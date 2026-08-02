@@ -392,9 +392,29 @@
 
   // Event Listeners
   btnReloadSupabase.addEventListener('click', async () => {
-  tagCSV.textContent = '🤖 Bot: Descargando foto actual...';
-  tagCSV.className = 'file-tag no';
+  tagCSV.textContent = '🔄 Leyendo Supabase...';
   btnReloadSupabase.disabled = true;
+
+  try {
+    // Intentar conectar con el bot local con un tiempo límite de 2 segundos
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const respuesta = await fetch('http://localhost:3000/ejecutar-bot', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
+    if (respuesta.ok) {
+      console.log('⚡ Foto en vivo tomada con éxito por el bot local.');
+    }
+  } catch (err) {
+    // Si no se encuentra el servidor local (ej: la web la consulta el Director), ignora el error silenciosamente
+    console.log('ℹ️ Servidor local no detectado. Cargando directamente la foto existente en Supabase.');
+  }
+
+  // Cargar siempre la información actualizada guardada en Supabase
+  await cargarDesdeSupabase();
+  btnReloadSupabase.disabled = false;
+});
 
   try {
     // 1. Le pedimos al servidor local que ejecute el bot
