@@ -266,6 +266,65 @@
     document.getElementById('val-costo').textContent = `$ ${(total * COSTO_PROMEDIO_ONU_USD).toLocaleString()} USD`;
   }
 
+// RENDERIZADO: 1.2 INDICADORES TÁCTICOS
+async function renderTactico(arbolActual) {
+  const devStock = arbolActual['OBE_DEVOLUCIONES']?.total || 0;
+  const descStock = arbolActual['OBE_DESCARTE']?.total || 0;
+  const catrielActual = arbolActual['OBE_ALM_CATRIEL']?.total || 0;
+
+  // Obtener fecha del mes anterior en Supabase
+  let catrielAnterior = 0;
+  let variacionCatriel = 0;
+
+  try {
+    const inicioMesActual = new Date();
+    inicioMesActual.setDate(1); // Primer día del mes en curso
+
+    const { data: ultMesAnt } = await supabaseClient
+      .from('registro_stock')
+      .select('stock_total')
+      .eq('almacen', 'OBE_ALM_CATRIEL')
+      .lt('fecha_registro', inicioMesActual.toISOString().split('T')[0])
+      .order('fecha_registro', { ascending: false });
+
+    if (ultMesAnt && ultMesAnt.length > 0) {
+      catrielAnterior = ultMesAnt.reduce((acc, curr) => acc + curr.stock_total, 0);
+      variacionCatriel = catrielAnterior > 0 
+        ? Math.round(((catrielActual - catrielAnterior) / catrielAnterior) * 100) 
+        : 0;
+    }
+  } catch (err) {
+    console.log('Sin histórico para comparativa de Catriel');
+  }
+
+  const estadoCatriel = variacionCatriel > 0 
+    ? `<span style="color:#ef4444;">🔴 +${variacionCatriel}% (Aumento de Compras)</span>` 
+    : `<span style="color:#22c55e;">🟢 ${variacionCatriel}% (Optimizando Reuso)</span>`;
+
+  document.getElementById('stock-tactico').innerHTML = `
+    <h2 class="card-title">🎯 Indicadores Tácticos (Buffers Técnicos y Análisis de Compras)</h2>
+    <div class="grid-tactico">
+      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+        <div class="title" style="color:#475569;">📥 OBE_DEVOLUCIONES</div>
+        <div class="value">${devStock} un.</div>
+        <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${(devStock * COSTO_PROMEDIO_ONU_USD).toLocaleString()} USD</strong></div>
+      </div>
+
+      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+        <div class="title" style="color:#475569;">🗑️ OBE_DESCARTE</div>
+        <div class="value">${descStock} un.</div>
+        <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${(descStock * COSTO_PROMEDIO_ONU_USD).toLocaleString()} USD</strong></div>
+      </div>
+
+      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+        <div class="title" style="color:#475569;">🛒 COMPRAS (OBE_CATRIEL)</div>
+        <div class="value">${catrielActual} un.</div>
+        <div class="subtext" style="color:#64748b;">vs Mes Anterior (${catrielAnterior} un.): ${estadoCatriel}</div>
+      </div>
+    </div>
+  `;
+}
+
   // RENDERIZADO: 1.3 OPERATIVO
   function renderOperativo(arbol, totalDB, totalCATV) {
     let html = '<table class="arbol">';
