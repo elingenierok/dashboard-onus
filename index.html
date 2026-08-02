@@ -107,8 +107,8 @@
 <script>
 (function() {
   // CONFIGURACIÓN DE SUPABASE
-  const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co'; // 👈 Tu URL de Supabase
-  const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';           // 👈 Tu Key Anon
+  const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const SUCURSALES = ['OBE_ALM_PRINCIPAL', 'OBE_ALM_CATRIEL', 'SPD_PRINCIPAL', 'WND-PRINCIPAL', 'ITU_ALM_PRINCIPAL', 'ELDO_ALM_PRINCIPAL'];
@@ -150,7 +150,6 @@
     tagCSV.className = 'file-tag no';
 
     try {
-      // 1. Obtener la última fecha de registro cargada
       const { data: ult, error: errUlt } = await supabaseClient
         .from('registro_stock')
         .select('fecha_registro')
@@ -163,7 +162,6 @@
 
       const ultimaFecha = ult[0].fecha_registro;
 
-      // 2. Traer los datos de esa fecha
       const { data, error } = await supabaseClient
         .from('registro_stock')
         .select('descripcion, stock_total, almacen')
@@ -390,52 +388,23 @@
     arbolTextoContainer.innerHTML = '<strong style="color:#94a3b8;">📋 Árbol en texto:</strong>\n\n' + generarArbolTexto(arbol);
   }
 
-  // Event Listeners
-  btnReloadSupabase.addEventListener('click', async () => {
-  tagCSV.textContent = '🔄 Leyendo Supabase...';
-  btnReloadSupabase.disabled = true;
+  // --- ESCUCHADORES DE EVENTOS ---
 
-  try {
-    // Intentar conectar con el bot local con un tiempo límite de 2 segundos
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+  // Cargar CSV Manual
+  document.getElementById('csvInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      stockData = parseCSV(ev.target.result);
+      tagCSV.textContent = `Manual: ✅ ${file.name}`;
+      tagCSV.className = 'file-tag ok';
+      renderTabla();
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
 
-    const respuesta = await fetch('http://localhost:3000/ejecutar-bot', { signal: controller.signal });
-    clearTimeout(timeoutId);
-    
-    if (respuesta.ok) {
-      console.log('⚡ Foto en vivo tomada con éxito por el bot local.');
-    }
-  } catch (err) {
-    // Si no se encuentra el servidor local (ej: la web la consulta el Director), ignora el error silenciosamente
-    console.log('ℹ️ Servidor local no detectado. Cargando directamente la foto existente en Supabase.');
-  }
-
-  // Cargar siempre la información actualizada guardada en Supabase
-  await cargarDesdeSupabase();
-  btnReloadSupabase.disabled = false;
-});
-
-  try {
-    // 1. Le pedimos al servidor local que ejecute el bot
-    const respuesta = await fetch('http://localhost:3000/ejecutar-bot');
-    const resultado = await respuesta.json();
-
-    if (resultado.success) {
-      // 2. Si el bot terminó bien, leemos Supabase
-      await cargarDesdeSupabase();
-      alert('📸 ¡Foto del momento tomada e impactada en Supabase con éxito!');
-    } else {
-      alert('❌ Ocurrió un error al ejecutar el bot: ' + resultado.error);
-    }
-  } catch (err) {
-    alert('⚠️ No se pudo conectar con el servidor local. Asegúrate de tener corriendo "node server.js" en la terminal.');
-    cargarDesdeSupabase();
-  } finally {
-    btnReloadSupabase.disabled = false;
-  }
-});
-
+  // Cargar Umbrales
   document.getElementById('umbralesInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -449,9 +418,29 @@
     reader.readAsText(file, 'UTF-8');
   });
 
+  // Cambiar Vista
   btnToggleVista.addEventListener('click', () => {
     vista = vista === 'grupos' ? 'sucursales' : 'grupos';
     renderTabla();
+  });
+
+  // Actualizar de Supabase / Bot local
+  btnReloadSupabase.addEventListener('click', async () => {
+    tagCSV.textContent = '🔄 Leyendo Supabase...';
+    btnReloadSupabase.disabled = true;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      await fetch('http://localhost:3000/ejecutar-bot', { signal: controller.signal });
+      clearTimeout(timeoutId);
+    } catch (err) {
+      console.log('Servidor local no detectado. Leyendo Supabase directamente.');
+    }
+
+    await cargarDesdeSupabase();
+    btnReloadSupabase.disabled = false;
   });
 
   // Carga inicial automática
