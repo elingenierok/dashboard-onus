@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard ONUs - Tabla Árbol</title>
+<!-- Librería oficial de Supabase para el navegador -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f1f5f9; padding: 20px; color: #1a1a1a; }
+  .container { max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  .header { background: #0f172a; color: white; padding: 18px 28px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
+  .header h1 { font-size: 1.3rem; font-weight: 700; }
+  .header .acciones { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  .btn { padding: 10px 20px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; font-size: 0.88rem; transition: all 0.2s; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .btn-primary { background: #3b82f6; color: white; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-success { background: #10b981; color: white; }
+  .btn-success:hover { background: #059669; }
+  .btn-outline { background: white; border: 2px solid #cbd5e1; color: #334155; }
+  .btn-outline:hover { background: #f1f5f9; }
+  .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
+  .file-tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; }
+  .file-tag.ok { background: #d1fae5; color: #065f46; }
+  .file-tag.no { background: #e2e8f0; color: #475569; }
+
+  .card { background: white; border-radius: 14px; box-shadow: 0 2px 14px rgba(0,0,0,0.05); padding: 22px; overflow-x: auto; }
+  .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: #0f172a; }
+
+  .resumen { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .resumen-item { padding: 12px 18px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; min-width: 90px; }
+  .resumen-item strong { display: block; font-size: 1.5rem; color: #0f172a; }
+  .resumen-item span { font-size: 0.73rem; color: #64748b; }
+
+  .leyenda { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; font-size: 0.78rem; align-items: center; }
+  .leyenda-item { display: flex; align-items: center; gap: 6px; }
+  .leyenda-color { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #cbd5e1; }
+  .leyenda-color.verde { background: #dcfce7; }
+  .leyenda-color.amarillo { background: #fef3c7; }
+  .leyenda-color.rojo { background: #fee2e2; }
+
+  .table-wrapper { overflow-x: auto; }
+  table.arbol { width: 100%; border-collapse: collapse; min-width: 950px; table-layout: auto; }
+  table.arbol td, table.arbol th { padding: 10px 12px; text-align: center; vertical-align: top; }
+  table.arbol td { border: 1px solid #e2e8f0; }
+
+  .bg-verde { background: #dcfce7; }
+  .bg-amarillo { background: #fef3c7; }
+  .bg-rojo { background: #fee2e2; }
+
+  .celda-total { background: #1e293b; color: white; font-size: 1.1rem; font-weight: 800; }
+  .celda-grupo { font-weight: 700; font-size: 0.9rem; }
+  .celda-sucursal { font-weight: 700; font-size: 0.85rem; }
+  .celda-item { font-size: 0.75rem; color: #475569; }
+  .item-lista { text-align: left; font-weight: 500; line-height: 1.6; }
+  .item-lista div { padding: 1px 0; }
+  .borde-izq-grueso { border-left: 3px solid #1e293b !important; }
+
+  .arbol-texto { background: #1e293b; color: #e2e8f0; padding: 18px 22px; border-radius: 10px; font-family: 'SF Mono', 'Consolas', 'Courier New', monospace; font-size: 0.8rem; line-height: 1.7; white-space: pre; overflow-x: auto; margin-top: 16px; max-height: 500px; overflow-y: auto; }
+  .arbol-texto .db { color: #60a5fa; }
+  .arbol-texto .catv { color: #fbbf24; }
+  .arbol-texto .total { color: white; font-weight: 700; }
+  .arbol-texto .suc { color: #a78bfa; }
+  .arbol-texto .alerta-rojo { color: #fca5a5; }
+  .arbol-texto .alerta-amarillo { color: #fde68a; }
+
+  .empty-msg { text-align: center; padding: 40px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🌳 Dashboard ONUs - Supabase Live</h1>
+    <div class="acciones">
+      <span id="tagCSV" class="file-tag no">Origen: Conectando...</span>
+      <span id="tagUmbrales" class="file-tag no">Umbrales: ❌</span>
+      <button id="btnReloadSupabase" class="btn btn-primary">⚡ Actualizar de Supabase</button>
+      <label for="csvInput" class="btn btn-outline btn-sm">📂 Cargar CSV Manual</label>
+      <input type="file" id="csvInput" accept=".csv" style="display:none;">
+      <label for="umbralesInput" class="btn btn-success btn-sm">📋 Cargar Umbrales</label>
+      <input type="file" id="umbralesInput" accept=".txt,.csv" style="display:none;">
+      <button id="btnToggleVista" class="btn btn-outline btn-sm">🔄 Cambiar Vista</button>
+    </div>
+  </div>
+
+  <div class="leyenda">
+    <strong>🎨 Leyenda:</strong>
+    <div class="leyenda-item"><div class="leyenda-color verde"></div> Saludable</div>
+    <div class="leyenda-item"><div class="leyenda-color amarillo"></div> Atención</div>
+    <div class="leyenda-item"><div class="leyenda-color rojo"></div> Crítico</div>
+  </div>
+
+  <div id="resumenContainer" class="resumen" style="display:none;"></div>
+
+  <div class="card">
+    <h2 id="tituloTabla">📊 Vista: Grupos → Sucursales → Items</h2>
+    <div id="tablaWrapper" class="table-wrapper">
+      <div class="empty-msg">Cargando datos desde la base de datos...</div>
+    </div>
+    <div id="arbolTextoContainer" class="arbol-texto" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // CONFIGURACIÓN DE SUPABASE
+  const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co'; // 👈 Tu URL de Supabase
+  const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';           // 👈 Tu Key Anon
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const SUCURSALES = ['OBE_ALM_PRINCIPAL', 'OBE_ALM_CATRIEL', 'SPD_PRINCIPAL', 'WND-PRINCIPAL', 'ITU_ALM_PRINCIPAL', 'ELDO_ALM_PRINCIPAL'];
+  const SUCURSALES_CORTAS = ['OBE PRINC', 'OBE CATR', 'SPD PRINC', 'WND PRINC', 'ITU PRINC', 'ELD PRINC'];
+
+  const GRUPO_DUAL_BAND = [
+    "ONU ZTE F6201B V9.3 WIFI6 AX3000",
+    "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
+    "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
+    "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
+    "ONU WIFI HUAWEI/WIRETECH DUAL BAND(USADA)",
+    "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)"
+  ];
+
+  const GRUPO_CATV = [
+    "ONU HUAWEI ECHOLIFE EG8147X6",
+    "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
+    "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
+    "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"
+  ];
+
+  let stockData = [];
+  let umbralesData = null;
+  let vista = 'grupos';
+
+  const tagCSV = document.getElementById('tagCSV');
+  const tagUmbrales = document.getElementById('tagUmbrales');
+  const resumenContainer = document.getElementById('resumenContainer');
+  const tablaWrapper = document.getElementById('tablaWrapper');
+  const tituloTabla = document.getElementById('tituloTabla');
+  const btnToggleVista = document.getElementById('btnToggleVista');
+  const btnReloadSupabase = document.getElementById('btnReloadSupabase');
+  const arbolTextoContainer = document.getElementById('arbolTextoContainer');
+
+  function normalize(s) { return s.trim().toUpperCase().replace(/\s+/g, ' '); }
+
+  async function cargarDesdeSupabase() {
+    tagCSV.textContent = 'Supabase: ⏳ Consultando...';
+    tagCSV.className = 'file-tag no';
+
+    try {
+      // 1. Obtener la última fecha de registro cargada
+      const { data: ult, error: errUlt } = await supabaseClient
+        .from('registro_stock')
+        .select('fecha_registro')
+        .order('fecha_registro', { ascending: false })
+        .limit(1);
+
+      if (errUlt || !ult || ult.length === 0) {
+        throw new Error('Sin datos en Supabase');
+      }
+
+      const ultimaFecha = ult[0].fecha_registro;
+
+      // 2. Traer los datos de esa fecha
+      const { data, error } = await supabaseClient
+        .from('registro_stock')
+        .select('descripcion, stock_total, almacen')
+        .eq('fecha_registro', ultimaFecha);
+
+      if (error) throw error;
+
+      stockData = data.map(d => ({
+        descripcion: d.descripcion,
+        stock: d.stock_total,
+        almacen: d.almacen
+      }));
+
+      tagCSV.textContent = `Supabase: ✅ ${ultimaFecha}`;
+      tagCSV.className = 'file-tag ok';
+      renderTabla();
+
+    } catch (err) {
+      console.error(err);
+      tagCSV.textContent = 'Supabase: ❌ Error';
+      tablaWrapper.innerHTML = '<div class="empty-msg">No se pudieron cargar datos desde Supabase.</div>';
+    }
+  }
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const firstLine = lines[0];
+    let d = firstLine.includes('\t') ? '\t' : (firstLine.includes(';') ? ';' : ',');
+    const headers = firstLine.split(d).map(h => h.replace(/^"|"$/g, '').trim());
+    const descIdx = headers.findIndex(h => h.toLowerCase() === 'descripcion');
+    const stockIdx = headers.findIndex(h => h.toLowerCase() === 'stock total');
+    const almacenIdx = headers.findIndex(h => h.toLowerCase() === 'almacen');
+    if (descIdx === -1 || stockIdx === -1 || almacenIdx === -1) return [];
+    
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = splitLine(lines[i], d);
+      if (cols.length <= Math.max(descIdx, stockIdx, almacenIdx)) continue;
+      const desc = cols[descIdx]?.replace(/^"|"$/g, '').trim();
+      const rawStock = cols[stockIdx]?.replace(/^"|"$/g, '').replace(/\./g, '').replace(',', '.') || '0';
+      const stock = Math.round(parseFloat(rawStock));
+      const almacen = cols[almacenIdx]?.replace(/^"|"$/g, '').trim();
+      if (!desc || isNaN(stock) || !almacen) continue;
+      data.push({ descripcion: desc, stock, almacen });
+    }
+    return data;
+  }
+
+  function splitLine(line, d) {
+    const r = []; let c = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { q = !q; c += ch; }
+      else if (ch === d && !q) { r.push(c); c = ''; }
+      else c += ch;
+    }
+    r.push(c); return r;
+  }
+
+  function parseUmbrales(text) {
+    const lineas = text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('#') && l.trim() !== '[UMBRALES_ONUS]');
+    const inicio = lineas.findIndex(l => l.includes('TIPO') && l.includes('SUCURSAL'));
+    const datos = inicio >= 0 ? lineas.slice(inicio + 1) : lineas;
+    const umb = { DB: {}, CATV: {}, total: { DB: { min: 0, pedido: 0 }, CATV: { min: 0, pedido: 0 } } };
+    for (const linea of datos) {
+      const partes = linea.split('|').map(s => s.trim());
+      if (partes.length < 4) continue;
+      const tipo = partes[0].toUpperCase();
+      const sucursal = partes[1];
+      const min = parseInt(partes[2], 10);
+      const pedido = parseInt(partes[3], 10);
+      if (isNaN(min) || isNaN(pedido)) continue;
+      if (sucursal.toUpperCase() === 'TOTAL') {
+        if (tipo === 'DB') umb.total.DB = { min, pedido };
+        if (tipo === 'CATV') umb.total.CATV = { min, pedido };
+      } else if (tipo === 'DB' || tipo === 'CATV') {
+        umb[tipo][sucursal] = { min, pedido };
+      }
+    }
+    return umb;
+  }
+
+  function perteneceAGrupo(descNorm, grupo) {
+    return grupo.some(patron => descNorm.includes(normalize(patron)));
+  }
+
+  function getGrupo(descNorm) {
+    if (perteneceAGrupo(descNorm, GRUPO_DUAL_BAND)) return 'DB';
+    if (perteneceAGrupo(descNorm, GRUPO_CATV)) return 'CATV';
+    return null;
+  }
+
+  function acumularDatos(data) {
+    const arbol = {};
+    for (const s of SUCURSALES) arbol[s] = { DB: {}, CATV: {} };
+    for (const row of data) {
+      if (!SUCURSALES.includes(row.almacen)) continue;
+      const dNorm = normalize(row.descripcion);
+      const grupo = getGrupo(dNorm);
+      if (!grupo) continue;
+      if (!arbol[row.almacen][grupo][dNorm]) arbol[row.almacen][grupo][dNorm] = 0;
+      arbol[row.almacen][grupo][dNorm] += row.stock;
+    }
+    return arbol;
+  }
+
+  function getColorClass(stock, tipo, sucursal) {
+    if (!umbralesData) return 'bg-verde';
+    let umb = (sucursal === 'TOTAL') ? umbralesData.total[tipo] : umbralesData[tipo]?.[sucursal];
+    if (!umb || !umb.min || !umb.pedido) return 'bg-verde';
+    if (stock <= umb.min) return 'bg-rojo';
+    if (stock <= umb.pedido) return 'bg-amarillo';
+    return 'bg-verde';
+  }
+
+  function getAlertaTexto(stock, tipo, sucursal) {
+    if (!umbralesData) return '';
+    let umb = (sucursal === 'TOTAL') ? umbralesData.total[tipo] : umbralesData[tipo]?.[sucursal];
+    if (!umb || !umb.min || !umb.pedido) return '';
+    if (stock <= umb.min) return 'alerta-rojo';
+    if (stock <= umb.pedido) return 'alerta-amarillo';
+    return '';
+  }
+
+  function renderResumen(arbol) {
+    let totalDB = 0, totalCATV = 0;
+    for (const s of SUCURSALES) {
+      for (const cant of Object.values(arbol[s].DB)) totalDB += cant;
+      for (const cant of Object.values(arbol[s].CATV)) totalCATV += cant;
+    }
+    resumenContainer.style.display = 'flex';
+    resumenContainer.innerHTML = `
+      <div class="resumen-item ${getColorClass(totalDB, 'DB', 'TOTAL')}"><strong>${totalDB}</strong><span>🔵 Dual Band</span></div>
+      <div class="resumen-item ${getColorClass(totalCATV, 'CATV', 'TOTAL')}"><strong>${totalCATV}</strong><span>🟠 CATV</span></div>
+      <div class="resumen-item"><strong>${totalDB + totalCATV}</strong><span>📦 Total ONUs</span></div>
+    `;
+  }
+
+  function generarArbolTexto(arbol) {
+    let totalDB = 0, totalCATV = 0;
+    const porSuc = {};
+    for (const s of SUCURSALES) {
+      const tDB = Object.values(arbol[s].DB).reduce((a, b) => a + b, 0);
+      const tCATV = Object.values(arbol[s].CATV).reduce((a, b) => a + b, 0);
+      porSuc[s] = { DB: tDB, CATV: tCATV, total: tDB + tCATV };
+      totalDB += tDB;
+      totalCATV += tCATV;
+    }
+
+    let txt = `<span class="total">TOTAL ONUs: ${totalDB + totalCATV}</span>\n`;
+    if (vista === 'grupos') {
+      txt += `├── <span class="db ${getAlertaTexto(totalDB, 'DB', 'TOTAL')}">DUAL BAND: ${totalDB}</span>\n`;
+      SUCURSALES.forEach((s, i) => {
+        const pref = i === SUCURSALES.length - 1 ? '│   └──' : '│   ├──';
+        txt += `│   ${pref} <span class="suc ${getAlertaTexto(porSuc[s].DB, 'DB', s)}">${SUCURSALES_CORTAS[i]}: ${porSuc[s].DB}</span>\n`;
+      });
+      txt += `└── <span class="catv ${getAlertaTexto(totalCATV, 'CATV', 'TOTAL')}">CATV: ${totalCATV}</span>\n`;
+      SUCURSALES.forEach((s, i) => {
+        const pref = i === SUCURSALES.length - 1 ? '    └──' : '    ├──';
+        txt += `    ${pref} <span class="suc ${getAlertaTexto(porSuc[s].CATV, 'CATV', s)}">${SUCURSALES_CORTAS[i]}: ${porSuc[s].CATV}</span>\n`;
+      });
+    }
+    return txt;
+  }
+
+  function renderTabla() {
+    if (!stockData.length) {
+      tablaWrapper.innerHTML = '<div class="empty-msg">Sin datos para mostrar.</div>';
+      arbolTextoContainer.style.display = 'none';
+      return;
+    }
+
+    const arbol = acumularDatos(stockData);
+    renderResumen(arbol);
+
+    let totalDB = 0, totalCATV = 0;
+    for (const s of SUCURSALES) {
+      for (const cant of Object.values(arbol[s].DB)) totalDB += cant;
+      for (const cant of Object.values(arbol[s].CATV)) totalCATV += cant;
+    }
+
+    tituloTabla.textContent = vista === 'grupos'
+      ? '📊 Vista: Grupos → Sucursales → Items'
+      : '📊 Vista: Sucursales → Grupos → Items';
+
+    let html = '<table class="arbol">';
+    html += `<tr><td class="celda-total" colspan="8">📦 TOTAL ONUs: ${totalDB + totalCATV}</td></tr>`;
+
+    if (vista === 'grupos') {
+      html += `<tr>
+        <td class="celda-grupo ${getColorClass(totalDB, 'DB', 'TOTAL')}" colspan="4">🔵 DUAL BAND: ${totalDB}</td>
+        <td class="celda-grupo ${getColorClass(totalCATV, 'CATV', 'TOTAL')} borde-izq-grueso" colspan="4">🟠 CATV: ${totalCATV}</td>
+      </tr><tr>`;
+      
+      SUCURSALES.forEach((s, i) => {
+        const tDB = Object.values(arbol[s].DB).reduce((a, b) => a + b, 0);
+        html += `<td class="celda-sucursal ${getColorClass(tDB, 'DB', s)}">🏭 ${SUCURSALES_CORTAS[i]}<br>${tDB}</td>`;
+      });
+      SUCURSALES.forEach((s, i) => {
+        const tCATV = Object.values(arbol[s].CATV).reduce((a, b) => a + b, 0);
+        html += `<td class="celda-sucursal ${getColorClass(tCATV, 'CATV', s)}${i === 0 ? ' borde-izq-grueso' : ''}">🏭 ${SUCURSALES_CORTAS[i]}<br>${tCATV}</td>`;
+      });
+      html += '</tr><tr>';
+
+      SUCURSALES.forEach((s) => {
+        html += `<td class="celda-item"><div class="item-lista">`;
+        for (const [item, cant] of Object.entries(arbol[s].DB)) html += `<div>📦 ${item}: <strong>${cant}</strong></div>`;
+        if (!Object.keys(arbol[s].DB).length) html += '<div>-</div>';
+        html += '</div></td>';
+      });
+      SUCURSALES.forEach((s, i) => {
+        html += `<td class="celda-item${i === 0 ? ' borde-izq-grueso' : ''}"><div class="item-lista">`;
+        for (const [item, cant] of Object.entries(arbol[s].CATV)) html += `<div>📦 ${item}: <strong>${cant}</strong></div>`;
+        if (!Object.keys(arbol[s].CATV).length) html += '<div>-</div>';
+        html += '</div></td>';
+      });
+      html += '</tr>';
+    }
+
+    html += '</table>';
+    tablaWrapper.innerHTML = html;
+    arbolTextoContainer.style.display = 'block';
+    arbolTextoContainer.innerHTML = '<strong style="color:#94a3b8;">📋 Árbol en texto:</strong>\n\n' + generarArbolTexto(arbol);
+  }
+
+  // Event Listeners
+  btnReloadSupabase.addEventListener('click', async () => {
+  tagCSV.textContent = '🤖 Bot: Descargando foto actual...';
+  tagCSV.className = 'file-tag no';
+  btnReloadSupabase.disabled = true;
+
+  try {
+    // 1. Le pedimos al servidor local que ejecute el bot
+    const respuesta = await fetch('http://localhost:3000/ejecutar-bot');
+    const resultado = await respuesta.json();
+
+    if (resultado.success) {
+      // 2. Si el bot terminó bien, leemos Supabase
+      await cargarDesdeSupabase();
+      alert('📸 ¡Foto del momento tomada e impactada en Supabase con éxito!');
+    } else {
+      alert('❌ Ocurrió un error al ejecutar el bot: ' + resultado.error);
+    }
+  } catch (err) {
+    alert('⚠️ No se pudo conectar con el servidor local. Asegúrate de tener corriendo "node server.js" en la terminal.');
+    cargarDesdeSupabase();
+  } finally {
+    btnReloadSupabase.disabled = false;
+  }
+});
+
+  document.getElementById('umbralesInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      umbralesData = parseUmbrales(ev.target.result);
+      tagUmbrales.textContent = `Umbrales: ✅ ${file.name}`;
+      tagUmbrales.className = 'file-tag ok';
+      renderTabla();
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  btnToggleVista.addEventListener('click', () => {
+    vista = vista === 'grupos' ? 'sucursales' : 'grupos';
+    renderTabla();
+  });
+
+  // Carga inicial automática
+  cargarDesdeSupabase();
+})();
+</script>
+</body>
+</html>
