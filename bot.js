@@ -97,6 +97,12 @@ async function ejecutarBot() {
     await pages[i].close().catch(() => {});
   }
 
+  // 💬 FIX 1: Interceptar y aceptar automáticamente alertas nativas del navegador (alert / confirm / prompt)
+  page.on('dialog', async dialog => {
+    console.log(`💬 Popup detectado: "${dialog.message()}". Aceptando automáticamente...`);
+    await dialog.accept();
+  });
+
   try {
     console.log('🌐 Conectando al ISP...');
     await page.goto(process.env.ISP_URL, { waitUntil: 'networkidle2' });
@@ -175,6 +181,19 @@ async function ejecutarBot() {
     console.log(`📂 Archivo detectado en: ${rutaCSV}`);
     
     const datos = parsearCSV(rutaCSV);
+
+    // 🧹 FIX 2: Borrar datos previos con la fecha de hoy para evitar duplicados en Supabase
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    console.log(`🧹 Limpiando registros anteriores con fecha ${fechaHoy} en Supabase...`);
+    
+    const { error: deleteError } = await supabase
+      .from('registro_stock')
+      .delete()
+      .eq('fecha_registro', fechaHoy);
+
+    if (deleteError) {
+      console.warn('⚠️ Advertencia al limpiar registros previos:', deleteError.message);
+    }
     
     console.log(`🚀 Subiendo ${datos.length} filas a Supabase...`);
     const BATCH_SIZE = 500;

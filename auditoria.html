@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditoría de Stock - Control de Sucursal</title>
+<!-- Librería oficial de Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f8fafc; padding: 16px; color: #0f172a; }
+  .container { max-width: 650px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+  .header { background: #0f172a; color: white; padding: 18px; border-radius: 12px; text-align: center; }
+  .header h1 { font-size: 1.2rem; font-weight: 700; }
+  .header p { font-size: 0.8rem; color: #94a3b8; margin-top: 4px; }
+
+  .card { background: white; border-radius: 12px; border: 1px solid #cbd5e1; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  
+  .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .form-group label { font-size: 0.82rem; font-weight: 700; color: #334155; }
+  .form-control { padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.9rem; outline: none; }
+  .form-control:focus { border-color: #0284c7; }
+
+  table.conteo { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  table.conteo th { background: #f1f5f9; text-align: left; padding: 8px 10px; font-size: 0.78rem; color: #475569; }
+  table.conteo td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 0.82rem; }
+  
+  .input-fisico { width: 80px; padding: 6px; text-align: center; font-weight: 700; border-radius: 6px; border: 1px solid #0284c7; background: #f0f9ff; }
+
+  .btn { width: 100%; padding: 12px; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; font-size: 0.9rem; transition: background 0.2s; }
+  .btn-primary { background: #0284c7; color: white; }
+  .btn-primary:hover { background: #0369a1; }
+  .btn-primary:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+  .alert { padding: 12px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; text-align: center; display: none; }
+  .alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  
+  <header class="header">
+    <h1>📋 Control de Inventario Físico</h1>
+    <p>Suministros y Logística - Registro de Auditoría Local</p>
+  </header>
+
+  <main class="card">
+    <div id="msgBox" class="alert"></div>
+
+    <!-- SELECCIÓN DE SUCURSAL Y RESPONSABLE -->
+    <div class="form-group">
+      <label for="selectSucursal">🏭 Selecciona tu Depósito / Sucursal:</label>
+      <select id="selectSucursal" class="form-control" onchange="cargarInventarioSistema()">
+        <option value="">-- Seleccionar --</option>
+        <option value="OBE_ALM_PRINCIPAL">OBE Principal</option>
+        <option value="OBE_ALM_CATRIEL">OBE Catriel (Compras)</option>
+        <option value="SPD_PRINCIPAL">San Pedro Principal</option>
+        <option value="WND-PRINCIPAL">Wanda Principal</option>
+        <option value="ITU_ALM_PRINCIPAL">Ituzaingó Principal</option>
+        <option value="ELDO_ALM_PRINCIPAL">Eldorado Principal</option>
+        <option value="OBE_ALM_DEVOLUCIONES">OBE Devoluciones (Triage)</option>
+        <option value="OBE_ALM_DESCARTE">OBE Descarte</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="inputAuditor">👤 Nombre del Responsable de Conteo:</label>
+      <input type="text" id="inputAuditor" class="form-control" placeholder="Ej: Juan Pérez">
+    </div>
+
+    <!-- TABLA DE CONTEO DINÁMICA -->
+    <div id="seccionConteo" style="display:none; margin-top: 16px;">
+      <label style="font-size: 0.85rem; font-weight: 700; color: #0f172a;">📦 ONUs Registradas en Sistema:</label>
+      <table class="conteo">
+        <thead>
+          <tr>
+            <th>Modelo ONU</th>
+            <th style="text-align:center;">Sistema</th>
+            <th style="text-align:center;">Conteo Real</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyEquipos"></tbody>
+      </table>
+
+      <button id="btnGuardar" class="btn btn-primary" style="margin-top: 20px;" onclick="guardarAuditoria()">
+        💾 Guardar Conteo en Sistema
+      </button>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const GRUPO_DUAL_BAND = [
+    "ONU ZTE F6201B V9.3 WIFI6 AX3000",
+    "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
+    "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
+    "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
+    "ONU WIFI HUAWEI/WIRETECH DUAL BAND(USADA)",
+    "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)"
+  ];
+
+  const GRUPO_CATV = [
+    "ONU HUAWEI ECHOLIFE EG8147X6",
+    "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
+    "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
+    "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"
+  ];
+
+  let inventarioCargado = [];
+
+  // 1. CARGAR, FILTRAR Y SUMAR MATEMÁTICAMENTE
+  async function cargarInventarioSistema() {
+    const sucursal = document.getElementById('selectSucursal').value;
+    const seccionConteo = document.getElementById('seccionConteo');
+    const tbody = document.getElementById('tbodyEquipos');
+    
+    if (!sucursal) {
+      seccionConteo.style.display = 'none';
+      return;
+    }
+
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Cargando ONUs...</td></tr>';
+    seccionConteo.style.display = 'block';
+
+    try {
+      const { data: ult } = await supabaseClient.from('registro_stock').select('fecha_registro').order('fecha_registro', { ascending: false }).limit(1);
+      if (!ult || !ult.length) throw new Error('Sin datos');
+
+      const ultimaFecha = ult[0].fecha_registro;
+      const { data, error } = await supabaseClient
+        .from('registro_stock')
+        .select('descripcion, stock_total')
+        .eq('fecha_registro', ultimaFecha)
+        .eq('almacen', sucursal);
+
+      if (error) throw error;
+
+      // Paso A: Filtrar solo ONUs de interés
+      const inventarioFiltrado = data.filter(item => {
+        const desc = item.descripcion.toUpperCase();
+        const esDB = GRUPO_DUAL_BAND.some(p => desc.includes(p.toUpperCase()));
+        const esCATV = GRUPO_CATV.some(p => desc.includes(p.toUpperCase()));
+        return esDB || esCATV;
+      });
+
+      // Paso B: Sumar matemáticamente si hay varios lotes del mismo equipo en el CSV original
+      const mapaAgrupado = {};
+      
+      inventarioFiltrado.forEach(item => {
+        const modeloNormalizado = item.descripcion.trim().toUpperCase(); 
+        if (!mapaAgrupado[modeloNormalizado]) {
+          mapaAgrupado[modeloNormalizado] = {
+            descripcionReal: item.descripcion.trim(),
+            totalMatematico: 0
+          };
+        }
+        
+        // Suma limpia garantizada
+        mapaAgrupado[modeloNormalizado].totalMatematico += parseInt(item.stock_total, 10) || 0;
+      });
+
+      const inventarioLimpio = Object.keys(mapaAgrupado).map(clave => ({
+        descripcion: mapaAgrupado[clave].descripcionReal,
+        stock_total: mapaAgrupado[clave].totalMatematico
+      }));
+
+      inventarioCargado = inventarioLimpio;
+      renderTablaConteo(inventarioLimpio);
+    } catch (err) {
+      console.error(err);
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:red;">Error al obtener datos.</td></tr>';
+    }
+  }
+
+  // 2. RENDERIZAR TABLA
+  function renderTablaConteo(lista) {
+    const tbody = document.getElementById('tbodyEquipos');
+    if (!lista.length) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No hay ONUs de interés registradas en esta sucursal.</td></tr>';
+      return;
+    }
+
+    let html = '';
+    lista.forEach((item, index) => {
+      html += `<tr>
+        <td style="font-weight:600; color:#334155;">${item.descripcion}</td>
+        <td style="text-align:center; font-weight:700;">${item.stock_total} un.</td>
+        <td style="text-align:center;">
+          <input type="number" min="0" id="input-fisico-${index}" class="input-fisico" value="${item.stock_total}">
+        </td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+  }
+
+  // 3. GUARDAR RESULTADOS
+  async function guardarAuditoria() {
+    const sucursal = document.getElementById('selectSucursal').value;
+    const auditor = document.getElementById('inputAuditor').value.trim();
+    const btnGuardar = document.getElementById('btnGuardar');
+
+    if (!auditor) {
+      mostrarMensaje('Por favor ingresa tu nombre antes de guardar.', 'error');
+      return;
+    }
+
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = '⏳ Guardando...';
+
+    const registrosInsertar = inventarioCargado.map((item, index) => {
+      const valorFisico = parseInt(document.getElementById(`input-fisico-${index}`).value, 10) || 0;
+      return {
+        sucursal: sucursal,
+        auditor_nombre: auditor,
+        descripcion_onu: item.descripcion,
+        stock_sistema: item.stock_total,
+        stock_fisico: valorFisico
+      };
+    });
+
+    try {
+      const { error } = await supabaseClient.from('auditoria_sucursales').insert(registrosInsertar);
+      if (error) throw error;
+
+      mostrarMensaje('✅ ¡Auditoría registrada con éxito!', 'success');
+      setTimeout(() => location.reload(), 2000);
+    } catch (err) {
+      console.error(err);
+      mostrarMensaje('❌ Error al guardar la auditoría. Intenta nuevamente.', 'error');
+      btnGuardar.disabled = false;
+      btnGuardar.textContent = '💾 Guardar Conteo en Sistema';
+    }
+  }
+
+  function mostrarMensaje(texto, tipo) {
+    const msgBox = document.getElementById('msgBox');
+    msgBox.textContent = texto;
+    msgBox.className = `alert alert-${tipo}`;
+    msgBox.style.display = 'block';
+  }
+</script>
+</body>
+</html>

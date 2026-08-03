@@ -40,7 +40,7 @@
   .bar-fill-db { background: #0284c7; height: 100%; transition: width 0.4s ease; }
   .bar-fill-catv { background: #ea580c; height: 100%; transition: width 0.4s ease; }
 
-  .grid-tactico { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .grid-tactico { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
   .placeholder-tactico { background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 30px; text-align: center; color: #64748b; font-size: 0.85rem; font-weight: 600; }
 
   .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.82rem; }
@@ -49,6 +49,7 @@
   .file-tag.ok { background: #dcfce7; color: #166534; }
   .file-tag.no { background: #f1f5f9; color: #475569; }
 
+  /* TABLAS EN GENERAL */
   table.arbol { width: 100%; border-collapse: collapse; min-width: 900px; }
   table.arbol td, table.arbol th { padding: 10px; text-align: center; border: 1px solid #e2e8f0; font-size: 0.82rem; }
   .celda-total { background: #0f172a; color: white; font-weight: 800; font-size: 1rem; }
@@ -56,6 +57,17 @@
   .celda-db { background: #e0f2fe; color: #0369a1; }
   .celda-catv { background: #ffedd5; color: #c2410c; }
   .borde-izq { border-left: 3px solid #0f172a !important; }
+
+  /* TABLA AUDITORÍA TÁCTICA */
+  table.tabla-auditoria { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  table.tabla-auditoria th { background: #1e293b; color: white; padding: 10px; font-size: 0.8rem; text-align: left; }
+  table.tabla-auditoria td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 0.82rem; }
+  .tag-sin-desviacion { color: #16a34a; font-weight: 700; background: #dcfce7; padding: 2px 8px; border-radius: 4px; }
+  .tag-desviacion-neg { color: #dc2626; font-weight: 700; background: #fee2e2; padding: 2px 8px; border-radius: 4px; display: inline-block; margin: 2px; }
+  .tag-desviacion-pos { color: #d97706; font-weight: 700; background: #fef3c7; padding: 2px 8px; border-radius: 4px; display: inline-block; margin: 2px; }
+  .tag-fecha-ok { color: #15803d; font-weight: 600; }
+  .tag-fecha-warn { color: #b45309; font-weight: 700; }
+  .tag-fecha-alert { color: #b91c1c; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -108,9 +120,15 @@
 
     <!-- 1.2 INDICADORES TÁCTICOS -->
     <section id="stock-tactico" class="card">
-      <h2 class="card-title">🎯 Indicadores Tácticos (Buffers Técnicos y Análisis)</h2>
-      <div class="grid-tactico">
+      <h2 class="card-title">🎯 Indicadores Tácticos (Control & Auditoría)</h2>
+      <div id="grid-tactico-cards" class="grid-tactico">
         <div class="placeholder-tactico">Cargando datos históricos...</div>
+      </div>
+      
+      <!-- TABLA DE AUDITORÍA: SISTEMA VS REAL (DESVIACIÓN ABSOLUTA) -->
+      <div style="margin-top: 10px;">
+        <strong style="font-size: 0.9rem; color: #0f172a;">📋 Exactitud de Registro (Stock Sistema vs. Stock Físico)</strong>
+        <div id="tablaAuditoriaWrapper" style="overflow-x: auto; margin-top: 8px;"></div>
       </div>
     </section>
 
@@ -161,7 +179,6 @@
   const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // MATRIZ MAESTRA DE PRECIOS ESTIMADOS (EN USD)
   const PRECIOS_EQUIPOS = {
     "ONU ZTE F6201B V9.3 WIFI6 AX3000": 65,
     "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)": 35,
@@ -174,20 +191,28 @@
     "ONU ZTE F6600R DUAL BAND WIFI (CATV)": 80,
     "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)": 40
   };
-  const COSTO_POR_DEFECTO = 50; // Para cualquier equipo no mapeado
+  const COSTO_POR_DEFECTO = 50;
 
   const SUCURSALES = ['OBE_ALM_PRINCIPAL', 'OBE_ALM_CATRIEL', 'SPD_PRINCIPAL', 'WND-PRINCIPAL', 'ITU_ALM_PRINCIPAL', 'ELDO_ALM_PRINCIPAL'];
   const SUCURSALES_CORTAS = ['OBE PRINC', 'OBE CATR', 'SPD PRINC', 'WND PRINC', 'ITU PRINC', 'ELD PRINC'];
-  
-  // CORRECCIÓN DE NOMBRES DE ALMACENES
   const ALMACENES_TACTICOS = ['OBE_ALM_DEVOLUCIONES', 'OBE_ALM_DESCARTE'];
+
+  const LISTA_AUDITORIA = [
+    { key: 'OBE_ALM_PRINCIPAL', nombre: 'OBE Principal' },
+    { key: 'OBE_ALM_CATRIEL', nombre: 'OBE Catriel (Compras)' },
+    { key: 'OBE_ALM_DEVOLUCIONES', nombre: 'OBE Devoluciones (Triage)' },
+    { key: 'OBE_ALM_DESCARTE', nombre: 'OBE Descarte (Inmovilizado)' },
+    { key: 'SPD_PRINCIPAL', nombre: 'San Pedro Principal' },
+    { key: 'WND-PRINCIPAL', nombre: 'Wanda Principal' },
+    { key: 'ITU_ALM_PRINCIPAL', nombre: 'Ituzaingó Principal' },
+    { key: 'ELDO_ALM_PRINCIPAL', nombre: 'Eldorado Principal' }
+  ];
 
   const GRUPO_DUAL_BAND = ["ONU ZTE F6201B V9.3 WIFI6 AX3000", "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)", "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)", "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)", "ONU WIFI HUAWEI/WIRETECH DUAL BAND(USADA)", "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)"];
   const GRUPO_CATV = ["ONU HUAWEI ECHOLIFE EG8147X6", "ONU HUAWEI ECHOLIFE EG8147X6(USADO)", "ONU ZTE F6600R DUAL BAND WIFI (CATV)", "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"];
 
   let stockData = [];
 
-  // CAMBIO DE SOLAPAS (TABS)
   function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -195,7 +220,6 @@
     document.getElementById(tabId).classList.add('active');
   }
 
-  // LECTURA DE DATOS DESDE SUPABASE
   async function cargarDesdeSupabase() {
     const tagCSV = document.getElementById('tagCSV');
     tagCSV.textContent = 'Supabase: ⏳ Consultando...';
@@ -220,7 +244,6 @@
     }
   }
 
-  // RENDERIZADO GENERAL DE STOCK (Cálculos de inventario y valor)
   async function renderStockModulo() {
     let totalDB = 0, totalCATV = 0;
     let valorGlobal = 0, valorDevoluciones = 0, valorDescarte = 0;
@@ -234,7 +257,6 @@
       const esDB = GRUPO_DUAL_BAND.some(p => descUpper.includes(p));
       const esCATV = GRUPO_CATV.some(p => descUpper.includes(p));
       
-      // Multiplicar stock exacto por el precio del catálogo
       const precioUnitario = PRECIOS_EQUIPOS[row.descripcion] || COSTO_POR_DEFECTO;
       const valorFila = row.stock * precioUnitario;
 
@@ -254,9 +276,9 @@
     renderEstrategico(totalDB, totalCATV, valorGlobal);
     renderOperativo(arbol, totalDB, totalCATV);
     await renderTactico(arbol, valorDevoluciones, valorDescarte);
+    await renderAuditoriaTabla();
   }
 
-  // RENDERIZADO: 1.1 ESTRATÉGICO
   function renderEstrategico(db, catv, valorGlobal) {
     const total = db + catv;
     const pctDB = total > 0 ? Math.round((db / total) * 100) : 0;
@@ -271,11 +293,9 @@
     document.getElementById('bar-catv').style.width = `${pctCATV}%`;
 
     document.getElementById('val-total').textContent = total.toLocaleString();
-    // AHORA USA EL VALOR GLOBAL CALCULAdo CON PRECIOS EXACTOS
     document.getElementById('val-costo').textContent = `$ ${valorGlobal.toLocaleString()} USD`;
   }
 
-  // RENDERIZADO: 1.2 TÁCTICO (Histórico + Triage)
   async function renderTactico(arbolActual, valorDevoluciones, valorDescarte) {
     const devStock = arbolActual['OBE_ALM_DEVOLUCIONES']?.total || 0;
     const descStock = arbolActual['OBE_ALM_DESCARTE']?.total || 0;
@@ -298,21 +318,14 @@
 
       if (fechasAnt && fechasAnt.length > 0) {
         const fechaCierreAnt = fechasAnt[0].fecha_registro;
-        
-        const { data: stockAnt } = await supabaseClient
-          .from('registro_stock')
-          .select('stock_total')
-          .eq('almacen', 'OBE_ALM_CATRIEL')
-          .eq('fecha_registro', fechaCierreAnt);
+        const { data: stockAnt } = await supabaseClient.from('registro_stock').select('stock_total').eq('almacen', 'OBE_ALM_CATRIEL').eq('fecha_registro', fechaCierreAnt);
 
         if (stockAnt) {
           catrielAnterior = stockAnt.reduce((acc, curr) => acc + curr.stock_total, 0);
-          variacionCatriel = catrielAnterior > 0 
-            ? Math.round(((catrielActual - catrielAnterior) / catrielAnterior) * 100) 
-            : 0;
+          variacionCatriel = catrielAnterior > 0 ? Math.round(((catrielActual - catrielAnterior) / catrielAnterior) * 100) : 0;
         }
       }
-    } catch (err) { console.log('Error al cargar histórico', err); }
+    } catch (err) {}
 
     let estadoCatriel = '<span style="color:#64748b; font-weight:600;">Sin datos previos</span>';
     if (catrielAnterior > 0) {
@@ -321,33 +334,142 @@
         : `<span style="color:#16a34a; font-weight:700;">🟢 ${variacionCatriel}% (Reuso eficiente)</span>`;
     }
 
-    document.getElementById('stock-tactico').innerHTML = `
-      <h2 class="card-title">🎯 Indicadores Tácticos (Buffers Técnicos y Análisis de Compras)</h2>
-      <div class="grid-tactico">
-        
-        <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-          <div class="title" style="color:#475569;">📥 OBE_ALM_DEVOLUCIONES (A Probar)</div>
-          <div class="value">${devStock} un.</div>
-          <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${valorDevoluciones.toLocaleString()} USD</strong></div>
-        </div>
-
-        <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-          <div class="title" style="color:#475569;">🗑️ OBE_ALM_DESCARTE (Inmovilizado)</div>
-          <div class="value">${descStock} un.</div>
-          <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${valorDescarte.toLocaleString()} USD</strong></div>
-        </div>
-
-        <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-          <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO (OBE_CATRIEL)</div>
-          <div class="value">${catrielActual} un.</div>
-          <div class="subtext" style="color:#475569;">vs Cierre Mes Anterior (${catrielAnterior} un.)<br>${estadoCatriel}</div>
-        </div>
-
+    document.getElementById('grid-tactico-cards').innerHTML = `
+      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+        <div class="title" style="color:#475569;">📥 OBE_ALM_DEVOLUCIONES (A Probar)</div>
+        <div class="value">${devStock} un.</div>
+        <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${valorDevoluciones.toLocaleString()} USD</strong></div>
+      </div>
+      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+        <div class="title" style="color:#475569;">🗑️ OBE_ALM_DESCARTE (Inmovilizado)</div>
+        <div class="value">${descStock} un.</div>
+        <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${valorDescarte.toLocaleString()} USD</strong></div>
+      </div>
+      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+        <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO (OBE_CATRIEL)</div>
+        <div class="value">${catrielActual} un.</div>
+        <div class="subtext" style="color:#475569;">vs Cierre Mes Anterior (${catrielAnterior} un.)<br>${estadoCatriel}</div>
       </div>
     `;
   }
 
-  // RENDERIZADO: 1.3 OPERATIVO
+  // RENDERIZADO: TABLA AUDITORÍA CON CÁLCULO DE DESVIACIÓN ABSOLUTA POR MODELO
+  async function renderAuditoriaTabla() {
+    let html = `<table class="tabla-auditoria">
+      <thead>
+        <tr>
+          <th>Almacén / Depósito</th>
+          <th style="text-align:center;">Stock Sistema</th>
+          <th style="text-align:center;">Stock Físico</th>
+          <th style="text-align:center;">Detalle de Desviación</th>
+          <th style="text-align:center;">Desv. Absoluta (%)</th>
+          <th style="text-align:center;">Última Inspección</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    const hoy = new Date();
+    let auditoriasGuardadas = [];
+    try {
+      const { data } = await supabaseClient.from('auditoria_sucursales').select('*').order('created_at', { ascending: false });
+      if (data) auditoriasGuardadas = data;
+    } catch (e) { console.log('Sin auditorías previas registradas'); }
+
+    LISTA_AUDITORIA.forEach(item => {
+      
+      // 1. Recopilar inventario del Sistema por modelo (Solo ONUs válidas)
+      const dataSistemaSucursal = stockData.filter(d => d.almacen === item.key && (
+        GRUPO_DUAL_BAND.some(p => d.descripcion.toUpperCase().includes(p)) || 
+        GRUPO_CATV.some(p => d.descripcion.toUpperCase().includes(p))
+      ));
+      
+      const mapaSistema = {};
+      dataSistemaSucursal.forEach(d => {
+        const desc = d.descripcion.trim().toUpperCase();
+        mapaSistema[desc] = (mapaSistema[desc] || 0) + parseInt(d.stock, 10);
+      });
+      const stockSistemaTotal = Object.values(mapaSistema).reduce((a, b) => a + b, 0);
+
+      // 2. Extraer última auditoría física de esa sucursal
+      const registrosSucursal = auditoriasGuardadas.filter(a => a.sucursal === item.key);
+      let stockRealTotal = stockSistemaTotal;
+      let tagFrescura = `<span style="color:#94a3b8; font-style:italic;">Sin auditoría</span>`;
+      
+      let faltantes = 0;
+      let sobrantes = 0;
+      let desviacionAbsoluta = 0;
+      let desviacionPct = '0.0';
+
+      if (registrosSucursal.length > 0) {
+        const fechaUltima = new Date(registrosSucursal[0].created_at);
+        const fechaUltimaStr = registrosSucursal[0].created_at;
+        const auditorNombre = registrosSucursal[0].auditor_nombre || 'Auditor';
+
+        // Filtrar todos los items del mismo momento exacto
+        const itemsUltimaAuditoria = registrosSucursal.filter(a => a.created_at === fechaUltimaStr);
+        
+        const mapaReal = {};
+        itemsUltimaAuditoria.forEach(a => {
+           const desc = a.descripcion_onu.trim().toUpperCase();
+           mapaReal[desc] = (mapaReal[desc] || 0) + parseInt(a.stock_fisico, 10);
+        });
+        stockRealTotal = Object.values(mapaReal).reduce((a, b) => a + b, 0);
+
+        // 3. COMPARACIÓN MODELO POR MODELO (Desviación Absoluta)
+        const modelosUnicos = new Set([...Object.keys(mapaSistema), ...Object.keys(mapaReal)]);
+        
+        modelosUnicos.forEach(modelo => {
+           const sys = mapaSistema[modelo] || 0;
+           const real = mapaReal[modelo] || 0;
+           const diff = real - sys;
+           
+           if (diff < 0) faltantes += Math.abs(diff);
+           if (diff > 0) sobrantes += diff;
+        });
+
+        desviacionAbsoluta = faltantes + sobrantes;
+        desviacionPct = stockSistemaTotal > 0 ? ((desviacionAbsoluta / stockSistemaTotal) * 100).toFixed(1) : '0.0';
+
+        // Etiqueta de Frescura (SLA de Auditoría)
+        const diffTiempo = Math.abs(hoy - fechaUltima);
+        const diasTranscurridos = Math.floor(diffTiempo / (1000 * 60 * 60 * 24));
+        if (diasTranscurridos === 0) {
+          tagFrescura = `<span class="tag-fecha-ok">🟢 Hoy (${auditorNombre})</span>`;
+        } else if (diasTranscurridos <= 7) {
+          tagFrescura = `<span class="tag-fecha-ok">🟢 Hace ${diasTranscurridos}d (${auditorNombre})</span>`;
+        } else if (diasTranscurridos <= 15) {
+          tagFrescura = `<span class="tag-fecha-warn">🟡 Hace ${diasTranscurridos}d (${auditorNombre})</span>`;
+        } else {
+          tagFrescura = `<span class="tag-fecha-alert">🔴 Hace ${diasTranscurridos}d (${auditorNombre})</span>`;
+        }
+      }
+
+      // 4. GENERACIÓN DE ETIQUETAS VISUALES DE DESVIACIÓN
+      let tagEstado = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
+      
+      if (faltantes > 0 && sobrantes > 0) {
+        // Hubo cruce de equipos (falta de uno, sobra de otro)
+        tagEstado = `<span class="tag-desviacion-neg">🔴 Faltan ${faltantes}</span><br><span class="tag-desviacion-pos">🟡 Sobran ${sobrantes}</span>`;
+      } else if (faltantes > 0) {
+        tagEstado = `<span class="tag-desviacion-neg">🔴 Faltan ${faltantes}</span>`;
+      } else if (sobrantes > 0) {
+        tagEstado = `<span class="tag-desviacion-pos">🟡 Sobran ${sobrantes}</span>`;
+      }
+
+      html += `<tr>
+        <td style="font-weight:600; color:#334155;">${item.nombre}</td>
+        <td style="text-align:center; font-weight:700;">${stockSistemaTotal} un.</td>
+        <td style="text-align:center; color:#0284c7; font-weight:700;">${stockRealTotal} un.</td>
+        <td style="text-align:center;">${tagEstado}</td>
+        <td style="text-align:center; font-weight:700;">${desviacionPct}%</td>
+        <td style="text-align:center;">${tagFrescura}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    document.getElementById('tablaAuditoriaWrapper').innerHTML = html;
+  }
+
   function renderOperativo(arbol, totalDB, totalCATV) {
     let html = '<table class="arbol">';
     html += `<tr><td class="celda-total" colspan="12">📦 TOTAL ONUs DISTRIBUCIÓN SUCURSALES: ${(totalDB + totalCATV).toLocaleString()}</td></tr>`;
@@ -368,7 +490,6 @@
     document.getElementById('tablaWrapper').innerHTML = html;
   }
 
-  // RENDERIZADO: 4. REFERENCIAS (CATÁLOGO DE PRECIOS)
   function renderTablaPrecios() {
     let html = '<table class="arbol" style="text-align: left;">';
     html += '<tr><th style="background:#0f172a; color:white;">Modelo de Equipo (Descripción exacta)</th><th style="background:#0f172a; color:white; width: 150px; text-align:center;">Valor Referencia</th></tr>';
@@ -385,7 +506,6 @@
     document.getElementById('tablaPreciosWrapper').innerHTML = html;
   }
 
-  // BOTÓN ACTUALIZAR
   document.getElementById('btnReloadSupabase').addEventListener('click', async () => {
     try {
       const controller = new AbortController();
@@ -396,7 +516,6 @@
     await cargarDesdeSupabase();
   });
 
-  // CARGA INICIAL
   renderTablaPrecios();
   cargarDesdeSupabase();
 </script>

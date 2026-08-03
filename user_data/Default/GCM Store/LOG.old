@@ -1,2 +1,3 @@
-2026/08/02-14:21:31.649 1cb4 Creating DB C:\Users\La Nave de Jose\dashboard-suministro\bot-suministro\user_data\Default\GCM Store since it was missing.
-2026/08/02-14:21:31.654 1cb4 Reusing MANIFEST C:\Users\La Nave de Jose\dashboard-suministro\bot-suministro\user_data\Default\GCM Store/MANIFEST-000001
+2026/08/02-20:51:41.640 46dc Reusing MANIFEST C:\Users\La Nave de Jose\dashboard-suministro\bot-suministro\user_data\Default\GCM Store/MANIFEST-000001
+2026/08/02-20:51:41.640 46dc Recovering log #3
+2026/08/02-20:51:41.640 46dc Reusing old log C:\Users\La Nave de Jose\dashboard-suministro\bot-suministro\user_data\Default\GCM Store/000003.log 
