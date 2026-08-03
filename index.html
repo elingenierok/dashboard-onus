@@ -267,15 +267,25 @@
       const descUpper = (row.descripcion || '').toUpperCase();
       const codTrim = (row.codigo || '').trim();
 
-      const esDB = GRUPO_DUAL_BAND.some(p => descUpper.includes(p));
+      // Clasificación excluyente (Evita duplicar ONUs híbridas CATV/DUAL BAND)
       const esCATV = GRUPO_CATV.some(p => descUpper.includes(p));
+      const esDB = !esCATV && GRUPO_DUAL_BAND.some(p => descUpper.includes(p));
       
       const precioUnitario = mapaPrecios.get(codTrim) || mapaPrecios.get(descUpper) || COSTO_POR_DEFECTO;
       const valorFila = row.stock * precioUnitario;
 
       if (SUCURSALES.includes(row.almacen)) {
-        if (esDB) { totalDB += row.stock; arbol[row.almacen].DB += row.stock; arbol[row.almacen].total += row.stock; valorGlobal += valorFila; }
-        if (esCATV) { totalCATV += row.stock; arbol[row.almacen].CATV += row.stock; arbol[row.almacen].total += row.stock; valorGlobal += valorFila; }
+        if (esCATV) { 
+          totalCATV += row.stock; 
+          arbol[row.almacen].CATV += row.stock; 
+          arbol[row.almacen].total += row.stock; 
+          valorGlobal += valorFila; 
+        } else if (esDB) { 
+          totalDB += row.stock; 
+          arbol[row.almacen].DB += row.stock; 
+          arbol[row.almacen].total += row.stock; 
+          valorGlobal += valorFila; 
+        }
       } 
       else if (ALMACENES_TACTICOS.includes(row.almacen)) {
         if (esDB || esCATV) {
