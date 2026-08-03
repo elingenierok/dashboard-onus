@@ -113,7 +113,7 @@
         <div class="kpi-card-dark" style="border-color: #0284c7;">
           <div class="title" style="color: #f8fafc;">📦 Total ONUs Operativas</div>
           <div class="value" id="val-total" style="color: #38bdf8;">0</div>
-          <div class="subtext">Valor Estimado: <strong id="val-costo" style="color: #4ade80;">$0 USD</strong></div>
+          <div class="subtext">Valor Real: <strong id="val-costo" style="color: #4ade80;">$0 USD</strong></div>
         </div>
       </div>
     </section>
@@ -165,7 +165,7 @@
     <section class="card">
       <h2 class="card-title">⚙️ Catálogo Maestro de Precios (Valorización en USD)</h2>
       <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">
-        Estos valores se utilizan para calcular con precisión el capital inmovilizado en cada almacén. En futuras versiones, se podrá actualizar mediante la carga de un archivo CSV contable.
+        Precios unitarios reales de catálogo extraídos automáticamente desde Supabase.
       </p>
       <div id="tablaPreciosWrapper" style="overflow-x: auto;"></div>
     </section>
@@ -179,19 +179,7 @@
   const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
   const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const PRECIOS_EQUIPOS = {
-    "ONU ZTE F6201B V9.3 WIFI6 AX3000": 65,
-    "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)": 35,
-    "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)": 70,
-    "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)": 40,
-    "ONU WIFI HUAWEI/WIRETECH DUAL BAND(USADA)": 35,
-    "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)": 35,
-    "ONU HUAWEI ECHOLIFE EG8147X6": 85,
-    "ONU HUAWEI ECHOLIFE EG8147X6(USADO)": 45,
-    "ONU ZTE F6600R DUAL BAND WIFI (CATV)": 80,
-    "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)": 40
-  };
-  const COSTO_POR_DEFECTO = 50;
+  const COSTO_POR_DEFECTO = 0;
 
   const SUCURSALES = ['OBE_ALM_PRINCIPAL', 'OBE_ALM_CATRIEL', 'SPD_PRINCIPAL', 'WND-PRINCIPAL', 'ITU_ALM_PRINCIPAL', 'ELDO_ALM_PRINCIPAL'];
   const SUCURSALES_CORTAS = ['OBE PRINC', 'OBE CATR', 'SPD PRINC', 'WND PRINC', 'ITU PRINC', 'ELD PRINC'];
@@ -208,10 +196,12 @@
     { key: 'ELDO_ALM_PRINCIPAL', nombre: 'Eldorado Principal' }
   ];
 
-  const GRUPO_DUAL_BAND = ["ONU ZTE F6201B V9.3 WIFI6 AX3000", "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)", "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)", "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)", "ONU WIFI HUAWEI/WIRETECH DUAL BAND(USADA)", "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)"];
-  const GRUPO_CATV = ["ONU HUAWEI ECHOLIFE EG8147X6", "ONU HUAWEI ECHOLIFE EG8147X6(USADO)", "ONU ZTE F6600R DUAL BAND WIFI (CATV)", "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"];
+  const GRUPO_DUAL_BAND = ["F6201B", "F6600P", "WIRETECH DUAL BAND", "F670L", "DUAL BAND"];
+  const GRUPO_CATV = ["EG8147X6", "F6600R", "CATV"];
 
   let stockData = [];
+  let mapaPrecios = new Map();
+  let listaPreciosTabla = [];
 
   function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -227,19 +217,40 @@
 
     try {
       const { data: ult } = await supabaseClient.from('registro_stock').select('fecha_registro').order('fecha_registro', { ascending: false }).limit(1);
-      if (!ult || !ult.length) throw new Error('Sin datos');
+      if (!ult || !ult.length) throw new Error('Sin datos de stock');
 
       const ultimaFecha = ult[0].fecha_registro;
-      const { data, error } = await supabaseClient.from('registro_stock').select('descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha);
-      if (error) throw error;
 
-      stockData = data.map(d => ({ descripcion: d.descripcion, stock: d.stock_total, almacen: d.almacen }));
+      const [resStock, resPrecios] = await Promise.all([
+        supabaseClient.from('registro_stock').select('codigo, descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha),
+        supabaseClient.from('precios_catalogos').select('codigo, descripcion, precio_final, moneda')
+      ]);
+
+      if (resStock.error) throw resStock.error;
+
+      stockData = (resStock.data || []).map(d => ({
+        codigo: d.codigo,
+        descripcion: d.descripcion,
+        stock: d.stock_total,
+        almacen: d.almacen
+      }));
+
+      mapaPrecios.clear();
+      listaPreciosTabla = resPrecios.data || [];
+
+      listaPreciosTabla.forEach(p => {
+        const val = parseFloat(p.precio_final) || 0;
+        if (p.codigo) mapaPrecios.set(p.codigo.trim(), val);
+        if (p.descripcion) mapaPrecios.set(p.descripcion.trim().toUpperCase(), val);
+      });
+
       tagCSV.textContent = `Supabase: ✅ ${ultimaFecha}`;
       tagCSV.className = 'file-tag ok';
 
       await renderStockModulo();
+      renderTablaPrecios();
     } catch (err) {
-      console.error(err);
+      console.error('Error al consultar Supabase:', err);
       tagCSV.textContent = 'Supabase: ❌ Error';
     }
   }
@@ -253,11 +264,13 @@
     ALMACENES_TACTICOS.forEach(s => arbol[s] = { DB: 0, CATV: 0, total: 0 });
 
     stockData.forEach(row => {
-      const descUpper = row.descripcion.toUpperCase();
+      const descUpper = (row.descripcion || '').toUpperCase();
+      const codTrim = (row.codigo || '').trim();
+
       const esDB = GRUPO_DUAL_BAND.some(p => descUpper.includes(p));
       const esCATV = GRUPO_CATV.some(p => descUpper.includes(p));
       
-      const precioUnitario = PRECIOS_EQUIPOS[row.descripcion] || COSTO_POR_DEFECTO;
+      const precioUnitario = mapaPrecios.get(codTrim) || mapaPrecios.get(descUpper) || COSTO_POR_DEFECTO;
       const valorFila = row.stock * precioUnitario;
 
       if (SUCURSALES.includes(row.almacen)) {
@@ -293,7 +306,7 @@
     document.getElementById('bar-catv').style.width = `${pctCATV}%`;
 
     document.getElementById('val-total').textContent = total.toLocaleString();
-    document.getElementById('val-costo').textContent = `$ ${valorGlobal.toLocaleString()} USD`;
+    document.getElementById('val-costo').textContent = `$ ${Math.round(valorGlobal).toLocaleString('es-AR')} USD`;
   }
 
   async function renderTactico(arbolActual, valorDevoluciones, valorDescarte) {
@@ -338,12 +351,12 @@
       <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
         <div class="title" style="color:#475569;">📥 OBE_ALM_DEVOLUCIONES (A Probar)</div>
         <div class="value">${devStock} un.</div>
-        <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${valorDevoluciones.toLocaleString()} USD</strong></div>
+        <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
       </div>
       <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
         <div class="title" style="color:#475569;">🗑️ OBE_ALM_DESCARTE (Inmovilizado)</div>
         <div class="value">${descStock} un.</div>
-        <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${valorDescarte.toLocaleString()} USD</strong></div>
+        <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
       </div>
       <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
         <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO (OBE_CATRIEL)</div>
@@ -353,7 +366,6 @@
     `;
   }
 
-  // RENDERIZADO: TABLA AUDITORÍA CON CÁLCULO DE DESVIACIÓN ABSOLUTA POR MODELO
   async function renderAuditoriaTabla() {
     let html = `<table class="tabla-auditoria">
       <thead>
@@ -376,8 +388,6 @@
     } catch (e) { console.log('Sin auditorías previas registradas'); }
 
     LISTA_AUDITORIA.forEach(item => {
-      
-      // 1. Recopilar inventario del Sistema por modelo (Solo ONUs válidas)
       const dataSistemaSucursal = stockData.filter(d => d.almacen === item.key && (
         GRUPO_DUAL_BAND.some(p => d.descripcion.toUpperCase().includes(p)) || 
         GRUPO_CATV.some(p => d.descripcion.toUpperCase().includes(p))
@@ -390,7 +400,6 @@
       });
       const stockSistemaTotal = Object.values(mapaSistema).reduce((a, b) => a + b, 0);
 
-      // 2. Extraer última auditoría física de esa sucursal
       const registrosSucursal = auditoriasGuardadas.filter(a => a.sucursal === item.key);
       let stockRealTotal = stockSistemaTotal;
       let tagFrescura = `<span style="color:#94a3b8; font-style:italic;">Sin auditoría</span>`;
@@ -405,7 +414,6 @@
         const fechaUltimaStr = registrosSucursal[0].created_at;
         const auditorNombre = registrosSucursal[0].auditor_nombre || 'Auditor';
 
-        // Filtrar todos los items del mismo momento exacto
         const itemsUltimaAuditoria = registrosSucursal.filter(a => a.created_at === fechaUltimaStr);
         
         const mapaReal = {};
@@ -415,7 +423,6 @@
         });
         stockRealTotal = Object.values(mapaReal).reduce((a, b) => a + b, 0);
 
-        // 3. COMPARACIÓN MODELO POR MODELO (Desviación Absoluta)
         const modelosUnicos = new Set([...Object.keys(mapaSistema), ...Object.keys(mapaReal)]);
         
         modelosUnicos.forEach(modelo => {
@@ -430,7 +437,6 @@
         desviacionAbsoluta = faltantes + sobrantes;
         desviacionPct = stockSistemaTotal > 0 ? ((desviacionAbsoluta / stockSistemaTotal) * 100).toFixed(1) : '0.0';
 
-        // Etiqueta de Frescura (SLA de Auditoría)
         const diffTiempo = Math.abs(hoy - fechaUltima);
         const diasTranscurridos = Math.floor(diffTiempo / (1000 * 60 * 60 * 24));
         if (diasTranscurridos === 0) {
@@ -444,11 +450,9 @@
         }
       }
 
-      // 4. GENERACIÓN DE ETIQUETAS VISUALES DE DESVIACIÓN
       let tagEstado = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
       
       if (faltantes > 0 && sobrantes > 0) {
-        // Hubo cruce de equipos (falta de uno, sobra de otro)
         tagEstado = `<span class="tag-desviacion-neg">🔴 Faltan ${faltantes}</span><br><span class="tag-desviacion-pos">🟡 Sobran ${sobrantes}</span>`;
       } else if (faltantes > 0) {
         tagEstado = `<span class="tag-desviacion-neg">🔴 Faltan ${faltantes}</span>`;
@@ -492,16 +496,20 @@
 
   function renderTablaPrecios() {
     let html = '<table class="arbol" style="text-align: left;">';
-    html += '<tr><th style="background:#0f172a; color:white;">Modelo de Equipo (Descripción exacta)</th><th style="background:#0f172a; color:white; width: 150px; text-align:center;">Valor Referencia</th></tr>';
+    html += '<tr><th style="background:#0f172a; color:white;">Código</th><th style="background:#0f172a; color:white;">Descripción</th><th style="background:#0f172a; color:white; width: 150px; text-align:center;">Precio Final</th></tr>';
     
-    for (const [modelo, precio] of Object.entries(PRECIOS_EQUIPOS)) {
-      html += `<tr>
-        <td style="font-weight: 600; color: #334155;">${modelo}</td>
-        <td style="text-align:center; color: #16a34a; font-weight: 700;">$ ${precio} USD</td>
-      </tr>`;
+    if (listaPreciosTabla.length === 0) {
+      html += '<tr><td colspan="3" style="text-align:center; color:#64748b;">No hay precios cargados en Supabase.</td></tr>';
+    } else {
+      listaPreciosTabla.forEach(item => {
+        html += `<tr>
+          <td style="font-weight: 700; color: #0284c7;">${item.codigo || '-'}</td>
+          <td style="font-weight: 600; color: #334155;">${item.descripcion || '-'}</td>
+          <td style="text-align:center; color: #16a34a; font-weight: 700;">$ ${item.precio_final} ${item.moneda || 'USD'}</td>
+        </tr>`;
+      });
     }
     
-    html += `<tr><td style="color:#64748b; font-style:italic;">Cualquier otro equipo no listado arriba</td><td style="text-align:center; color:#64748b;">$ ${COSTO_POR_DEFECTO} USD (Por defecto)</td></tr>`;
     html += '</table>';
     document.getElementById('tablaPreciosWrapper').innerHTML = html;
   }
@@ -516,7 +524,6 @@
     await cargarDesdeSupabase();
   });
 
-  renderTablaPrecios();
   cargarDesdeSupabase();
 </script>
 </body>
