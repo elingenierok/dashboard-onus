@@ -4,70 +4,52 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Suministros y Logística - KPI del área</title>
-<!-- Librería oficial de Supabase -->
+<!-- Librerías Externas -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-  /* ESTILOS GLOBALES Y PALETA */
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f8fafc; padding: 20px; color: #0f172a; }
   .container { max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-
-  /* Encabezado Principal */
   .header { background: #0f172a; color: white; padding: 18px 28px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
-  .header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.3px; }
-  .header-tools { display: flex; gap: 10px; align-items: center; }
-
-  /* Solapas de Navegación */
+  .header h1 { font-size: 1.25rem; font-weight: 700; }
+  
+  /* Tabs */
   .nav-tabs { display: flex; gap: 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; overflow-x: auto; }
   .tab-btn { padding: 10px 24px; font-size: 0.9rem; font-weight: 700; border: none; background: #e2e8f0; color: #475569; border-radius: 8px 8px 0 0; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
   .tab-btn.active { background: #0284c7; color: white; }
   .tab-content { display: none; flex-direction: column; gap: 20px; }
   .tab-content.active { display: flex; }
-
-  /* Componentes Estándar */
+  
+  /* Componentes */
   .card { background: white; border-radius: 12px; border: 1px solid #cbd5e1; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
   .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: #0f172a; }
-
-  /* ESTILOS: MÓDULO STOCK */
-  .panel-estrategico { background: #0f172a; color: white; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .panel-estrategico { background: #0f172a; color: white; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .summary-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #1e293b; padding: 12px 18px; border-radius: 8px; border: 1px solid #334155; }
+  .grid-tactico { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
   .kpi-card-dark { background: #1e293b; border: 1px solid #334155; padding: 16px; border-radius: 10px; }
-  .kpi-card-dark .title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; font-weight: 600; }
+  .kpi-card-dark .title { font-size: 0.8rem; text-transform: uppercase; color: #94a3b8; font-weight: 600; }
   .kpi-card-dark .value { font-size: 1.8rem; font-weight: 800; margin: 4px 0; }
   .kpi-card-dark .subtext { font-size: 0.75rem; color: #cbd5e1; }
-
-  .bar-container { background: #334155; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 8px; }
-  .bar-fill-db { background: #0284c7; height: 100%; transition: width 0.4s ease; }
-  .bar-fill-catv { background: #ea580c; height: 100%; transition: width 0.4s ease; }
-
-  .grid-tactico { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
   .placeholder-tactico { background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 30px; text-align: center; color: #64748b; font-size: 0.85rem; font-weight: 600; }
-
   .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.82rem; }
   .btn-outline { background: white; border: 1px solid #cbd5e1; color: #334155; }
   .file-tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
   .file-tag.ok { background: #dcfce7; color: #166534; }
-  .file-tag.no { background: #f1f5f9; color: #475569; }
-
-  /* TABLAS EN GENERAL */
-  table.arbol { width: 100%; border-collapse: collapse; min-width: 1000px; }
-  table.arbol td, table.arbol th { padding: 8px; text-align: center; border: 1px solid #cbd5e1; font-size: 0.82rem; }
+  .file-tag.no { background: #fee2e2; color: #991b1b; }
+  
+  /* Tablas */
+  table.arbol, table.tabla-auditoria { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  table.arbol { min-width: 1000px; }
+  table.arbol td, table.arbol th, table.tabla-auditoria td { padding: 8px; text-align: center; border: 1px solid #cbd5e1; font-size: 0.82rem; }
+  table.tabla-auditoria th { background: #1e293b; color: white; padding: 10px; font-size: 0.8rem; text-align: left; border:none; }
   .celda-total { background: #0f172a; color: white; font-weight: 800; font-size: 1rem; }
-  .celda-grupo { font-weight: 700; }
   .celda-db { background: #e0f2fe; color: #0369a1; }
   .celda-catv { background: #ffedd5; color: #c2410c; }
   .borde-izq { border-left: 3px solid #0f172a !important; }
-
-  /* TABLA AUDITORÍA TÁCTICA */
-  table.tabla-auditoria { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  table.tabla-auditoria th { background: #1e293b; color: white; padding: 10px; font-size: 0.8rem; text-align: left; }
-  table.tabla-auditoria td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 0.82rem; }
   .tag-sin-desviacion { color: #16a34a; font-weight: 700; background: #dcfce7; padding: 2px 8px; border-radius: 4px; }
-  .tag-desviacion-neg { color: #dc2626; font-weight: 700; background: #fee2e2; padding: 2px 8px; border-radius: 4px; display: inline-block; margin: 2px; }
-  .tag-desviacion-pos { color: #d97706; font-weight: 700; background: #fef3c7; padding: 2px 8px; border-radius: 4px; display: inline-block; margin: 2px; }
   .tag-fecha-ok { color: #15803d; font-weight: 600; }
   .tag-fecha-warn { color: #b45309; font-weight: 700; }
-  .tag-fecha-alert { color: #b91c1c; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -75,9 +57,9 @@
 <div class="container">
   <header class="header">
     <h1>Suministros y Logística - KPI del área</h1>
-    <div class="header-tools" id="header-tools-area"></div>
   </header>
 
+  <!-- Pestañas Principales -->
   <nav class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('tab-stock')">📦 STOCK</button>
     <button class="tab-btn" onclick="switchTab('tab-recupero')">🔄 RECUPERO DE EQUIPOS</button>
@@ -85,410 +67,70 @@
     <button class="tab-btn" onclick="switchTab('tab-referencias')">⚙️ REFERENCIAS</button>
   </nav>
 
+  <!-- PESTAÑA: STOCK -->
   <main id="tab-stock" class="tab-content active">
-    <!-- 1.1 INDICADORES ESTRATÉGICOS -->
     <section id="stock-estrategico" class="panel-estrategico">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
         <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Inventario Saludable)</h2>
-        <span id="tagCSV" class="file-tag no">Origen: Conectando...</span>
+        <span id="tagCSV" class="file-tag no">Conectando...</span>
       </div>
-      <div class="kpi-grid">
-        <div class="kpi-card-dark">
-          <div class="title" style="color: #38bdf8;">🔵 Dual Band</div>
-          <div class="value" id="val-db">0</div>
-          <div class="subtext" id="pct-db">0% del total</div>
-          <div class="bar-container"><div id="bar-db" class="bar-fill-db" style="width: 0%;"></div></div>
-        </div>
-        <div class="kpi-card-dark">
-          <div class="title" style="color: #fb923c;">🟠 CATV</div>
-          <div class="value" id="val-catv">0</div>
-          <div class="subtext" id="pct-catv">0% del total</div>
-          <div class="bar-container"><div id="bar-catv" class="bar-fill-catv" style="width: 0%;"></div></div>
-        </div>
-        <div class="kpi-card-dark" style="border-color: #0284c7;">
-          <div class="title" style="color: #f8fafc;">📦 Total ONUs Operativas</div>
-          <div class="value" id="val-total" style="color: #38bdf8;">0</div>
-          <div class="subtext">Valor Real: <strong id="val-costo" style="color: #4ade80;">$0 USD</strong></div>
-        </div>
+      <div class="summary-bar">
+        <div style="font-size: 0.88rem; color: #cbd5e1;">🔵 Dual Band: <strong id="val-db" style="color: #38bdf8; font-size: 1.05rem;">0</strong> <span id="pct-db" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
+        <div style="font-size: 0.88rem; color: #cbd5e1;">🟠 CATV: <strong id="val-catv" style="color: #fb923c; font-size: 1.05rem;">0</strong> <span id="pct-catv" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
+        <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Operativo: <strong id="val-total" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
+        <div style="font-size: 0.88rem; color: #cbd5e1;">💵 Valor Real: <strong id="val-costo" style="color: #4ade80; font-size: 1.05rem;">$0 USD</strong></div>
+      </div>
+      <!-- Contenedor del Gráfico con altura holgada de 180px para evitar cortes -->
+      <div style="position: relative; height: 180px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
+        <canvas id="kpiStackedChart"></canvas>
       </div>
     </section>
 
-    <!-- 1.2 INDICADORES TÁCTICOS -->
     <section id="stock-tactico" class="card">
       <h2 class="card-title">🎯 Indicadores Tácticos (Control & Auditoría)</h2>
-      <div id="grid-tactico-cards" class="grid-tactico">
-        <div class="placeholder-tactico">Cargando datos históricos...</div>
-      </div>
+      <div id="grid-tactico-cards" class="grid-tactico"></div>
       <div style="margin-top: 10px;">
         <strong style="font-size: 0.9rem; color: #0f172a;">📋 Exactitud de Registro (Stock Sistema vs. Stock Físico)</strong>
         <div id="tablaAuditoriaWrapper" style="overflow-x: auto; margin-top: 8px;"></div>
       </div>
     </section>
 
-    <!-- 1.3 INDICADORES OPERATIVOS -->
     <section id="stock-operativo" class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h2 class="card-title" style="margin: 0;">⚙️ Indicadores Operativos - Distribución por Sucursal</h2>
         <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar de Supabase</button>
       </div>
-      <div id="tablaWrapper" style="overflow-x: auto;">
-        <div style="text-align: center; padding: 30px; color: #64748b;">Cargando datos...</div>
-      </div>
+      <div id="tablaWrapper" style="overflow-x: auto;"></div>
     </section>
   </main>
 
+  <!-- PESTAÑAS FUTURAS -->
   <main id="tab-recupero" class="tab-content">
-    <section class="card">
-      <h2 class="card-title">🔄 Módulo de Recupero de Equipos</h2>
-      <div class="placeholder-tactico">Próximamente: Integración con Google Sheets para tasa de devolución y reacondicionamiento.</div>
-    </section>
+    <section class="card"><h2 class="card-title">🔄 Módulo de Recupero de Equipos</h2><div class="placeholder-tactico">Próximamente... (Se creará en js/recupero.js)</div></section>
   </main>
-
   <main id="tab-flota" class="tab-content">
-    <section class="card">
-      <h2 class="card-title">🚚 Módulo de Gestión de Flota</h2>
-      <div class="placeholder-tactico">Próximamente: Control de combustible, mantenimiento preventivo y disponibilidad vehicular.</div>
-    </section>
+    <section class="card"><h2 class="card-title">🚚 Módulo de Gestión de Flota</h2><div class="placeholder-tactico">Próximamente... (Se creará en js/flota.js)</div></section>
   </main>
-
   <main id="tab-referencias" class="tab-content">
     <section class="card">
-      <h2 class="card-title">⚙️ Catálogo Maestro de Precios (Valorización en USD)</h2>
-      <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;">
-        Precios unitarios reales de catálogo extraídos automáticamente desde Supabase.
-      </p>
+      <h2 class="card-title">⚙️ Catálogo Maestro de Precios</h2>
       <div id="tablaPreciosWrapper" style="overflow-x: auto;"></div>
     </section>
   </main>
 </div>
 
+<!-- Carga del único script del módulo de Stock -->
+<script src="js/stock.js"></script>
+
 <script>
-  const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  const COSTO_POR_DEFECTO = 0;
-
-  const SUCURSALES = ['OBE_ALM_PRINCIPAL', 'OBE_ALM_CATRIEL', 'SPD_PRINCIPAL', 'WND-PRINCIPAL', 'ITU_ALM_PRINCIPAL', 'ELDO_ALM_PRINCIPAL'];
-  const SUCURSALES_CORTAS = ['OBE PRINC', 'OBE CATR', 'SPD PRINC', 'WND PRINC', 'ITU PRINC', 'ELD PRINC'];
-  const ALMACEN_DEV = 'OBE_ALM_DEVOLUCIONES';
-  const ALMACEN_DESC = 'OBE_ALM_DESCARTE';
-  
-  const LISTA_AUDITORIA = [
-    { key: 'OBE_ALM_PRINCIPAL', nombre: 'OBE Principal' },
-    { key: 'OBE_ALM_CATRIEL', nombre: 'OBE Catriel (Compras)' },
-    { key: 'OBE_ALM_DEVOLUCIONES', nombre: 'OBE Devoluciones (Triage)' },
-    { key: 'OBE_ALM_DESCARTE', nombre: 'OBE Descarte (Inmovilizado)' },
-    { key: 'SPD_PRINCIPAL', nombre: 'San Pedro Principal' },
-    { key: 'WND-PRINCIPAL', nombre: 'Wanda Principal' },
-    { key: 'ITU_ALM_PRINCIPAL', nombre: 'Ituzaingó Principal' },
-    { key: 'ELDO_ALM_PRINCIPAL', nombre: 'Eldorado Principal' }
-  ];
-
-  let stockData = [];
-  let mapaPrecios = new Map();
-  let listaPreciosTabla = [];
-
+  // Cambiador de solapas global
   function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-    event.currentTarget.classList.add('active');
-    document.getElementById(tabId).classList.add('active');
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    const target = document.getElementById(tabId);
+    if (target) target.classList.add('active');
   }
-
-  async function cargarDesdeSupabase() {
-    const tagCSV = document.getElementById('tagCSV');
-    tagCSV.textContent = 'Supabase: ⏳ Consultando...';
-    tagCSV.className = 'file-tag no';
-
-    try {
-      const { data: ult } = await supabaseClient.from('registro_stock').select('fecha_registro').order('fecha_registro', { ascending: false }).limit(1);
-      if (!ult || !ult.length) throw new Error('Sin datos de stock');
-
-      const ultimaFecha = ult[0].fecha_registro;
-
-      const [resStock, resPrecios] = await Promise.all([
-        supabaseClient.from('registro_stock').select('codigo, descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha),
-        supabaseClient.from('precios_catalogos').select('codigo, descripcion, precio_final, moneda')
-      ]);
-
-      if (resStock.error) throw resStock.error;
-
-      // Agrupar stock para evitar duplicados del mismo día
-      const stockUnico = new Map();
-      (resStock.data || []).forEach(d => {
-        const key = `${d.almacen}_${d.codigo}_${d.descripcion}`;
-        stockUnico.set(key, {
-          codigo: (d.codigo || '').trim().toUpperCase(),
-          descripcion: (d.descripcion || '').trim().toUpperCase(),
-          stock: parseInt(d.stock_total, 10) || 0,
-          almacen: (d.almacen || '').trim()
-        });
-      });
-      stockData = Array.from(stockUnico.values());
-
-      // Cargar Diccionario de Precios
-      mapaPrecios.clear();
-      listaPreciosTabla = resPrecios.data || [];
-      listaPreciosTabla.forEach(p => {
-        const val = parseFloat(p.precio_final) || 0;
-        if (p.codigo) mapaPrecios.set(p.codigo.trim().toUpperCase(), val);
-        if (p.descripcion) mapaPrecios.set(p.descripcion.trim().toUpperCase(), val);
-      });
-
-      tagCSV.textContent = `Supabase: ✅ ${ultimaFecha}`;
-      tagCSV.className = 'file-tag ok';
-
-      await renderStockModulo();
-      renderTablaPrecios();
-    } catch (err) {
-      console.error('Error al consultar Supabase:', err);
-      tagCSV.textContent = 'Supabase: ❌ Error';
-    }
-  }
-
-  async function renderStockModulo() {
-    let totalOnusOperativas = 0, valorGlobalOperativo = 0;
-    let totalDB = 0, totalCATV = 0;
-    
-    let devCant = 0, valorDevoluciones = 0;
-    let descCant = 0, valorDescarte = 0;
-    
-    const arbol = {};
-    SUCURSALES.forEach(s => arbol[s] = { DB: 0, CATV: 0, itemsDB: {}, itemsCATV: {} });
-
-    stockData.forEach(row => {
-      // Filtrar solo equipos que contengan la palabra "ONU"
-      if (!row.descripcion.includes('ONU')) return;
-
-      const precioUnitario = mapaPrecios.get(row.codigo) || mapaPrecios.get(row.descripcion) || COSTO_POR_DEFECTO;
-      const valorFila = row.stock * precioUnitario;
-
-      // 1. VALORIZACIÓN OPERATIVA (Sucursales Principales)
-      if (SUCURSALES.includes(row.almacen)) {
-        totalOnusOperativas += row.stock;
-        valorGlobalOperativo += valorFila;
-
-        // Clasificación visual
-        const esCATV = row.descripcion.includes('CATV') || row.descripcion.includes('EG8147X6') || row.descripcion.includes('F6600R');
-        
-        if (esCATV) {
-          totalCATV += row.stock;
-          arbol[row.almacen].CATV += row.stock;
-          arbol[row.almacen].itemsCATV[row.descripcion] = (arbol[row.almacen].itemsCATV[row.descripcion] || 0) + row.stock;
-        } else {
-          totalDB += row.stock;
-          arbol[row.almacen].DB += row.stock;
-          arbol[row.almacen].itemsDB[row.descripcion] = (arbol[row.almacen].itemsDB[row.descripcion] || 0) + row.stock;
-        }
-      } 
-      // 2. VALORIZACIÓN TÁCTICA (Devoluciones y Descarte)
-      else if (row.almacen === ALMACEN_DEV) {
-        devCant += row.stock;
-        valorDevoluciones += valorFila;
-      } 
-      else if (row.almacen === ALMACEN_DESC) {
-        descCant += row.stock;
-        valorDescarte += valorFila;
-      }
-    });
-
-    renderEstrategico(totalDB, totalCATV, totalOnusOperativas, valorGlobalOperativo);
-    renderOperativo(arbol, totalDB, totalCATV, totalOnusOperativas);
-    await renderTactico(devCant, valorDevoluciones, descCant, valorDescarte);
-    await renderAuditoriaTabla();
-  }
-
-  function renderEstrategico(db, catv, total, valorGlobal) {
-    const pctDB = total > 0 ? Math.round((db / total) * 100) : 0;
-    const pctCATV = total > 0 ? Math.round((catv / total) * 100) : 0;
-
-    document.getElementById('val-db').textContent = db.toLocaleString('es-AR');
-    document.getElementById('pct-db').textContent = `${pctDB}% del total`;
-    document.getElementById('bar-db').style.width = `${pctDB}%`;
-
-    document.getElementById('val-catv').textContent = catv.toLocaleString('es-AR');
-    document.getElementById('pct-catv').textContent = `${pctCATV}% del total`;
-    document.getElementById('bar-catv').style.width = `${pctCATV}%`;
-
-    document.getElementById('val-total').textContent = total.toLocaleString('es-AR');
-    document.getElementById('val-costo').textContent = `$ ${Math.round(valorGlobal).toLocaleString('es-AR')} USD`;
-  }
-
-  async function renderTactico(devCant, valorDevoluciones, descCant, valorDescarte) {
-    let catrielAnterior = 0, catrielActual = 0, variacionCatriel = 0;
-
-    stockData.forEach(row => {
-      if (row.almacen === 'OBE_ALM_CATRIEL' && row.descripcion.includes('ONU')) {
-        catrielActual += row.stock;
-      }
-    });
-
-    try {
-      const inicioMesActual = new Date();
-      inicioMesActual.setDate(1); 
-      const strInicioMes = inicioMesActual.toISOString().split('T')[0];
-
-      const { data: fechasAnt } = await supabaseClient
-        .from('registro_stock')
-        .select('fecha_registro')
-        .lt('fecha_registro', strInicioMes)
-        .order('fecha_registro', { ascending: false })
-        .limit(1);
-
-      if (fechasAnt && fechasAnt.length > 0) {
-        const fechaCierreAnt = fechasAnt[0].fecha_registro;
-        const { data: stockAnt } = await supabaseClient.from('registro_stock').select('stock_total, descripcion').eq('almacen', 'OBE_ALM_CATRIEL').eq('fecha_registro', fechaCierreAnt);
-
-        if (stockAnt) {
-          catrielAnterior = stockAnt.reduce((acc, curr) => curr.descripcion.toUpperCase().includes('ONU') ? acc + parseInt(curr.stock_total,10) : acc, 0);
-          variacionCatriel = catrielAnterior > 0 ? Math.round(((catrielActual - catrielAnterior) / catrielAnterior) * 100) : 0;
-        }
-      }
-    } catch (err) {}
-
-    let estadoCatriel = '<span style="color:#64748b; font-weight:600;">Sin datos previos</span>';
-    if (catrielAnterior > 0) {
-      estadoCatriel = variacionCatriel > 0 
-        ? `<span style="color:#dc2626; font-weight:700;">🔴 +${variacionCatriel}% (Aumento)</span>` 
-        : `<span style="color:#16a34a; font-weight:700;">🟢 ${variacionCatriel}% (Reuso)</span>`;
-    }
-
-    document.getElementById('grid-tactico-cards').innerHTML = `
-      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-        <div class="title" style="color:#475569;">📥 OBE_ALM_DEVOLUCIONES (A Probar)</div>
-        <div class="value">${devCant.toLocaleString('es-AR')} un.</div>
-        <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
-      </div>
-      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-        <div class="title" style="color:#475569;">🗑️ OBE_ALM_DESCARTE (Inmovilizado)</div>
-        <div class="value">${descCant.toLocaleString('es-AR')} un.</div>
-        <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
-      </div>
-      <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-        <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO (OBE_CATRIEL)</div>
-        <div class="value">${catrielActual.toLocaleString('es-AR')} un.</div>
-        <div class="subtext" style="color:#475569;">vs Cierre Mes Anterior (${catrielAnterior.toLocaleString('es-AR')} un.)<br>${estadoCatriel}</div>
-      </div>
-    `;
-  }
-
-  async function renderAuditoriaTabla() {
-    let html = `<table class="tabla-auditoria">
-      <thead>
-        <tr>
-          <th>Almacén / Depósito</th>
-          <th style="text-align:center;">Stock Sistema</th>
-          <th style="text-align:center;">Stock Físico</th>
-          <th style="text-align:center;">Detalle de Desviación</th>
-          <th style="text-align:center;">Desv. Absoluta (%)</th>
-          <th style="text-align:center;">Última Inspección</th>
-        </tr>
-      </thead>
-      <tbody>`;
-
-    let auditoriasGuardadas = [];
-    try {
-      const { data } = await supabaseClient.from('auditoria_sucursales').select('*').order('created_at', { ascending: false });
-      if (data) auditoriasGuardadas = data;
-    } catch (e) {}
-
-    LISTA_AUDITORIA.forEach(item => {
-      const stockSistemaTotal = stockData.reduce((acc, d) => (d.almacen === item.key && d.descripcion.includes('ONU')) ? acc + d.stock : acc, 0);
-      const registrosSucursal = auditoriasGuardadas.filter(a => a.sucursal === item.key);
-      let stockRealTotal = stockSistemaTotal;
-      let tagFrescura = `<span style="color:#94a3b8; font-style:italic;">Sin auditoría</span>`;
-
-      if (registrosSucursal.length > 0) {
-        const fechaUltima = new Date(registrosSucursal[0].created_at);
-        const auditorNombre = registrosSucursal[0].auditor_nombre || 'Auditor';
-        const diffTiempo = Math.abs(new Date() - fechaUltima);
-        const diasTranscurridos = Math.floor(diffTiempo / (1000 * 60 * 60 * 24));
-        tagFrescura = diasTranscurridos <= 7 ? `<span class="tag-fecha-ok">🟢 Hace ${diasTranscurridos}d (${auditorNombre})</span>` : `<span class="tag-fecha-warn">🟡 Hace ${diasTranscurridos}d (${auditorNombre})</span>`;
-      }
-
-      html += `<tr>
-        <td style="font-weight:600; color:#334155;">${item.nombre}</td>
-        <td style="text-align:center; font-weight:700;">${stockSistemaTotal.toLocaleString('es-AR')} un.</td>
-        <td style="text-align:center; color:#0284c7; font-weight:700;">${stockRealTotal.toLocaleString('es-AR')} un.</td>
-        <td style="text-align:center;"><span class="tag-sin-desviacion">🟢 Exacto (0)</span></td>
-        <td style="text-align:center; font-weight:700;">0.0%</td>
-        <td style="text-align:center;">${tagFrescura}</td>
-      </tr>`;
-    });
-
-    html += `</tbody></table>`;
-    document.getElementById('tablaAuditoriaWrapper').innerHTML = html;
-  }
-
-  function renderOperativo(arbol, totalDB, totalCATV, totalOnusOperativas) {
-    let html = '<table class="arbol">';
-    html += `<tr><td class="celda-total" colspan="12">📦 TOTAL ONUs DISTRIBUCIÓN SUCURSALES: ${totalOnusOperativas.toLocaleString('es-AR')}</td></tr>`;
-    
-    html += `<tr>
-      <td class="celda-grupo celda-db" colspan="6">🔵 DUAL BAND (${totalDB.toLocaleString('es-AR')})</td>
-      <td class="celda-grupo celda-catv borde-izq" colspan="6">🟠 CATV (${totalCATV.toLocaleString('es-AR')})</td>
-    </tr><tr>`;
-
-    SUCURSALES.forEach((s, i) => {
-      let itemsHtml = '';
-      Object.entries(arbol[s].itemsDB).forEach(([itemDesc, itemCant]) => {
-        itemsHtml += `<div style="font-size:0.72rem; text-align:left; margin-top:4px; color:#1e293b; line-height:1.2;">📦 ${itemDesc}: <strong>${itemCant}</strong></div>`;
-      });
-      html += `<td class="celda-db" style="vertical-align:top; padding:8px 6px;">
-        <strong>${SUCURSALES_CORTAS[i]}</strong><br>
-        <span style="font-size:1.1rem; font-weight:800; color:#0369a1;">${arbol[s].DB.toLocaleString('es-AR')}</span>
-        <div style="margin-top:6px; border-top:1px dashed #cbd5e1; padding-top:4px;">${itemsHtml || '<span style="font-size:0.7rem; color:#94a3b8;">Sin ítems</span>'}</div>
-      </td>`;
-    });
-
-    SUCURSALES.forEach((s, i) => {
-      let itemsHtml = '';
-      Object.entries(arbol[s].itemsCATV).forEach(([itemDesc, itemCant]) => {
-        itemsHtml += `<div style="font-size:0.72rem; text-align:left; margin-top:4px; color:#1e293b; line-height:1.2;">📦 ${itemDesc}: <strong>${itemCant}</strong></div>`;
-      });
-      html += `<td class="celda-catv ${i === 0 ? 'borde-izq' : ''}" style="vertical-align:top; padding:8px 6px;">
-        <strong>${SUCURSALES_CORTAS[i]}</strong><br>
-        <span style="font-size:1.1rem; font-weight:800; color:#c2410c;">${arbol[s].CATV.toLocaleString('es-AR')}</span>
-        <div style="margin-top:6px; border-top:1px dashed #fed7aa; padding-top:4px;">${itemsHtml || '<span style="font-size:0.7rem; color:#94a3b8;">Sin ítems</span>'}</div>
-      </td>`;
-    });
-
-    html += '</tr></table>';
-    document.getElementById('tablaWrapper').innerHTML = html;
-  }
-
-  function renderTablaPrecios() {
-    let html = '<table class="arbol" style="text-align: left;">';
-    html += '<tr><th style="background:#0f172a; color:white;">Código</th><th style="background:#0f172a; color:white;">Descripción</th><th style="background:#0f172a; color:white; width: 150px; text-align:center;">Precio Final</th></tr>';
-    
-    if (listaPreciosTabla.length === 0) {
-      html += '<tr><td colspan="3" style="text-align:center; color:#64748b;">No hay precios cargados en Supabase.</td></tr>';
-    } else {
-      listaPreciosTabla.forEach(item => {
-        html += `<tr>
-          <td style="font-weight: 700; color: #0284c7;">${item.codigo || '-'}</td>
-          <td style="font-weight: 600; color: #334155;">${item.descripcion || '-'}</td>
-          <td style="text-align:center; color: #16a34a; font-weight: 700;">$ ${item.precio_final} ${item.moneda || 'USD'}</td>
-        </tr>`;
-      });
-    }
-    
-    html += '</table>';
-    document.getElementById('tablaPreciosWrapper').innerHTML = html;
-  }
-
-  document.getElementById('btnReloadSupabase').addEventListener('click', async () => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      await fetch('http://localhost:3000/ejecutar-bot', { signal: controller.signal });
-      clearTimeout(timeoutId);
-    } catch (e) { console.log('Servidor local no detectado.'); }
-    await cargarDesdeSupabase();
-  });
-
-  cargarDesdeSupabase();
 </script>
 </body>
 </html>

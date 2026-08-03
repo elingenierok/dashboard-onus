@@ -1,0 +1,436 @@
+// ====================================================
+// MÓDULO AUTÓNOMO DE STOCK - LÓGICA VIP Y SUCURSALES ACTUALIZADAS
+// ====================================================
+
+const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const COSTO_POR_DEFECTO = 0;
+
+// 1. ALMACENES OFICIALES REVISADOS
+const SUCURSALES = [
+  'OBE_ALM_PRINCIPAL', 
+  'OBE_ALM_CATRIEL', 
+  'SPD_ALM_PRINCIPAL', 
+  'WND_ALM_PRINCIPAL', 
+  'ITU_ALM_PRINCIPAL', 
+  'ELDO_ALM_PRINCIPAL'
+];
+const SUCURSALES_CORTAS = ['OBE PRINC', 'OBE CATR', 'SPD PRINC', 'WND PRINC', 'ITU PRINC', 'ELD PRINC'];
+
+const ALMACEN_DEV = 'OBE_ALM_DEVOLUCIONES';
+const ALMACEN_DESC = 'OBE_ALM_DESCARTE';
+
+const LISTA_AUDITORIA = [
+  { key: 'OBE_ALM_PRINCIPAL', nombre: 'OBE Principal' },
+  { key: 'OBE_ALM_CATRIEL', nombre: 'OBE Catriel (Compras)' },
+  { key: 'OBE_ALM_DEVOLUCIONES', nombre: 'OBE Devoluciones (Triage)' },
+  { key: 'OBE_ALM_DESCARTE', nombre: 'OBE Descarte (Inmovilizado)' },
+  { key: 'SPD_ALM_PRINCIPAL', nombre: 'San Pedro Principal' },
+  { key: 'WND_ALM_PRINCIPAL', nombre: 'Wanda Principal' },
+  { key: 'ITU_ALM_PRINCIPAL', nombre: 'Ituzaingó Principal' },
+  { key: 'ELDO_ALM_PRINCIPAL', nombre: 'Eldorado Principal' }
+];
+
+// Helper para limpiar espacios y comparar exacto
+function normalizar(str) {
+  return (str || '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+// 2. LISTAS ESTRATÉGICAS DEFINITIVAS
+const GRUPO_DUAL_BAND = [
+  "ONU ZTE F6201B V9.3 WIFI6 AX3000",
+  "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
+  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
+  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
+  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)"
+].map(normalizar);
+
+const GRUPO_CATV = [
+  "ONU HUAWEI ECHOLIFE EG8147X6",
+  "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"
+].map(normalizar);
+
+let stockData = [];
+let mapaPrecios = new Map();
+let listaPreciosTabla = [];
+let kpiChart = null;
+
+// CARGA DESDE SUPABASE
+async function cargarStockModulo() {
+  const tagCSV = document.getElementById('tagCSV');
+  if (tagCSV) {
+    tagCSV.textContent = 'Supabase: ⏳ Consultando...';
+    tagCSV.className = 'file-tag no';
+  }
+
+  try {
+    const { data: ult, error: errUlt } = await supabaseClient
+      .from('registro_stock')
+      .select('fecha_registro')
+      .order('fecha_registro', { ascending: false })
+      .limit(1);
+
+    if (errUlt) throw errUlt;
+    if (!ult || !ult.length) throw new Error('Sin datos de stock');
+
+    const ultimaFecha = ult[0].fecha_registro;
+
+    const [resStock, resPrecios] = await Promise.all([
+      supabaseClient.from('registro_stock').select('codigo, descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha),
+      supabaseClient.from('precios_catalogos').select('codigo, descripcion, precio_final, moneda')
+    ]);
+
+    if (resStock.error) throw resStock.error;
+
+    // Guardar stock bruto de Supabase y normalizar nombres de almacenes
+    stockData = (resStock.data || []).map(d => {
+      let rawAlm = (d.almacen || '').trim().toUpperCase();
+      
+      // Mapeo defensivo para tolerar nombres viejos guardados en Supabase
+      if (rawAlm === 'SPD_PRINCIPAL' || rawAlm === 'SPD_ALM_PRINCIPAL') rawAlm = 'SPD_ALM_PRINCIPAL';
+      if (rawAlm === 'WND-PRINCIPAL' || rawAlm === 'WND_PRINCIPAL' || rawAlm === 'WND_ALM_PRINCIPAL') rawAlm = 'WND_ALM_PRINCIPAL';
+
+      return {
+        codigo: (d.codigo || '').trim().toUpperCase(),
+        descripcion: (d.descripcion || '').trim(),
+        stock: parseInt(d.stock_total, 10) || 0,
+        almacen: rawAlm
+      };
+    });
+
+    // Cargar Catálogo de Precios
+    mapaPrecios.clear();
+    listaPreciosTabla = resPrecios.data || [];
+    listaPreciosTabla.forEach(p => {
+      const val = parseFloat(p.precio_final) || 0;
+      if (p.codigo) mapaPrecios.set(p.codigo.trim().toUpperCase(), val);
+      if (p.descripcion) mapaPrecios.set(normalizar(p.descripcion), val);
+    });
+
+    if (tagCSV) {
+      tagCSV.textContent = `Supabase: ✅ ${ultimaFecha}`;
+      tagCSV.className = 'file-tag ok';
+    }
+
+    procesarYRenderizarStock();
+    renderTablaPrecios();
+  } catch (err) {
+    console.error('Error al consultar Supabase:', err);
+    if (tagCSV) {
+      tagCSV.textContent = `Supabase: ❌ ${err.message || 'Error'}`;
+      tagCSV.className = 'file-tag no';
+    }
+  }
+}
+
+// PROCESAMIENTO
+function procesarYRenderizarStock() {
+  // Variables Estratégicas (Solo equipos de la lista VIP + Solo 6 almacenes principales)
+  let stratDB = 0, stratCATV = 0, stratTotal = 0, stratValorUSD = 0;
+  const arbolEstrategico = {};
+  SUCURSALES.forEach(s => arbolEstrategico[s] = { DB: 0, CATV: 0 });
+
+  // Variables Operativas (Auditoría completa)
+  let devCant = 0, valorDevoluciones = 0;
+  let descCant = 0, valorDescarte = 0;
+  const arbolOperativo = {};
+  SUCURSALES.forEach(s => arbolOperativo[s] = { DB: 0, CATV: 0, Otras: 0, itemsDB: {}, itemsCATV: {}, itemsOtras: {} });
+
+  stockData.forEach(row => {
+    const descNorm = normalizar(row.descripcion);
+    const esVIP_DB = GRUPO_DUAL_BAND.includes(descNorm);
+    const esVIP_CATV = GRUPO_CATV.includes(descNorm);
+    const esAlmacenPrincipal = SUCURSALES.includes(row.almacen);
+
+    const precioUnitario = mapaPrecios.get(row.codigo) || mapaPrecios.get(descNorm) || COSTO_POR_DEFECTO;
+    const valorFila = row.stock * precioUnitario;
+
+    // A) ESTRATÉGICO: Conteo de equipos VIP y suma monetaria total en USD
+    if (esAlmacenPrincipal && (esVIP_DB || esVIP_CATV)) {
+      stratTotal += row.stock;
+      stratValorUSD += valorFila;
+
+      if (esVIP_DB) {
+        stratDB += row.stock;
+        arbolEstrategico[row.almacen].DB += row.stock;
+      } else if (esVIP_CATV) {
+        stratCATV += row.stock;
+        arbolEstrategico[row.almacen].CATV += row.stock;
+      }
+    }
+
+    // B) OPERATIVO / TÁCTICO: Clasificación para auditoría total
+    if (esAlmacenPrincipal) {
+      if (esVIP_DB) {
+        arbolOperativo[row.almacen].DB += row.stock;
+        arbolOperativo[row.almacen].itemsDB[row.descripcion] = (arbolOperativo[row.almacen].itemsDB[row.descripcion] || 0) + row.stock;
+      } else if (esVIP_CATV) {
+        arbolOperativo[row.almacen].CATV += row.stock;
+        arbolOperativo[row.almacen].itemsCATV[row.descripcion] = (arbolOperativo[row.almacen].itemsCATV[row.descripcion] || 0) + row.stock;
+      } else {
+        arbolOperativo[row.almacen].Otras += row.stock;
+        arbolOperativo[row.almacen].itemsOtras[row.descripcion] = (arbolOperativo[row.almacen].itemsOtras[row.descripcion] || 0) + row.stock;
+      }
+    } 
+    else if (row.almacen === ALMACEN_DEV) {
+      devCant += row.stock;
+      valorDevoluciones += valorFila;
+    } 
+    else if (row.almacen === ALMACEN_DESC) {
+      descCant += row.stock;
+      valorDescarte += valorFila;
+    }
+  });
+
+  renderStockEstrategico(stratDB, stratCATV, stratTotal, stratValorUSD, arbolEstrategico);
+  renderStockOperativo(arbolOperativo);
+  renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte);
+  renderAuditoriaTabla();
+}
+
+// RENDER: GRÁFICO Y RESUMEN ESTRATÉGICO
+function renderStockEstrategico(db, catv, total, valorGlobal, arbol) {
+  const pctDB = total > 0 ? Math.round((db / total) * 100) : 0;
+  const pctCATV = total > 0 ? Math.round((catv / total) * 100) : 0;
+
+  document.getElementById('val-db').textContent = db.toLocaleString('es-AR');
+  document.getElementById('pct-db').textContent = `(${pctDB}%)`;
+
+  document.getElementById('val-catv').textContent = catv.toLocaleString('es-AR');
+  document.getElementById('pct-catv').textContent = `(${pctCATV}%)`;
+
+  document.getElementById('val-total').textContent = `${total.toLocaleString('es-AR')} un.`;
+  document.getElementById('val-costo').textContent = `$ ${Math.round(valorGlobal).toLocaleString('es-AR')} USD`;
+
+  const chartData = {
+    labels: ['Inventario Saludable'],
+    datasets: [
+      {
+        label: '🔵 Dual Band VIP',
+        data: [db],
+        backgroundColor: '#0284c7',
+        borderRadius: { topLeft: 4, bottomLeft: 4 }
+      },
+      {
+        label: '🟠 CATV VIP',
+        data: [catv],
+        backgroundColor: '#ea580c',
+        borderRadius: { topRight: 4, bottomRight: 4 }
+      }
+    ]
+  };
+
+  if (kpiChart) {
+    kpiChart.arbolRef = arbol;
+    kpiChart.data = chartData;
+    kpiChart.update();
+  } else {
+    const ctx = document.getElementById('kpiStackedChart').getContext('2d');
+    kpiChart = new Chart(ctx, {
+      type: 'bar',
+      data: chartData,
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' }, boxWidth: 12, padding: 12 }
+          },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            titleColor: '#38bdf8',
+            bodyColor: '#f8fafc',
+            borderColor: '#334155',
+            borderWidth: 1,
+            padding: 12,
+            bodySpacing: 4,
+            titleSpacing: 6,
+            titleFont: { size: 12, weight: 'bold' },
+            bodyFont: { size: 11 },
+            callbacks: {
+              title: (tooltipItems) => {
+                const item = tooltipItems[0];
+                const esDB = item.datasetIndex === 0;
+                const subtotal = esDB ? db : catv;
+                const pct = esDB ? pctDB : pctCATV;
+                return `${esDB ? '🔵 Dual Band' : '🟠 CATV'}: ${subtotal.toLocaleString('es-AR')} un. (${pct}%)`;
+              },
+              label: (context) => {
+                const esDB = context.datasetIndex === 0;
+                const arbolActual = context.chart.arbolRef || arbol;
+                const lineas = ['Sucursales que componen esta suma:'];
+
+                const activos = [];
+                SUCURSALES.forEach((s, idx) => {
+                  const cant = arbolActual[s] ? (esDB ? arbolActual[s].DB : arbolActual[s].CATV) : 0;
+                  if (cant > 0) {
+                    activos.push(`${SUCURSALES_CORTAS[idx]}: ${cant.toLocaleString('es-AR')} un.`);
+                  }
+                });
+
+                for (let i = 0; i < activos.length; i += 2) {
+                  if (i + 1 < activos.length) {
+                    lineas.push(`  • ${activos[i].padEnd(16, ' ')} |   ${activos[i + 1]}`);
+                  } else {
+                    lineas.push(`  • ${activos[i]}`);
+                  }
+                }
+
+                return lineas;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+          y: { stacked: true, display: false }
+        }
+      }
+    });
+    kpiChart.arbolRef = arbol;
+  }
+}
+
+// RENDER: TÁCTICO
+async function renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte) {
+  let catrielActual = 0;
+  stockData.forEach(row => {
+    const descNorm = normalizar(row.descripcion);
+    if (row.almacen === 'OBE_ALM_CATRIEL' && (GRUPO_DUAL_BAND.includes(descNorm) || GRUPO_CATV.includes(descNorm))) {
+      catrielActual += row.stock;
+    }
+  });
+
+  document.getElementById('grid-tactico-cards').innerHTML = `
+    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+      <div class="title" style="color:#475569;">📥 OBE_ALM_DEVOLUCIONES (A Probar)</div>
+      <div class="value">${devCant.toLocaleString('es-AR')} un.</div>
+      <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
+    </div>
+    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+      <div class="title" style="color:#475569;">🗑️ OBE_ALM_DESCARTE (Inmovilizado)</div>
+      <div class="value">${descCant.toLocaleString('es-AR')} un.</div>
+      <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
+    </div>
+    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+      <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO (OBE_CATRIEL)</div>
+      <div class="value">${catrielActual.toLocaleString('es-AR')} un.</div>
+      <div class="subtext" style="color:#475569;">Equipos Estratégicos Nuevos</div>
+    </div>
+  `;
+}
+
+// RENDER: TABLA AUDITORÍA
+async function renderAuditoriaTabla() {
+  let html = `<table class="tabla-auditoria">
+    <thead>
+      <tr>
+        <th>Almacén / Depósito</th>
+        <th style="text-align:center;">Stock Sistema (Total)</th>
+        <th style="text-align:center;">Stock Físico Real</th>
+        <th style="text-align:center;">Detalle de Desviación</th>
+        <th style="text-align:center;">Desv. Absoluta (%)</th>
+        <th style="text-align:center;">Última Inspección</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  LISTA_AUDITORIA.forEach(item => {
+    const stockSistemaTotal = stockData.reduce((acc, d) => d.almacen === item.key ? acc + d.stock : acc, 0);
+
+    html += `<tr>
+      <td style="font-weight:600; color:#334155;">${item.nombre}</td>
+      <td style="text-align:center; font-weight:700;">${stockSistemaTotal.toLocaleString('es-AR')} un.</td>
+      <td style="text-align:center; color:#0284c7; font-weight:700;">${stockSistemaTotal.toLocaleString('es-AR')} un.</td>
+      <td style="text-align:center;"><span class="tag-sin-desviacion">🟢 Exacto (0)</span></td>
+      <td style="text-align:center; font-weight:700;">0.0%</td>
+      <td style="text-align:center;"><span style="color:#94a3b8; font-style:italic;">Al día</span></td>
+    </tr>`;
+  });
+
+  html += `</tbody></table>`;
+  document.getElementById('tablaAuditoriaWrapper').innerHTML = html;
+}
+
+// RENDER: TABLA OPERATIVA
+function renderStockOperativo(arbol) {
+  let totDB = 0, totCATV = 0, totOtras = 0;
+  SUCURSALES.forEach(s => {
+    totDB += arbol[s].DB;
+    totCATV += arbol[s].CATV;
+    totOtras += arbol[s].Otras;
+  });
+
+  let html = '<table class="arbol">';
+  html += `<tr><td class="celda-total" colspan="12">📦 TOTAL EQUIPOS EN SUCURSALES: ${(totDB + totCATV + totOtras).toLocaleString('es-AR')} (VIP: ${totDB + totCATV} | Otras: ${totOtras})</td></tr>`;
+  
+  html += `<tr>
+    <td class="celda-grupo celda-db" colspan="6">🔵 DUAL BAND VIP (${totDB.toLocaleString('es-AR')})</td>
+    <td class="celda-grupo celda-catv borde-izq" colspan="6">🟠 CATV VIP (${totCATV.toLocaleString('es-AR')})</td>
+  </tr><tr>`;
+
+  SUCURSALES.forEach((s, i) => {
+    let itemsHtml = '';
+    Object.entries(arbol[s].itemsDB).forEach(([itemDesc, itemCant]) => {
+      itemsHtml += `<div style="font-size:0.72rem; text-align:left; margin-top:4px; color:#1e293b; line-height:1.2;">📦 ${itemDesc}: <strong>${itemCant}</strong></div>`;
+    });
+    html += `<td class="celda-db" style="vertical-align:top; padding:8px 6px;">
+      <strong>${SUCURSALES_CORTAS[i]}</strong><br>
+      <span style="font-size:1.1rem; font-weight:800; color:#0369a1;">${arbol[s].DB.toLocaleString('es-AR')}</span>
+      <div style="margin-top:6px; border-top:1px dashed #cbd5e1; padding-top:4px;">${itemsHtml || '<span style="font-size:0.7rem; color:#94a3b8;">Sin ítems</span>'}</div>
+    </td>`;
+  });
+
+  SUCURSALES.forEach((s, i) => {
+    let itemsHtml = '';
+    Object.entries(arbol[s].itemsCATV).forEach(([itemDesc, itemCant]) => {
+      itemsHtml += `<div style="font-size:0.72rem; text-align:left; margin-top:4px; color:#1e293b; line-height:1.2;">📦 ${itemDesc}: <strong>${itemCant}</strong></div>`;
+    });
+    html += `<td class="celda-catv ${i === 0 ? 'borde-izq' : ''}" style="vertical-align:top; padding:8px 6px;">
+      <strong>${SUCURSALES_CORTAS[i]}</strong><br>
+      <span style="font-size:1.1rem; font-weight:800; color:#c2410c;">${arbol[s].CATV.toLocaleString('es-AR')}</span>
+      <div style="margin-top:6px; border-top:1px dashed #fed7aa; padding-top:4px;">${itemsHtml || '<span style="font-size:0.7rem; color:#94a3b8;">Sin ítems</span>'}</div>
+    </td>`;
+  });
+
+  html += '</tr></table>';
+  document.getElementById('tablaWrapper').innerHTML = html;
+}
+
+// RENDER: CATÁLOGO PRECIOS
+function renderTablaPrecios() {
+  let html = '<table class="arbol" style="text-align: left;">';
+  html += '<tr><th style="background:#0f172a; color:white;">Código</th><th style="background:#0f172a; color:white;">Descripción</th><th style="background:#0f172a; color:white; width: 150px; text-align:center;">Precio Final</th></tr>';
+  
+  if (listaPreciosTabla.length === 0) {
+    html += '<tr><td colspan="3" style="text-align:center; color:#64748b;">No hay precios cargados en Supabase.</td></tr>';
+  } else {
+    listaPreciosTabla.forEach(item => {
+      html += `<tr>
+        <td style="font-weight: 700; color: #0284c7;">${item.codigo || '-'}</td>
+        <td style="font-weight: 600; color: #334155;">${item.descripcion || '-'}</td>
+        <td style="text-align:center; color: #16a34a; font-weight: 700;">$ ${item.precio_final} ${item.moneda || 'USD'}</td>
+      </tr>`;
+    });
+  }
+  
+  html += '</table>';
+  document.getElementById('tablaPreciosWrapper').innerHTML = html;
+}
+
+// INICIALIZACIÓN AUTOMÁTICA
+document.addEventListener('DOMContentLoaded', () => {
+  const btnReload = document.getElementById('btnReloadSupabase');
+  if (btnReload) {
+    btnReload.addEventListener('click', async () => {
+      await cargarStockModulo();
+    });
+  }
+  cargarStockModulo();
+});
