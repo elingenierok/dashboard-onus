@@ -50,6 +50,36 @@
   .tag-sin-desviacion { color: #16a34a; font-weight: 700; background: #dcfce7; padding: 2px 8px; border-radius: 4px; }
   .tag-fecha-ok { color: #15803d; font-weight: 600; }
   .tag-fecha-warn { color: #b45309; font-weight: 700; }
+
+  /* Tooltips emergentes para tarjetas tácticas */
+  .kpi-tooltip-container {
+    position: relative;
+    cursor: pointer;
+  }
+  .kpi-card-tooltip {
+    display: none;
+    position: absolute;
+    bottom: 105%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    width: 320px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    text-align: left;
+    pointer-events: none;
+  }
+  .kpi-tooltip-container:hover .kpi-card-tooltip {
+    display: block;
+  }
 </style>
 </head>
 <body>

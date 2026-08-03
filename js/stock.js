@@ -1,5 +1,5 @@
 // ====================================================
-// MÓDULO AUTÓNOMO DE STOCK - LÓGICA VIP Y SUCURSALES ACTUALIZADAS
+// MÓDULO AUTÓNOMO DE STOCK - FILTRADO Y TOOLTIPS TÁCTICOS
 // ====================================================
 
 const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
@@ -33,12 +33,11 @@ const LISTA_AUDITORIA = [
   { key: 'ELDO_ALM_PRINCIPAL', nombre: 'Eldorado Principal' }
 ];
 
-// Helper para limpiar espacios y comparar exacto
 function normalizar(str) {
   return (str || '').replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-// 2. LISTAS ESTRATÉGICAS DEFINITIVAS
+// 2. LISTAS ESTRATÉGICAS DEFINITIVAS (EQUIPOS VIP)
 const GRUPO_DUAL_BAND = [
   "ONU ZTE F6201B V9.3 WIFI6 AX3000",
   "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
@@ -86,11 +85,8 @@ async function cargarStockModulo() {
 
     if (resStock.error) throw resStock.error;
 
-    // Guardar stock bruto de Supabase y normalizar nombres de almacenes
     stockData = (resStock.data || []).map(d => {
       let rawAlm = (d.almacen || '').trim().toUpperCase();
-      
-      // Mapeo defensivo para tolerar nombres viejos guardados en Supabase
       if (rawAlm === 'SPD_PRINCIPAL' || rawAlm === 'SPD_ALM_PRINCIPAL') rawAlm = 'SPD_ALM_PRINCIPAL';
       if (rawAlm === 'WND-PRINCIPAL' || rawAlm === 'WND_PRINCIPAL' || rawAlm === 'WND_ALM_PRINCIPAL') rawAlm = 'WND_ALM_PRINCIPAL';
 
@@ -102,7 +98,6 @@ async function cargarStockModulo() {
       };
     });
 
-    // Cargar Catálogo de Precios
     mapaPrecios.clear();
     listaPreciosTabla = resPrecios.data || [];
     listaPreciosTabla.forEach(p => {
@@ -129,19 +124,28 @@ async function cargarStockModulo() {
 
 // PROCESAMIENTO
 function procesarYRenderizarStock() {
-  // Variables Estratégicas (Solo equipos de la lista VIP + Solo 6 almacenes principales)
   let stratDB = 0, stratCATV = 0, stratTotal = 0, stratValorUSD = 0;
   const arbolEstrategico = {};
   SUCURSALES.forEach(s => arbolEstrategico[s] = { DB: 0, CATV: 0 });
 
-  // Variables Operativas (Auditoría completa)
   let devCant = 0, valorDevoluciones = 0;
   let descCant = 0, valorDescarte = 0;
+  let catrielCant = 0;
+
+  // Objetos para acumular desglose detallado de ítems por tarjeta táctica
+  const itemsDev = {};
+  const itemsDesc = {};
+  const itemsCatriel = {};
+
   const arbolOperativo = {};
   SUCURSALES.forEach(s => arbolOperativo[s] = { DB: 0, CATV: 0, Otras: 0, itemsDB: {}, itemsCATV: {}, itemsOtras: {} });
 
   stockData.forEach(row => {
     const descNorm = normalizar(row.descripcion);
+
+    // Solo procesamos ítems que sean ONUs
+    if (!descNorm.includes('ONU')) return;
+
     const esVIP_DB = GRUPO_DUAL_BAND.includes(descNorm);
     const esVIP_CATV = GRUPO_CATV.includes(descNorm);
     const esAlmacenPrincipal = SUCURSALES.includes(row.almacen);
@@ -149,7 +153,7 @@ function procesarYRenderizarStock() {
     const precioUnitario = mapaPrecios.get(row.codigo) || mapaPrecios.get(descNorm) || COSTO_POR_DEFECTO;
     const valorFila = row.stock * precioUnitario;
 
-    // A) ESTRATÉGICO: Conteo de equipos VIP y suma monetaria total en USD
+    // A) INDICADOR ESTRATÉGICO
     if (esAlmacenPrincipal && (esVIP_DB || esVIP_CATV)) {
       stratTotal += row.stock;
       stratValorUSD += valorFila;
@@ -163,7 +167,7 @@ function procesarYRenderizarStock() {
       }
     }
 
-    // B) OPERATIVO / TÁCTICO: Clasificación para auditoría total
+    // B) INDICADOR OPERATIVO
     if (esAlmacenPrincipal) {
       if (esVIP_DB) {
         arbolOperativo[row.almacen].DB += row.stock;
@@ -175,20 +179,28 @@ function procesarYRenderizarStock() {
         arbolOperativo[row.almacen].Otras += row.stock;
         arbolOperativo[row.almacen].itemsOtras[row.descripcion] = (arbolOperativo[row.almacen].itemsOtras[row.descripcion] || 0) + row.stock;
       }
+
+      // Desglose especial de Catriel (Equipos VIP)
+      if (row.almacen === 'OBE_ALM_CATRIEL' && (esVIP_DB || esVIP_CATV)) {
+        catrielCant += row.stock;
+        itemsCatriel[row.descripcion] = (itemsCatriel[row.descripcion] || 0) + row.stock;
+      }
     } 
     else if (row.almacen === ALMACEN_DEV) {
       devCant += row.stock;
       valorDevoluciones += valorFila;
+      itemsDev[row.descripcion] = (itemsDev[row.descripcion] || 0) + row.stock;
     } 
     else if (row.almacen === ALMACEN_DESC) {
       descCant += row.stock;
       valorDescarte += valorFila;
+      itemsDesc[row.descripcion] = (itemsDesc[row.descripcion] || 0) + row.stock;
     }
   });
 
   renderStockEstrategico(stratDB, stratCATV, stratTotal, stratValorUSD, arbolEstrategico);
   renderStockOperativo(arbolOperativo);
-  renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte);
+  renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte, catrielCant, itemsDev, itemsDesc, itemsCatriel);
   renderAuditoriaTabla();
 }
 
@@ -297,31 +309,42 @@ function renderStockEstrategico(db, catv, total, valorGlobal, arbol) {
   }
 }
 
-// RENDER: TÁCTICO
-async function renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte) {
-  let catrielActual = 0;
-  stockData.forEach(row => {
-    const descNorm = normalizar(row.descripcion);
-    if (row.almacen === 'OBE_ALM_CATRIEL' && (GRUPO_DUAL_BAND.includes(descNorm) || GRUPO_CATV.includes(descNorm))) {
-      catrielActual += row.stock;
+// RENDER: TÁCTICO CON TOOLTIPS EMERGENTES
+function renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte, catrielCant, itemsDev, itemsDesc, itemsCatriel) {
+  // Helper para construir la lista HTML del tooltip
+  const armarTooltipHTML = (titulo, objItems) => {
+    let listHtml = `<strong style="color:#38bdf8; display:block; margin-bottom:6px; border-bottom:1px solid #334155; padding-bottom:4px;">${titulo}</strong>`;
+    const entries = Object.entries(objItems);
+    if (entries.length === 0) {
+      listHtml += '<span style="color:#94a3b8; font-style:italic;">Sin ítems registrados</span>';
+    } else {
+      entries.forEach(([desc, cant]) => {
+        listHtml += `<div style="margin-bottom:3px; color:#cbd5e1;">• ${desc}: <strong style="color:#f8fafc;">${cant.toLocaleString('es-AR')} un.</strong></div>`;
+      });
     }
-  });
+    return `<div class="kpi-card-tooltip">${listHtml}</div>`;
+  };
 
   document.getElementById('grid-tactico-cards').innerHTML = `
-    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+    <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
       <div class="title" style="color:#475569;">📥 OBE_ALM_DEVOLUCIONES (A Probar)</div>
       <div class="value">${devCant.toLocaleString('es-AR')} un.</div>
-      <div class="subtext" style="color:#64748b;">Capital Parado: <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
+      <div class="subtext" style="color:#64748b;">Capital Parado (ONUs): <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
+      ${armarTooltipHTML('📥 Desglose Devoluciones', itemsDev)}
     </div>
-    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+
+    <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
       <div class="title" style="color:#475569;">🗑️ OBE_ALM_DESCARTE (Inmovilizado)</div>
       <div class="value">${descCant.toLocaleString('es-AR')} un.</div>
-      <div class="subtext" style="color:#64748b;">Capital Afectado: <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
+      <div class="subtext" style="color:#64748b;">Capital Afectado (ONUs): <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
+      ${armarTooltipHTML('🗑️ Desglose Descarte', itemsDesc)}
     </div>
-    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
+
+    <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
       <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO (OBE_CATRIEL)</div>
-      <div class="value">${catrielActual.toLocaleString('es-AR')} un.</div>
-      <div class="subtext" style="color:#475569;">Equipos Estratégicos Nuevos</div>
+      <div class="value">${catrielCant.toLocaleString('es-AR')} un.</div>
+      <div class="subtext" style="color:#475569;">ONUs Estratégicas Nuevas</div>
+      ${armarTooltipHTML('🛒 Desglose Stock Nuevo (Catriel)', itemsCatriel)}
     </div>
   `;
 }
@@ -332,7 +355,7 @@ async function renderAuditoriaTabla() {
     <thead>
       <tr>
         <th>Almacén / Depósito</th>
-        <th style="text-align:center;">Stock Sistema (Total)</th>
+        <th style="text-align:center;">Stock Sistema (ONUs)</th>
         <th style="text-align:center;">Stock Físico Real</th>
         <th style="text-align:center;">Detalle de Desviación</th>
         <th style="text-align:center;">Desv. Absoluta (%)</th>
@@ -342,7 +365,10 @@ async function renderAuditoriaTabla() {
     <tbody>`;
 
   LISTA_AUDITORIA.forEach(item => {
-    const stockSistemaTotal = stockData.reduce((acc, d) => d.almacen === item.key ? acc + d.stock : acc, 0);
+    const stockSistemaTotal = stockData.reduce((acc, d) => {
+      const dNorm = normalizar(d.descripcion);
+      return (d.almacen === item.key && dNorm.includes('ONU')) ? acc + d.stock : acc;
+    }, 0);
 
     html += `<tr>
       <td style="font-weight:600; color:#334155;">${item.nombre}</td>
@@ -368,11 +394,12 @@ function renderStockOperativo(arbol) {
   });
 
   let html = '<table class="arbol">';
-  html += `<tr><td class="celda-total" colspan="12">📦 TOTAL EQUIPOS EN SUCURSALES: ${(totDB + totCATV + totOtras).toLocaleString('es-AR')} (VIP: ${totDB + totCATV} | Otras: ${totOtras})</td></tr>`;
+  html += `<tr><td class="celda-total" colspan="18">📦 TOTAL ONUs EN SUCURSALES: ${(totDB + totCATV + totOtras).toLocaleString('es-AR')} (VIP: ${totDB + totCATV} | Otras ONUs: ${totOtras})</td></tr>`;
   
   html += `<tr>
     <td class="celda-grupo celda-db" colspan="6">🔵 DUAL BAND VIP (${totDB.toLocaleString('es-AR')})</td>
     <td class="celda-grupo celda-catv borde-izq" colspan="6">🟠 CATV VIP (${totCATV.toLocaleString('es-AR')})</td>
+    <td class="celda-grupo borde-izq" style="background:#f1f5f9; color:#475569;" colspan="6">⚙️ OTRAS ONUs / LEGACY (${totOtras.toLocaleString('es-AR')})</td>
   </tr><tr>`;
 
   SUCURSALES.forEach((s, i) => {
@@ -396,6 +423,18 @@ function renderStockOperativo(arbol) {
       <strong>${SUCURSALES_CORTAS[i]}</strong><br>
       <span style="font-size:1.1rem; font-weight:800; color:#c2410c;">${arbol[s].CATV.toLocaleString('es-AR')}</span>
       <div style="margin-top:6px; border-top:1px dashed #fed7aa; padding-top:4px;">${itemsHtml || '<span style="font-size:0.7rem; color:#94a3b8;">Sin ítems</span>'}</div>
+    </td>`;
+  });
+
+  SUCURSALES.forEach((s, i) => {
+    let itemsHtml = '';
+    Object.entries(arbol[s].itemsOtras).forEach(([itemDesc, itemCant]) => {
+      itemsHtml += `<div style="font-size:0.72rem; text-align:left; margin-top:4px; color:#334155; line-height:1.2;">📦 ${itemDesc}: <strong>${itemCant}</strong></div>`;
+    });
+    html += `<td class="${i === 0 ? 'borde-izq' : ''}" style="background:#f8fafc; vertical-align:top; padding:8px 6px;">
+      <strong>${SUCURSALES_CORTAS[i]}</strong><br>
+      <span style="font-size:1.1rem; font-weight:800; color:#475569;">${arbol[s].Otras.toLocaleString('es-AR')}</span>
+      <div style="margin-top:6px; border-top:1px dashed #cbd5e1; padding-top:4px;">${itemsHtml || '<span style="font-size:0.7rem; color:#94a3b8;">Sin ítems</span>'}</div>
     </td>`;
   });
 
@@ -424,7 +463,7 @@ function renderTablaPrecios() {
   document.getElementById('tablaPreciosWrapper').innerHTML = html;
 }
 
-// INICIALIZACIÓN AUTOMÁTICA
+// INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
   const btnReload = document.getElementById('btnReloadSupabase');
   if (btnReload) {
