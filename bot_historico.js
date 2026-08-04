@@ -1,11 +1,15 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { createClient } = require('@supabase/supabase-js');
 const puppeteer = require('puppeteer');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+const downloadPath = path.join(__dirname, 'descargas_bot');
+if (!fs.existsSync(downloadPath)) {
+  fs.mkdirSync(downloadPath, { recursive: true });
+}
 
 function parsearCSVStock(filePath) {
   const contenido = fs.readFileSync(filePath, 'latin1');
@@ -35,41 +39,18 @@ function parsearCSVStock(filePath) {
   return registros;
 }
 
-function limpiarCSVsAntiguos() {
-  const carpetas = [__dirname, path.join(os.homedir(), 'Downloads')];
-  for (const carpeta of carpetas) {
-    if (!fs.existsSync(carpeta)) continue;
-    const archivos = fs.readdirSync(carpeta);
-    for (const f of archivos) {
-      if (f.toLowerCase().endsWith('.csv') && f !== 'stockactual.csv') {
-        try { fs.unlinkSync(path.join(carpeta, f)); } catch (e) {}
-      }
+function limpiarDirectorioDescargas() {
+  const archivos = fs.readdirSync(downloadPath);
+  for (const f of archivos) {
+    if (f.toLowerCase().endsWith('.csv') || f.endsWith('.crdownload')) {
+      try { fs.unlinkSync(path.join(downloadPath, f)); } catch (e) {}
     }
   }
-}
-
-async function buscarYObtenerRutaCSV(timeoutMs = 25000) {
-  const inicio = Date.now();
-  const downloadsWindows = path.join(os.homedir(), 'Downloads');
-  const carpetas = [__dirname, downloadsWindows];
-
-  while (Date.now() - inicio < timeoutMs) {
-    for (const carpeta of carpetas) {
-      if (!fs.existsSync(carpeta)) continue;
-      const archivos = fs.readdirSync(carpeta);
-      const csvEncontrado = archivos.find(f => 
-        f.endsWith('.csv') && f !== 'stockactual.csv' && !f.endsWith('.crdownload')
-      );
-      if (csvEncontrado) return path.join(carpeta, csvEncontrado);
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-  return null;
 }
 
 async function ejecutarBotHistorico() {
-  console.log('🤖 Iniciando bot: [STOCK HISTÓRICO]');
-  limpiarCSVsAntiguos();
+  console.log('🤖 [HISTÓRICO] Iniciando captura diaria...');
+  limpiarDirectorioDescargas();
 
   const browser = await puppeteer.launch({ 
     headless: false, 
@@ -83,53 +64,45 @@ async function ejecutarBotHistorico() {
   const client = await page.target().createCDPSession();
   await client.send('Page.setDownloadBehavior', {
     behavior: 'allow',
-    downloadPath: path.join(os.homedir(), 'Downloads')
+    downloadPath: downloadPath
   });
 
   for (let i = 1; i < pages.length; i++) {
     await pages[i].close().catch(() => {});
   }
 
-  page.on('dialog', async dialog => {
-    await dialog.accept();
-  });
+  page.on('dialog', async dialog => { await dialog.accept(); });
 
   try {
-    console.log('🌐 Conectando al ISP...');
     await page.goto(process.env.ISP_URL, { waitUntil: 'networkidle2' });
 
     const inputPassword = await page.$('input[type="password"]');
     if (inputPassword) {
-      console.log('🔑 Autenticando...');
       await page.type('input[type="text"], input[name*="user"]', process.env.ISP_USER);
       await page.type('input[type="password"]', process.env.ISP_PASS);
       await page.click('button[type="submit"], input[type="submit"]');
       await page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {});
     }
 
-    console.log('🧭 Navegando a Administracion -> Stock -> Stock Actual...');
     await page.evaluate(() => {
-      const enlaces = Array.from(document.querySelectorAll('a'));
-      const admin = enlaces.find(a => a.textContent.trim().includes('Administracion'));
+      const admin = Array.from(document.querySelectorAll('a')).find(a => a.textContent.trim().includes('Administracion'));
       if (admin) admin.click();
     });
     await new Promise(r => setTimeout(r, 1000));
 
     await page.evaluate(() => {
-      const enlaces = Array.from(document.querySelectorAll('a'));
-      const stock = enlaces.find(a => a.textContent.trim() === 'Stock');
+      const stock = Array.from(document.querySelectorAll('a')).find(a => a.textContent.trim() === 'Stock');
       if (stock) stock.click();
     });
     await new Promise(r => setTimeout(r, 1000));
 
     await page.evaluate(() => {
-      const enlaces = Array.from(document.querySelectorAll('a'));
-      const stockActual = enlaces.find(a => a.textContent.trim().includes('Stock Actual'));
+      const stockActual = Array.from(document.querySelectorAll('a')).find(a => a.textContent.trim().includes('Stock Actual'));
       if (stockActual) stockActual.click();
     });
     await new Promise(r => setTimeout(r, 4000));
 
-    console.log('⬇️ Descargando CSV de stock...');
+    const tiempoInicioDownload = Date.now();
     await page.evaluate(() => {
       const imgCSV = document.querySelector('img[src*="fil_csv.png"]') || document.querySelector('img[src*="csv"]');
       if (imgCSV) {
@@ -139,18 +112,28 @@ async function ejecutarBotHistorico() {
       }
     });
 
-    const rutaCSV = await buscarYObtenerRutaCSV(25000);
-    if (!rutaCSV) throw new Error('No se detectó la descarga del archivo CSV.');
+    let archivoDescargado = null;
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      const archivos = fs.readdirSync(downloadPath);
+      const validos = archivos.filter(f => f.toLowerCase().endsWith('.csv') && !f.endsWith('.crdownload'));
+      if (validos.length > 0) {
+        archivoDescargado = path.join(downloadPath, validos[0]);
+        break;
+      }
+    }
+
+    if (!archivoDescargado) throw new Error('No se detectó el archivo CSV.');
 
     await browser.close();
     
-    const datos = parsearCSVStock(rutaCSV);
+    const datos = parsearCSVStock(archivoDescargado);
     const fechaHoy = new Date().toISOString().split('T')[0];
     
-    console.log(`🧹 Limpiando registros del día (${fechaHoy}) en 'stock_historico'...`);
+    console.log(`🧹 [HISTÓRICO] Limpiando datos previos de hoy (${fechaHoy})...`);
     await supabase.from('stock_historico').delete().eq('fecha_registro', fechaHoy);
     
-    console.log(`🚀 Subiendo ${datos.length} filas a Supabase (stock_historico)...`);
+    console.log(`🚀 [HISTÓRICO] Guardando ${datos.length} filas en 'stock_historico'...`);
     const BATCH_SIZE = 500;
     for (let i = 0; i < datos.length; i += BATCH_SIZE) {
       const lote = datos.slice(i, i + BATCH_SIZE);
@@ -158,11 +141,11 @@ async function ejecutarBotHistorico() {
       if (error) throw error;
     }
 
-    fs.unlinkSync(rutaCSV);
-    console.log('🎉 ¡Sincronización de STOCK HISTÓRICO completada con éxito!');
+    fs.unlinkSync(archivoDescargado);
+    console.log('🎉 [HISTÓRICO] ¡Carga completada!');
 
   } catch (error) {
-    console.error('❌ Error durante la ejecución:', error.message);
+    console.error('❌ Error en Bot Histórico:', error.message);
     await browser.close();
   }
 }

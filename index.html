@@ -94,6 +94,7 @@
     <button class="tab-btn active" onclick="switchTab('tab-stock')">📦 STOCK</button>
     <button class="tab-btn" onclick="switchTab('tab-recupero')">🔄 RECUPERO DE EQUIPOS</button>
     <button class="tab-btn" onclick="switchTab('tab-flota')">🚚 FLOTA</button>
+    <button class="tab-btn" onclick="switchTab('tab-tendencias')">📈 Tendencias</button>
     <button class="tab-btn" onclick="switchTab('tab-referencias')">⚙️ REFERENCIAS</button>
   </nav>
 
@@ -110,7 +111,6 @@
         <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Operativo: <strong id="val-total" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
         <div style="font-size: 0.88rem; color: #cbd5e1;">💵 Valor Real: <strong id="val-costo" style="color: #4ade80; font-size: 1.05rem;">$0 USD</strong></div>
       </div>
-      <!-- Contenedor del Gráfico con altura holgada de 180px para evitar cortes -->
       <div style="position: relative; height: 180px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
         <canvas id="kpiStackedChart"></canvas>
       </div>
@@ -136,8 +136,6 @@
 
   <!-- PESTAÑA: RECUPERO DE EQUIPOS -->
   <main id="tab-recupero" class="tab-content">
-    
-    <!-- 1. NIVEL ESTRATÉGICO -->
     <section id="recupero-estrategico" class="panel-estrategico">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
         <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Eficiencia de Recupero)</h2>
@@ -149,28 +147,63 @@
         <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Recibidos: <strong id="rec-val-total-un" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
         <div style="font-size: 0.88rem; color: #cbd5e1;">💵 Capital Revalorizado: <strong id="rec-val-dinero" style="color: #38bdf8; font-size: 1.05rem;">$0 USD</strong></div>
       </div>
-      <!-- Gráfico Horizontal Unificado -->
       <div style="position: relative; height: 160px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
         <canvas id="recuperoChart"></canvas>
       </div>
     </section>
-
-    <!-- 2. NIVEL TÁCTICO -->
     <section id="recupero-tactico" class="card">
       <h2 class="card-title">🎯 Indicadores Tácticos (Flujo de Ingreso y Eficiencia)</h2>
       <div id="grid-recupero-cards" class="grid-tactico"></div>
     </section>
-
-    <!-- 3. NIVEL OPERATIVO -->
     <section id="recupero-operativo" class="card">
       <h2 class="card-title">⚙️ Indicadores Operativos - Desglose por Modelo y Origen</h2>
       <div id="tablaRecuperoOperativoWrapper" style="overflow-x: auto;"></div>
     </section>
-
   </main>
 
+  <!-- PESTAÑA: TENDENCIAS Y EVOLUCIÓN HISTÓRICA -->
+  <main id="tab-tendencias" class="tab-content">
+    <section class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2 class="card-title" style="margin:0;">📈 Evolución de Stock y Consumo Histórico</h2>
+        <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
+      </div>
 
-<!-- PESTAÑAS FUTURAS -->
+      <!-- Panel de Filtros con Tildes (Contraste Corregido) -->
+      <div style="display: flex; gap: 24px; flex-wrap: wrap; background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
+        
+        <!-- Filtro Almacenes (Líneas) -->
+        <div style="flex: 1; min-width: 280px;">
+          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">🏬 Seleccionar Almacenes (1 Línea por Almacén):</strong>
+          <div id="check-almacenes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; font-size: 0.85rem; color: #f8fafc;">
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> OBE Principal</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_CATRIEL" checked onchange="actualizarGraficoTendencias()"> OBE Catriel</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="SPD_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> San Pedro</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="WND_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Wanda</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ITU_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Ituzaingó</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ELDO_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Eldorado</label>
+          </div>
+        </div>
+
+        <!-- Filtro ONUs (Sumatoria) -->
+        <div style="flex: 1; min-width: 250px;">
+          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">📦 Grupos de ONUs (Se suman en la misma línea):</strong>
+          <div id="check-onus" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: #f8fafc;">
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="DUAL_BAND" checked onchange="actualizarGraficoTendencias()"> 🔵 Dual Band VIP (Wi-Fi 6 / AX3000 / F6600P)</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="CATV" checked onchange="actualizarGraficoTendencias()"> 🟠 CATV VIP (Huawei EG8147X6 / ZTE F6600R)</label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Contenedor del Gráfico de Líneas -->
+      <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+        <canvas id="chartTendenciasLines"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <!-- PESTAÑAS FUTURAS -->
   <main id="tab-flota" class="tab-content">
     <section class="card"><h2 class="card-title">🚚 Módulo de Gestión de Flota</h2><div class="placeholder-tactico">Próximamente... (Se creará en js/flota.js)</div></section>
   </main>
@@ -181,9 +214,6 @@
     </section>
   </main>
 </div>
-
-<!-- Carga del único script del módulo de Stock -->
-<script src="js/stock.js"></script>
 
 <script>
   // Cambiador de solapas global
@@ -198,6 +228,7 @@
 
 <script src="js/stock.js"></script>
 <script src="js/recupero.js"></script>
+<script src="js/tendencias.js"></script>
 
 </body>
 </html>
