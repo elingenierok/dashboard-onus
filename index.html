@@ -102,7 +102,7 @@
   <main id="tab-stock" class="tab-content active">
     <section id="stock-estrategico" class="panel-estrategico">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-        <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Inventario Saludable)</h2>
+        <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Nuevos vs. Usados)</h2>
         <span id="tagCSV" class="file-tag no">Conectando...</span>
       </div>
       <div class="summary-bar">
@@ -111,7 +111,7 @@
         <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Operativo: <strong id="val-total" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
         <div style="font-size: 0.88rem; color: #cbd5e1;">💵 Valor Real: <strong id="val-costo" style="color: #4ade80; font-size: 1.05rem;">$0 USD</strong></div>
       </div>
-      <div style="position: relative; height: 180px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
+      <div style="position: relative; height: 220px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
         <canvas id="kpiStackedChart"></canvas>
       </div>
     </section>
@@ -169,12 +169,12 @@
         <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
       </div>
 
-      <!-- Panel de Filtros con Tildes (Contraste Corregido) -->
+      <!-- Panel de Filtros -->
       <div style="display: flex; gap: 24px; flex-wrap: wrap; background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
         
         <!-- Filtro Almacenes (Líneas) -->
-        <div style="flex: 1; min-width: 280px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">🏬 Seleccionar Almacenes (1 Línea por Almacén):</strong>
+        <div style="flex: 1; min-width: 250px;">
+          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">🏬 Seleccionar Almacenes:</strong>
           <div id="check-almacenes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; font-size: 0.85rem; color: #f8fafc;">
             <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> OBE Principal</label>
             <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_CATRIEL" checked onchange="actualizarGraficoTendencias()"> OBE Catriel</label>
@@ -186,12 +186,21 @@
         </div>
 
         <!-- Filtro ONUs (Sumatoria) -->
-        <div style="flex: 1; min-width: 250px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">📦 Grupos de ONUs (Se suman en la misma línea):</strong>
+        <div style="flex: 1; min-width: 240px;">
+          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">📦 Grupos de ONUs:</strong>
           <div id="check-onus" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: #f8fafc;">
-            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="DUAL_BAND" checked onchange="actualizarGraficoTendencias()"> 🔵 Dual Band VIP (Wi-Fi 6 / AX3000 / F6600P)</label>
-            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="CATV" checked onchange="actualizarGraficoTendencias()"> 🟠 CATV VIP (Huawei EG8147X6 / ZTE F6600R)</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="DUAL_BAND" checked onchange="actualizarGraficoTendencias()"> 🔵 Dual Band VIP (Wi-Fi 6)</label>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="CATV" checked onchange="actualizarGraficoTendencias()"> 🟠 CATV VIP (EG8147X6 / F6600R)</label>
           </div>
+        </div>
+
+        <!-- Filtro Proyecciones -->
+        <div style="flex: 1; min-width: 200px; border-left: 1px solid #334155; padding-left: 16px;">
+          <strong style="color: #4ade80; display: block; margin-bottom: 10px; font-size: 0.9rem;">📉 Inteligencia Predictiva:</strong>
+          <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px; font-size: 0.85rem;">
+            <input type="checkbox" id="check-proyeccion-global" onchange="actualizarGraficoTendencias()"> 
+            Activar Proyección y Días a Cero
+          </label>
         </div>
 
       </div>
@@ -200,6 +209,15 @@
       <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
         <canvas id="chartTendenciasLines"></canvas>
       </div>
+
+      <!-- Panel de Estimaciones de Quiebre (Aparece al tildar la proyección) -->
+      <div id="panel-estimaciones" style="display: none; margin-top: 16px; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+        <h3 style="color: #4ade80; font-size: 1rem; margin-bottom: 12px;">⏳ Estimación de Quiebre de Stock (Días hasta llegar a 0)</h3>
+        <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+          <!-- Aquí se inyectan las tarjetas por JS -->
+        </div>
+      </div>
+
     </section>
   </main>
 
@@ -216,7 +234,6 @@
 </div>
 
 <script>
-  // Cambiador de solapas global
   function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));

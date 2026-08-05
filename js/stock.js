@@ -125,6 +125,8 @@ async function cargarStockModulo() {
 // PROCESAMIENTO
 function procesarYRenderizarStock() {
   let stratDB = 0, stratCATV = 0, stratTotal = 0, stratValorUSD = 0;
+  let stratNuevos = 0, stratUsados = 0;
+
   const arbolEstrategico = {};
   SUCURSALES.forEach(s => arbolEstrategico[s] = { DB: 0, CATV: 0 });
 
@@ -132,7 +134,6 @@ function procesarYRenderizarStock() {
   let descCant = 0, valorDescarte = 0;
   let catrielCant = 0;
 
-  // Objetos para acumular desglose detallado de ítems por tarjeta táctica
   const itemsDev = {};
   const itemsDesc = {};
   const itemsCatriel = {};
@@ -165,6 +166,13 @@ function procesarYRenderizarStock() {
         stratCATV += row.stock;
         arbolEstrategico[row.almacen].CATV += row.stock;
       }
+
+      // Clasificación de condición para la 2da barra
+      if (descNorm.includes('USAD')) {
+        stratUsados += row.stock;
+      } else {
+        stratNuevos += row.stock;
+      }
     }
 
     // B) INDICADOR OPERATIVO
@@ -180,7 +188,6 @@ function procesarYRenderizarStock() {
         arbolOperativo[row.almacen].itemsOtras[row.descripcion] = (arbolOperativo[row.almacen].itemsOtras[row.descripcion] || 0) + row.stock;
       }
 
-      // Desglose especial de Catriel (Equipos VIP)
       if (row.almacen === 'OBE_ALM_CATRIEL' && (esVIP_DB || esVIP_CATV)) {
         catrielCant += row.stock;
         itemsCatriel[row.descripcion] = (itemsCatriel[row.descripcion] || 0) + row.stock;
@@ -198,14 +205,14 @@ function procesarYRenderizarStock() {
     }
   });
 
-  renderStockEstrategico(stratDB, stratCATV, stratTotal, stratValorUSD, arbolEstrategico);
+  renderStockEstrategico(stratDB, stratCATV, stratNuevos, stratUsados, stratTotal, stratValorUSD, arbolEstrategico);
   renderStockOperativo(arbolOperativo);
   renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte, catrielCant, itemsDev, itemsDesc, itemsCatriel);
   renderAuditoriaTabla();
 }
 
-// RENDER: GRÁFICO Y RESUMEN ESTRATÉGICO
-function renderStockEstrategico(db, catv, total, valorGlobal, arbol) {
+// RENDER: GRÁFICO ESTRATÉGICO CON 2 BARRAS PARALELAS DE IGUAL LONGITUD
+function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, arbol) {
   const pctDB = total > 0 ? Math.round((db / total) * 100) : 0;
   const pctCATV = total > 0 ? Math.round((catv / total) * 100) : 0;
 
@@ -219,29 +226,44 @@ function renderStockEstrategico(db, catv, total, valorGlobal, arbol) {
   document.getElementById('val-costo').textContent = `$ ${Math.round(valorGlobal).toLocaleString('es-AR')} USD`;
 
   const chartData = {
-    labels: ['Inventario Saludable'],
+    labels: ['Tecnología VIP', 'Condición VIP'],
     datasets: [
       {
-        label: '🔵 Dual Band VIP',
-        data: [db],
+        label: 'Dual Band VIP',
+        data: [db, 0],
         backgroundColor: '#0284c7',
-        borderRadius: { topLeft: 4, bottomLeft: 4 }
+        borderRadius: 4
       },
       {
-        label: '🟠 CATV VIP',
-        data: [catv],
+        label: 'CATV VIP',
+        data: [catv, 0],
         backgroundColor: '#ea580c',
-        borderRadius: { topRight: 4, bottomRight: 4 }
+        borderRadius: 4
+      },
+      {
+        label: 'Nuevos',
+        data: [0, nuevos],
+        backgroundColor: '#22c55e',
+        borderRadius: 4
+      },
+      {
+        label: 'Usados / Reacond.',
+        data: [0, usados],
+        backgroundColor: '#eab308',
+        borderRadius: 4
       }
     ]
   };
+
+  const canvas = document.getElementById('kpiStackedChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
 
   if (kpiChart) {
     kpiChart.arbolRef = arbol;
     kpiChart.data = chartData;
     kpiChart.update();
   } else {
-    const ctx = document.getElementById('kpiStackedChart').getContext('2d');
     kpiChart = new Chart(ctx, {
       type: 'bar',
       data: chartData,
@@ -261,47 +283,19 @@ function renderStockEstrategico(db, catv, total, valorGlobal, arbol) {
             borderColor: '#334155',
             borderWidth: 1,
             padding: 12,
-            bodySpacing: 4,
-            titleSpacing: 6,
-            titleFont: { size: 12, weight: 'bold' },
-            bodyFont: { size: 11 },
+            filter: (tooltipItem) => tooltipItem.raw > 0, // Filtra los valores 0 para que no ensucien el tooltip
             callbacks: {
-              title: (tooltipItems) => {
-                const item = tooltipItems[0];
-                const esDB = item.datasetIndex === 0;
-                const subtotal = esDB ? db : catv;
-                const pct = esDB ? pctDB : pctCATV;
-                return `${esDB ? '🔵 Dual Band' : '🟠 CATV'}: ${subtotal.toLocaleString('es-AR')} un. (${pct}%)`;
-              },
               label: (context) => {
-                const esDB = context.datasetIndex === 0;
-                const arbolActual = context.chart.arbolRef || arbol;
-                const lineas = ['Sucursales que componen esta suma:'];
-
-                const activos = [];
-                SUCURSALES.forEach((s, idx) => {
-                  const cant = arbolActual[s] ? (esDB ? arbolActual[s].DB : arbolActual[s].CATV) : 0;
-                  if (cant > 0) {
-                    activos.push(`${SUCURSALES_CORTAS[idx]}: ${cant.toLocaleString('es-AR')} un.`);
-                  }
-                });
-
-                for (let i = 0; i < activos.length; i += 2) {
-                  if (i + 1 < activos.length) {
-                    lineas.push(`  • ${activos[i].padEnd(16, ' ')} |   ${activos[i + 1]}`);
-                  } else {
-                    lineas.push(`  • ${activos[i]}`);
-                  }
-                }
-
-                return lineas;
+                const val = context.raw || 0;
+                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                return ` ${context.dataset.label}: ${val.toLocaleString('es-AR')} un. (${pct}%)`;
               }
             }
           }
         },
         scales: {
           x: { stacked: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-          y: { stacked: true, display: false }
+          y: { stacked: true, grid: { display: false }, ticks: { color: '#f8fafc', font: { size: 11, weight: 'bold' } } }
         }
       }
     });
@@ -311,7 +305,6 @@ function renderStockEstrategico(db, catv, total, valorGlobal, arbol) {
 
 // RENDER: TÁCTICO CON TOOLTIPS EMERGENTES
 function renderStockTactico(devCant, valorDevoluciones, descCant, valorDescarte, catrielCant, itemsDev, itemsDesc, itemsCatriel) {
-  // Helper para construir la lista HTML del tooltip
   const armarTooltipHTML = (titulo, objItems) => {
     let listHtml = `<strong style="color:#38bdf8; display:block; margin-bottom:6px; border-bottom:1px solid #334155; padding-bottom:4px;">${titulo}</strong>`;
     const entries = Object.entries(objItems);

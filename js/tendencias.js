@@ -1,3 +1,7 @@
+// ====================================================
+// MÓDULO AUTÓNOMO: TENDENCIAS, PAGINACIÓN E INTELIGENCIA PREDICTIVA
+// ====================================================
+
 const SUPABASE_URL_TEN = 'https://ovluxdezwvuonlwnymna.supabase.co';
 const SUPABASE_KEY_TEN = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
 const supabaseTendencias = supabase.createClient(SUPABASE_URL_TEN, SUPABASE_KEY_TEN);
@@ -29,18 +33,82 @@ const CATV_LIST = [
 let rawHistoricoData = [];
 let tendenciasChart = null;
 
+// MOTOR DE PREDICCIÓN: Calculadora de Regresión Lineal
+function calcularRegresionLineal(fechas, valores) {
+  if (fechas.length < 2) return null;
+
+  // Normalizamos las fechas a "días transcurridos" desde el primer dato
+  const fecha0 = new Date(fechas[0]).getTime() / 86400000;
+  const xData = fechas.map(f => (new Date(f).getTime() / 86400000) - fecha0);
+  const yData = valores;
+  const n = xData.length;
+
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += xData[i];
+    sumY += yData[i];
+    sumXY += xData[i] * yData[i];
+    sumXX += xData[i] * xData[i];
+  }
+
+  // Pendiente (m) y Ordenada al origen (b)
+  const divisor = (n * sumXX - sumX * sumX);
+  if (divisor === 0) return null; // Evita división por cero si solo hay 1 fecha repetida
+
+  const m = (n * sumXY - sumX * sumY) / divisor;
+  const b = (sumY - m * sumX) / n;
+
+  // Puntos ideales de la recta de tendencia
+  const trendData = xData.map(x => Math.max(0, m * x + b)); // Math.max para no graficar negativos
+
+  // Cálculo: ¿En cuántos días a partir del ÚLTIMO día registrado llegamos a 0?
+  let diasParaCero = null;
+  const lastX = xData[n - 1];
+  
+  if (m < -0.01) { // Solo si hay una pendiente descendente clara
+    const xZero = -b / m;
+    diasParaCero = Math.max(0, Math.round(xZero - lastX));
+  }
+
+  return { trendData, m, diasParaCero };
+}
+
 async function cargarModuloTendencias() {
   const tag = document.getElementById('tagTendencias');
+  if (tag) {
+    tag.textContent = 'Supabase: ⏳ Descargando historial...';
+    tag.className = 'file-tag no';
+  }
+
   try {
-    // Consultamos la tabla de prueba liberada
-    const { data, error } = await supabaseTendencias
-      .from('stock_historico')
-      .select('fecha_registro, almacen, descripcion, stock_total')
-      .order('fecha_registro', { ascending: true });
+    let allData = [];
+    let from = 0;
+    const step = 999;
+    let hasMore = true;
 
-    if (error) throw error;
+    // Bucle para evadir el límite de 1000 filas de Supabase
+    while (hasMore) {
+      const { data, error } = await supabaseTendencias
+        .from('stock_historico')
+        .select('fecha_registro, almacen, descripcion, stock_total')
+        .ilike('descripcion', '%ONU%')
+        .order('fecha_registro', { ascending: true })
+        .range(from, from + step);
 
-    rawHistoricoData = data || [];
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        allData = allData.concat(data);
+        from += (step + 1);
+      }
+      
+      if (!data || data.length <= step) {
+        hasMore = false;
+      }
+    }
+
+    rawHistoricoData = allData;
+
     if (tag) {
       tag.textContent = `Supabase: ✅ ${rawHistoricoData.length} Registros Cargados`;
       tag.className = 'file-tag ok';
@@ -61,6 +129,8 @@ function actualizarGraficoTendencias() {
 
   const almacenesTildados = Array.from(document.querySelectorAll('#check-almacenes input:checked')).map(cb => cb.value);
   const onusTildadas = Array.from(document.querySelectorAll('#check-onus input:checked')).map(cb => cb.value);
+  const checkProyeccion = document.getElementById('check-proyeccion-global');
+  const activarProyecciones = checkProyeccion ? checkProyeccion.checked : false;
 
   const incluirDB = onusTildadas.includes('DUAL_BAND');
   const incluirCATV = onusTildadas.includes('CATV');
@@ -74,25 +144,39 @@ function actualizarGraficoTendencias() {
   });
 
   rawHistoricoData.forEach(row => {
-    const alm = row.almacen;
+    let alm = (row.almacen || '').trim().toUpperCase();
+    if (alm === 'SPD_PRINCIPAL') alm = 'SPD_ALM_PRINCIPAL';
+    if (alm === 'WND_PRINCIPAL' || alm === 'WND-PRINCIPAL') alm = 'WND_ALM_PRINCIPAL';
+
     const fecha = row.fecha_registro;
-    const descNorm = (row.descripcion || '').trim().toUpperCase();
+    const descNorm = (row.descripcion || '').replace(/\s+/g, ' ').trim().toUpperCase();
 
     if (!almacenesTildados.includes(alm)) return;
 
-    const esDB = DUAL_BAND_LIST.some(item => descNorm.includes(item.toUpperCase()));
-    const esCATV = CATV_LIST.some(item => descNorm.includes(item.toUpperCase()));
+    const esDB = DUAL_BAND_LIST.some(item => {
+      const itemNorm = item.replace(/\s+/g, ' ').trim().toUpperCase();
+      return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+    });
+
+    const esCATV = CATV_LIST.some(item => {
+      const itemNorm = item.replace(/\s+/g, ' ').trim().toUpperCase();
+      return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+    });
 
     if ((esDB && incluirDB) || (esCATV && incluirCATV)) {
       mapaSuma[alm][fecha] = (mapaSuma[alm][fecha] || 0) + (parseInt(row.stock_total, 10) || 0);
     }
   });
 
-  const datasets = almacenesTildados.map(alm => {
+  const datasets = [];
+  let htmlEstimaciones = '';
+
+  almacenesTildados.forEach(alm => {
     const meta = COLORES_SUCURSAL[alm] || { nombre: alm, color: '#cbd5e1' };
     const dataPuntos = fechasUnicas.map(f => mapaSuma[alm][f]);
 
-    return {
+    // 1. Agregar línea real del stock
+    datasets.push({
       label: meta.nombre,
       data: dataPuntos,
       borderColor: meta.color,
@@ -101,9 +185,61 @@ function actualizarGraficoTendencias() {
       borderWidth: 3,
       pointRadius: 5,
       pointHoverRadius: 8
-    };
+    });
+
+    // 2. Si las proyecciones están activas, calculamos y graficamos la tendencia
+    if (activarProyecciones) {
+      const regresion = calcularRegresionLineal(fechasUnicas, dataPuntos);
+      
+      if (regresion) {
+        // Línea punteada de tendencia
+        datasets.push({
+          label: `Tendencia ${meta.nombre}`,
+          data: regresion.trendData,
+          borderColor: meta.color,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderDash: [6, 4], // Efecto Punteado
+          pointRadius: 0, // Sin puntos para no molestar visualmente
+          tension: 0
+        });
+
+        // Tarjeta de estimación para el panel inferior
+        let estadoHtml = '';
+        if (regresion.m >= -0.01) {
+          estadoHtml = `<strong style="color: #4ade80;">📈 Stock Estable o en Alza</strong>`;
+        } else {
+          const dias = regresion.diasParaCero;
+          let colorDías = '#4ade80'; // Verde (muchos días)
+          if (dias <= 15) colorDías = '#f87171'; // Rojo (Crítico)
+          else if (dias <= 30) colorDías = '#facc15'; // Amarillo (Precaución)
+
+          estadoHtml = `En <strong style="color: ${colorDías}; font-size: 1.2rem;">${dias} días</strong> aprox.`;
+        }
+
+        htmlEstimaciones += `
+          <div style="background: #0f172a; border: 1px solid ${meta.color}; border-left: 4px solid ${meta.color}; padding: 12px; border-radius: 6px;">
+            <div style="color: #cbd5e1; font-size: 0.8rem; font-weight: bold; margin-bottom: 4px;">${meta.nombre}</div>
+            <div style="color: #f8fafc; font-size: 1rem;">${estadoHtml}</div>
+          </div>
+        `;
+      }
+    }
   });
 
+  // Mostrar u Ocultar panel de proyecciones
+  const panel = document.getElementById('panel-estimaciones');
+  const grid = document.getElementById('grid-estimaciones');
+  if (panel && grid) {
+    if (activarProyecciones && htmlEstimaciones !== '') {
+      grid.innerHTML = htmlEstimaciones;
+      panel.style.display = 'block';
+    } else {
+      panel.style.display = 'none';
+    }
+  }
+
+  // Renderizar o Actualizar Chart.js
   const canvas = document.getElementById('chartTendenciasLines');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -120,7 +256,10 @@ function actualizarGraficoTendencias() {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: 'top', labels: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } },
+          legend: { 
+            position: 'top', 
+            labels: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } 
+          },
           tooltip: {
             backgroundColor: '#0f172a',
             titleColor: '#38bdf8',
