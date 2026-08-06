@@ -1,20 +1,37 @@
 // ====================================================
-// MÓDULO AUTÓNOMO DE RECUPERO DE EQUIPOS
+// MÓDULO AUTÓNOMO DE RECUPERO DE EQUIPOS (DASHBOARD)
 // ====================================================
 
 const SUPABASE_URL_REC = 'https://ovluxdezwvuonlwnymna.supabase.co';
 const SUPABASE_KEY_REC = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
 const supabaseRecupero = supabase.createClient(SUPABASE_URL_REC, SUPABASE_KEY_REC);
 
-// Palabras clave para considerar tecnología VIP (Dual Band / CATV)
-const KEYWORDS_VIP_REC = [
-  'F6201B', 'F6600P', 'F670L', 'EG8147X6', 'F6600R', 
-  'AX3000', 'DUAL BAND', 'CATV', 'WIFI6', 'DUAL_BAND'
-];
+// Elimina tildes, espacios extra y convierte a mayúsculas
+function normalizar(txt) {
+  return (txt || '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
 
-function esModeloVIPRec(desc) {
-  const d = (desc || '').toUpperCase();
-  return KEYWORDS_VIP_REC.some(k => d.includes(k));
+// Lista Oficial Estricta de Equipos VIP
+const LISTA_VIP_EXACTA = [
+  "ONU ZTE F6201B V9.3 WIFI6 AX3000",
+  "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
+  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
+  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
+  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
+  "ONU HUAWEI ECHOLIFE EG8147X6",
+  "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"
+].map(normalizar);
+
+function esVIP(modelo) {
+  const m = normalizar(modelo);
+  return LISTA_VIP_EXACTA.some(vip => m.includes(vip) || vip.includes(m));
 }
 
 let recuperoChartInstance = null;
@@ -22,14 +39,14 @@ let recuperoChartInstance = null;
 async function cargarModuloRecupero() {
   const tag = document.getElementById('tagRecupero');
   if (tag) {
-    tag.textContent = 'Supabase: ⏳ Consultando recupero...';
+    tag.textContent = 'Supabase: ⏳ Consultando...';
     tag.className = 'file-tag no';
   }
 
   try {
     const [resRec, resPrecios] = await Promise.all([
       supabaseRecupero.from('registro_recupero').select('*'),
-      supabaseRecupero.from('precios_catalogos').select('codigo, descripcion, precio_final')
+      supabaseRecupero.from('precios_catalogos').select('*')
     ]);
 
     if (resRec.error) throw resRec.error;
@@ -38,9 +55,9 @@ async function cargarModuloRecupero() {
     const preciosMap = new Map();
 
     (resPrecios.data || []).forEach(p => {
-      const val = parseFloat(p.precio_final) || 0;
-      if (p.codigo) preciosMap.set(p.codigo.trim().toUpperCase(), val);
-      if (p.descripcion) preciosMap.set(p.descripcion.trim().toUpperCase(), val);
+      const precio = parseFloat(p.precio_final) || parseFloat(p.precio_usd) || parseFloat(p.precio) || 0;
+      if (p.codigo) preciosMap.set(normalizar(p.codigo), precio);
+      if (p.descripcion) preciosMap.set(normalizar(p.descripcion), precio);
     });
 
     if (tag) {
@@ -50,67 +67,72 @@ async function cargarModuloRecupero() {
 
     procesarYRenderizarRecupero(dataRec, preciosMap);
   } catch (err) {
-    console.error('Error en módulo Recupero:', err);
+    console.error('Error al cargar módulo Recupero:', err);
     if (tag) {
-      tag.textContent = 'Supabase: ❌ Error de lectura';
+      tag.textContent = 'Supabase: ❌ Error';
       tag.className = 'file-tag no';
     }
   }
 }
 
+function obtenerPrecioEstimado(descNorm, preciosMap) {
+  if (preciosMap.has(descNorm)) return preciosMap.get(descNorm);
+  
+  // Búsqueda alternativa por modelo clave en el catálogo
+  for (let [key, val] of preciosMap.entries()) {
+    if (descNorm.includes(key) || key.includes(descNorm)) return val;
+  }
+  return 0;
+}
+
 function procesarYRenderizarRecupero(data, preciosMap) {
   let totalRecibidos = 0;
-  let directoDescarteObs = 0; // Tecnología obsoleta (no va a prueba)
-  let enCirculacionVIP = 0;   // VIP recuperadas tras prueba
-  let fueraCirculacionVIP = 0; // VIP descartadas tras prueba
+  let directoDescarteObs = 0;
+  let enCirculacionVIP = 0;
+  let fueraCirculacionVIP = 0;
   let capitalRevalorizado = 0;
 
   const desgloseOperativo = {};
 
   data.forEach(row => {
-    const cant = parseInt(row.cantidad || row.stock_total || row.stock || 1, 10) || 1;
-    const desc = row.descripcion || row.modelo || row.equipo || '';
-    const descUpper = desc.trim().toUpperCase();
-    const estado = (row.estado || row.condicion || '').trim().toUpperCase();
-    const esVIP = esModeloVIPRec(descUpper);
-
+    const cant = parseInt(row.cantidad || 1, 10) || 1;
+    const desc = row.descripcion || row.modelo || row.equipo || 'DESCONOCIDO';
+    const descNorm = normalizar(desc);
+    
+    // Inspecciona todas las columnas posibles de estado
+    const condicion = normalizar(row.condicion || row.estado_final || row.estado || row.veredicto || '');
+    
+    const esEquipoVIP = esVIP(descNorm);
     totalRecibidos += cant;
 
-    const precioUnit = preciosMap.get(row.codigo ? row.codigo.trim().toUpperCase() : '') || 
-                       preciosMap.get(descUpper) || 0;
+    const precioUnit = obtenerPrecioEstimado(descNorm, preciosMap);
 
-    const esRecuperado = ['RECUPERADO', 'BUENO', 'EN CIRCULACION', 'CIRCULACION', 'OK', 'DISPONIBLE'].some(e => estado.includes(e));
-    const esDescarte = ['DESCARTE', 'DESECHADO', 'FUERA DE CIRCULACION', 'FALLADO', 'DEFECTUOSO', 'ROTO', 'MALO', 'OBSOLETO'].some(e => estado.includes(e));
+    if (!desgloseOperativo[descNorm]) {
+      desgloseOperativo[descNorm] = { desc: desc, vip: esEquipoVIP, circ: 0, descVIP: 0, descObs: 0 };
+    }
 
-    if (!esVIP && esDescarte) {
-      // 1. Tecnología vieja -> Directo a descarte sin probar
+    const esAprobado = ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO'].some(e => condicion.includes(e));
+    const esRechazado = ['DESCARTE', 'FALLA', 'BAJA', 'DEFECTUOSO', 'ROTO', 'RECHAZADO'].some(e => condicion.includes(e));
+
+    if (!esEquipoVIP) {
+      // 1. Equipos obsoletos -> Directo a Descarte
       directoDescarteObs += cant;
-    } else if (esVIP && esRecuperado) {
-      // 2. VIP Recuperado -> Pasa a circulación
+      desgloseOperativo[descNorm].descObs += cant;
+    } else if (esAprobado) {
+      // 2. VIP Aprobado -> En Circulación
       enCirculacionVIP += cant;
-      capitalRevalorizado += cant * precioUnit;
-    } else if (esVIP && esDescarte) {
-      // 3. VIP Descartado -> Fuera de circulación tras prueba
+      capitalRevalorizado += (cant * precioUnit);
+      desgloseOperativo[descNorm].circ += cant;
+    } else if (esRechazado) {
+      // 3. VIP Rechazado tras prueba -> Fuera de Circulación
       fueraCirculacionVIP += cant;
-    } else if (esRecuperado) {
-      enCirculacionVIP += cant;
-      capitalRevalorizado += cant * precioUnit;
-    } else {
-      directoDescarteObs += cant;
+      desgloseOperativo[descNorm].descVIP += cant;
     }
-
-    // Acumular desglose por modelo
-    if (!desgloseOperativo[descUpper]) {
-      desgloseOperativo[descUpper] = { desc: desc, vip: esVIP, circ: 0, descVIP: 0, descObs: 0 };
-    }
-    if (esVIP && esRecuperado) desgloseOperativo[descUpper].circ += cant;
-    else if (esVIP && esDescarte) desgloseOperativo[descUpper].descVIP += cant;
-    else if (!esVIP && esDescarte) desgloseOperativo[descUpper].descObs += cant;
+    // Si la condición es 'PENDIENTE', suma al total recibido pero no contamina las métricas de prueba.
   });
 
-  // Equipos VIP sometidos a laboratorio
   const probadosVIP = enCirculacionVIP + fueraCirculacionVIP;
-  const pctReaprovechamiento = probadosVIP > 0 ? ((enCirculacionVIP / probadosVIP) * 100).toFixed(1) : 0;
+  const pctReaprovechamiento = probadosVIP > 0 ? ((enCirculacionVIP / probadosVIP) * 100).toFixed(1) : "0.0";
   const valorPromedioRecuperado = enCirculacionVIP > 0 ? Math.round(capitalRevalorizado / enCirculacionVIP) : 0;
 
   renderRecuperoEstrategico(enCirculacionVIP, fueraCirculacionVIP, probadosVIP, capitalRevalorizado, pctReaprovechamiento);
@@ -118,39 +140,35 @@ function procesarYRenderizarRecupero(data, preciosMap) {
   renderRecuperoOperativo(desgloseOperativo);
 }
 
-// RENDER: RESUMEN Y GRÁFICO ESTRATÉGICO
 function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
-  document.getElementById('rec-val-circ').textContent = `${circ.toLocaleString('es-AR')} un.`;
-  document.getElementById('rec-pct-circ').textContent = `(${pct}%)`;
+  const elCirc = document.getElementById('rec-val-circ');
+  const elPctCirc = document.getElementById('rec-pct-circ');
+  const elDesc = document.getElementById('rec-val-desc');
+  const elPctDesc = document.getElementById('rec-pct-desc');
+  const elTotal = document.getElementById('rec-val-total-un');
+  const elDinero = document.getElementById('rec-val-dinero');
 
-  const pctDesc = probados > 0 ? (100 - parseFloat(pct)).toFixed(1) : 0;
-  document.getElementById('rec-val-desc').textContent = `${descVIP.toLocaleString('es-AR')} un.`;
-  document.getElementById('rec-pct-desc').textContent = `(${pctDesc}%)`;
+  if (elCirc) elCirc.textContent = `${circ.toLocaleString('es-AR')} un.`;
+  if (elPctCirc) elPctCirc.textContent = `(${pct}%)`;
 
-  document.getElementById('rec-val-total-un').textContent = `${probados.toLocaleString('es-AR')} un. VIP`;
-  document.getElementById('rec-val-dinero').textContent = `$ ${Math.round(capital).toLocaleString('es-AR')} USD`;
+  const pctDesc = probados > 0 ? (100 - parseFloat(pct)).toFixed(1) : "0.0";
+  if (elDesc) elDesc.textContent = `${descVIP.toLocaleString('es-AR')} un.`;
+  if (elPctDesc) elPctDesc.textContent = `(${pctDesc}%)`;
 
-  const chartData = {
-    labels: ['Evaluación Laboratorio VIP'],
-    datasets: [
-      {
-        label: '🟢 En Circulación (Recuperadas)',
-        data: [circ],
-        backgroundColor: '#4ade80',
-        borderRadius: 4
-      },
-      {
-        label: '🔴 Fuera de Circulación (Descarte VIP)',
-        data: [descVIP],
-        backgroundColor: '#f87171',
-        borderRadius: 4
-      }
-    ]
-  };
+  if (elTotal) elTotal.textContent = `${probados.toLocaleString('es-AR')} un. VIP`;
+  if (elDinero) elDinero.textContent = `$ ${Math.round(capital).toLocaleString('es-AR')} USD`;
 
   const canvas = document.getElementById('recuperoChart');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
+
+  const chartData = {
+    labels: ['Laboratorio VIP'],
+    datasets: [
+      { label: '🟢 En Circulación (Recuperadas)', data: [circ], backgroundColor: '#4ade80', borderRadius: 4 },
+      { label: '🔴 Fuera de Circulación (Descarte VIP)', data: [descVIP], backgroundColor: '#f87171', borderRadius: 4 }
+    ]
+  };
 
   if (recuperoChartInstance) {
     recuperoChartInstance.data = chartData;
@@ -168,65 +186,51 @@ function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
           y: { stacked: true, display: false }
         },
         plugins: {
-          legend: { position: 'top', labels: { color: '#f8fafc', font: { weight: 'bold' } } },
-          tooltip: {
-            backgroundColor: '#0f172a',
-            titleColor: '#38bdf8',
-            bodyColor: '#f8fafc',
-            borderColor: '#334155',
-            borderWidth: 1
-          }
+          legend: { position: 'top', labels: { color: '#f8fafc', font: { weight: 'bold' } } }
         }
       }
     });
   }
 }
 
-// RENDER: TARJETAS TÁCTICAS
 function renderRecuperoTactico(totalRecibidos, directoDescarte, enCirc, fueraCirc, pctReap, valPromedio, capitalTotal) {
   const container = document.getElementById('grid-recupero-cards');
   if (!container) return;
 
   container.innerHTML = `
-    <div class="kpi-card-dark" style="background:#1e293b; border:1px solid #334155;">
-      <div class="title" style="color:#94a3b8;">📥 1. EQUIPOS RECIBIDOS</div>
-      <div class="value" style="color:#f8fafc;">${totalRecibidos.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext" style="color:#cbd5e1;">Ingreso Bruto Laboratorio</div>
+    <div class="kpi-card-dark">
+      <div class="title">📥 1. EQUIPOS RECIBIDOS</div>
+      <div class="value">${totalRecibidos.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
+      <div class="subtext">Ingreso Bruto Laboratorio</div>
     </div>
-
-    <div class="kpi-card-dark" style="background:#1e293b; border:1px solid #eab308;">
+    <div class="kpi-card-dark" style="border-color:#eab308;">
       <div class="title" style="color:#fde047;">📼 DIRECTO A DESCARTE</div>
       <div class="value" style="color:#fde047;">${directoDescarte.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext" style="color:#cbd5e1;">Tecnología Obsoleta (Sin Prueba)</div>
+      <div class="subtext">Tecnología Obsoleta (Sin Prueba)</div>
     </div>
-
-    <div class="kpi-card-dark" style="background:#1e293b; border:1px solid #16a34a;">
+    <div class="kpi-card-dark" style="border-color:#16a34a;">
       <div class="title" style="color:#4ade80;">♻️ 2. EN CIRCULACIÓN</div>
       <div class="value" style="color:#4ade80;">${enCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext" style="color:#cbd5e1;">Equipos VIP Recuperados</div>
+      <div class="subtext">Equipos VIP Recuperados</div>
     </div>
-
-    <div class="kpi-card-dark" style="background:#1e293b; border:1px solid #dc2626;">
+    <div class="kpi-card-dark" style="border-color:#dc2626;">
       <div class="title" style="color:#f87171;">🗑️ 3. FUERA DE CIRCULACIÓN</div>
       <div class="value" style="color:#f87171;">${fueraCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext" style="color:#cbd5e1;">Descarte VIP Tras Prueba</div>
+      <div class="subtext">Descarte VIP Tras Prueba</div>
     </div>
-
-    <div class="kpi-card-dark" style="background:#1e293b; border:1px solid #0284c7;">
+    <div class="kpi-card-dark" style="border-color:#0284c7;">
       <div class="title" style="color:#38bdf8;">📈 4. % REAPROVECHAMIENTO</div>
       <div class="value" style="color:#38bdf8;">${pctReap}%</div>
-      <div class="subtext" style="color:#cbd5e1;">Efectividad sobre VIP Probadas</div>
+      <div class="subtext">Efectividad sobre VIP Probadas</div>
     </div>
-
-    <div class="kpi-card-dark" style="background:#1e293b; border:1px solid #16a34a;">
+    <div class="kpi-card-dark" style="border-color:#16a34a;">
       <div class="title" style="color:#4ade80;">💵 5. VALOR PROMEDIO / TOTAL</div>
       <div class="value" style="color:#4ade80;">$ ${valPromedio} <span style="font-size:0.9rem;">USD/un</span></div>
-      <div class="subtext" style="color:#cbd5e1;">Total: <strong>$ ${Math.round(capitalTotal).toLocaleString('es-AR')} USD</strong></div>
+      <div class="subtext">Total: <strong>$ ${Math.round(capitalTotal).toLocaleString('es-AR')} USD</strong></div>
     </div>
   `;
 }
 
-// RENDER: TABLA OPERATIVA
 function renderRecuperoOperativo(desglose) {
   const container = document.getElementById('tablaRecuperoOperativoWrapper');
   if (!container) return;
@@ -249,11 +253,11 @@ function renderRecuperoOperativo(desglose) {
   } else {
     entries.forEach(item => {
       html += `<tr>
-        <td style="font-weight:600; color:#334155;">${item.desc}</td>
+        <td style="font-weight:600; color:#cbd5e1;">${item.desc}</td>
         <td style="text-align:center;">${item.vip ? '<span style="color:#0284c7; font-weight:700;">🔵 VIP</span>' : '<span style="color:#64748b;">⚙️ Obsoleto</span>'}</td>
-        <td style="text-align:center; font-weight:700; color:#16a34a;">${item.circ} un.</td>
-        <td style="text-align:center; font-weight:700; color:#dc2626;">${item.descVIP} un.</td>
-        <td style="text-align:center; font-weight:700; color:#ca8a04;">${item.descObs} un.</td>
+        <td style="text-align:center; font-weight:700; color:#4ade80;">${item.circ} un.</td>
+        <td style="text-align:center; font-weight:700; color:#f87171;">${item.descVIP} un.</td>
+        <td style="text-align:center; font-weight:700; color:#fde047;">${item.descObs} un.</td>
       </tr>`;
     });
   }
@@ -262,7 +266,8 @@ function renderRecuperoOperativo(desglose) {
   container.innerHTML = html;
 }
 
-// INICIALIZACIÓN
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', cargarModuloRecupero);
+} else {
   cargarModuloRecupero();
-});
+}

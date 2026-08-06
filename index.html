@@ -52,10 +52,7 @@
   .tag-fecha-warn { color: #b45309; font-weight: 700; }
 
   /* Tooltips emergentes para tarjetas tácticas */
-  .kpi-tooltip-container {
-    position: relative;
-    cursor: pointer;
-  }
+  .kpi-tooltip-container { position: relative; cursor: pointer; }
   .kpi-card-tooltip {
     display: none;
     position: absolute;
@@ -77,16 +74,16 @@
     text-align: left;
     pointer-events: none;
   }
-  .kpi-tooltip-container:hover .kpi-card-tooltip {
-    display: block;
-  }
+  .kpi-tooltip-container:hover .kpi-card-tooltip { display: block; }
 </style>
 </head>
 <body>
 
 <div class="container">
+  <!-- Encabezado Principal con Botón de Actualización -->
   <header class="header">
     <h1>Suministros y Logística - KPI del área</h1>
+    <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar de Supabase</button>
   </header>
 
   <!-- Pestañas Principales -->
@@ -126,10 +123,7 @@
     </section>
 
     <section id="stock-operativo" class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2 class="card-title" style="margin: 0;">⚙️ Indicadores Operativos - Distribución por Sucursal</h2>
-        <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar de Supabase</button>
-      </div>
+      <h2 class="card-title">⚙️ Indicadores Operativos - Distribución por Sucursal</h2>
       <div id="tablaWrapper" style="overflow-x: auto;"></div>
     </section>
   </main>
@@ -210,12 +204,10 @@
         <canvas id="chartTendenciasLines"></canvas>
       </div>
 
-      <!-- Panel de Estimaciones de Quiebre (Aparece al tildar la proyección) -->
+      <!-- Panel de Estimaciones de Quiebre -->
       <div id="panel-estimaciones" style="display: none; margin-top: 16px; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
         <h3 style="color: #4ade80; font-size: 1rem; margin-bottom: 12px;">⏳ Estimación de Quiebre de Stock (Días hasta llegar a 0)</h3>
-        <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
-          <!-- Aquí se inyectan las tarjetas por JS -->
-        </div>
+        <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
       </div>
 
     </section>
@@ -243,9 +235,31 @@
   }
 </script>
 
+<!-- Carga de Módulos Individuales -->
 <script src="js/stock.js"></script>
 <script src="js/recupero.js"></script>
 <script src="js/tendencias.js"></script>
+
+<!-- Orquestador Global de Actualización -->
+<script>
+  document.getElementById('btnReloadSupabase').addEventListener('click', async () => {
+    const btn = document.getElementById('btnReloadSupabase');
+    btn.disabled = true;
+    btn.textContent = '⏳ Actualizando...';
+
+    // Ejecuta las 3 actualizaciones en paralelo sin importar en qué pestaña estés
+    await Promise.allSettled([
+      typeof cargarDatosStock === 'function' ? cargarDatosStock() : Promise.resolve(),
+      typeof cargarModuloRecupero === 'function' ? cargarModuloRecupero() : Promise.resolve(),
+      typeof cargarModuloTendencias === 'function' ? cargarModuloTendencias() : Promise.resolve()
+    ]);
+
+    btn.textContent = '⚡ Actualizar de Supabase';
+    btn.disabled = false;
+  });
+</script>
+</body>
+</html>
 
 </body>
 </html>
