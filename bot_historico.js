@@ -50,6 +50,27 @@ function limpiarDirectorioDescargas() {
 
 async function ejecutarBotHistorico() {
   console.log('🤖 [HISTÓRICO] Iniciando captura diaria...');
+
+  const fechaHoy = new Date().toISOString().split('T')[0];
+
+  // 🛡️ FRENO ANTI-SOBREESCRITURA: Verifica si ya existe foto de hoy en Supabase
+  const { data: registroExistente, error: errCheck } = await supabase
+    .from('stock_historico')
+    .select('id')
+    .eq('fecha_registro', fechaHoy)
+    .limit(1);
+
+  if (errCheck) {
+    console.error('❌ Error al consultar Supabase:', errCheck.message);
+    return;
+  }
+
+  // SI YA EXISTE DATO DE HOY, ABORTA Y PROTEGE LA MAÑANA
+  if (registroExistente && registroExistente.length > 0) {
+    console.log(`⚠️ [HISTÓRICO] Ya existe la foto de hoy (${fechaHoy}). Se cancela la ejecución para preservar la captura matutina.`);
+    return;
+  }
+
   limpiarDirectorioDescargas();
 
   const browser = await puppeteer.launch({ 
@@ -102,7 +123,6 @@ async function ejecutarBotHistorico() {
     });
     await new Promise(r => setTimeout(r, 4000));
 
-    const tiempoInicioDownload = Date.now();
     await page.evaluate(() => {
       const imgCSV = document.querySelector('img[src*="fil_csv.png"]') || document.querySelector('img[src*="csv"]');
       if (imgCSV) {
@@ -128,10 +148,6 @@ async function ejecutarBotHistorico() {
     await browser.close();
     
     const datos = parsearCSVStock(archivoDescargado);
-    const fechaHoy = new Date().toISOString().split('T')[0];
-    
-    console.log(`🧹 [HISTÓRICO] Limpiando datos previos de hoy (${fechaHoy})...`);
-    await supabase.from('stock_historico').delete().eq('fecha_registro', fechaHoy);
     
     console.log(`🚀 [HISTÓRICO] Guardando ${datos.length} filas en 'stock_historico'...`);
     const BATCH_SIZE = 500;
@@ -142,7 +158,7 @@ async function ejecutarBotHistorico() {
     }
 
     fs.unlinkSync(archivoDescargado);
-    console.log('🎉 [HISTÓRICO] ¡Carga completada!');
+    console.log('🎉 [HISTÓRICO] ¡Carga matutina completada exitosamente!');
 
   } catch (error) {
     console.error('❌ Error en Bot Histórico:', error.message);
