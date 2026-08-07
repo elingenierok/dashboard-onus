@@ -18,26 +18,35 @@ const COLORES_SUCURSAL = {
 const DUAL_BAND_LIST = [
   "ONU ZTE F6201B V9.3 WIFI6 AX3000",
   "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
+  "ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)",
   "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
   "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)"
+  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)(USADA)",
+  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
+  "ONU ZTE F670L V1.1 DUAL BAND WIFI(USADA)"
 ];
 
 const CATV_LIST = [
   "ONU HUAWEI ECHOLIFE EG8147X6",
   "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)",
+  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)(USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV) (USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6(CATV) (USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)(USADO)",
   "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)",
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)"
 ];
 
 let rawHistoricoData = [];
 let tendenciasChart = null;
 
-// MOTOR DE PREDICCIÓN: Calculadora de Regresión Lineal
 function calcularRegresionLineal(fechas, valores) {
   if (fechas.length < 2) return null;
 
-  // Normalizamos las fechas a "días transcurridos" desde el primer dato
   const fecha0 = new Date(fechas[0]).getTime() / 86400000;
   const xData = fechas.map(f => (new Date(f).getTime() / 86400000) - fecha0);
   const yData = valores;
@@ -51,21 +60,18 @@ function calcularRegresionLineal(fechas, valores) {
     sumXX += xData[i] * xData[i];
   }
 
-  // Pendiente (m) y Ordenada al origen (b)
   const divisor = (n * sumXX - sumX * sumX);
-  if (divisor === 0) return null; // Evita división por cero si solo hay 1 fecha repetida
+  if (divisor === 0) return null;
 
   const m = (n * sumXY - sumX * sumY) / divisor;
   const b = (sumY - m * sumX) / n;
 
-  // Puntos ideales de la recta de tendencia
-  const trendData = xData.map(x => Math.max(0, m * x + b)); // Math.max para no graficar negativos
+  const trendData = xData.map(x => Math.max(0, m * x + b));
 
-  // Cálculo: ¿En cuántos días a partir del ÚLTIMO día registrado llegamos a 0?
   let diasParaCero = null;
   const lastX = xData[n - 1];
   
-  if (m < -0.01) { // Solo si hay una pendiente descendente clara
+  if (m < -0.01) {
     const xZero = -b / m;
     diasParaCero = Math.max(0, Math.round(xZero - lastX));
   }
@@ -86,7 +92,6 @@ async function cargarModuloTendencias() {
     const step = 999;
     let hasMore = true;
 
-    // Bucle para evadir el límite de 1000 filas de Supabase
     while (hasMore) {
       const { data, error } = await supabaseTendencias
         .from('stock_historico')
@@ -175,7 +180,6 @@ function actualizarGraficoTendencias() {
     const meta = COLORES_SUCURSAL[alm] || { nombre: alm, color: '#cbd5e1' };
     const dataPuntos = fechasUnicas.map(f => mapaSuma[alm][f]);
 
-    // 1. Agregar línea real del stock
     datasets.push({
       label: meta.nombre,
       data: dataPuntos,
@@ -187,32 +191,29 @@ function actualizarGraficoTendencias() {
       pointHoverRadius: 8
     });
 
-    // 2. Si las proyecciones están activas, calculamos y graficamos la tendencia
     if (activarProyecciones) {
       const regresion = calcularRegresionLineal(fechasUnicas, dataPuntos);
       
       if (regresion) {
-        // Línea punteada de tendencia
         datasets.push({
           label: `Tendencia ${meta.nombre}`,
           data: regresion.trendData,
           borderColor: meta.color,
           backgroundColor: 'transparent',
           borderWidth: 2,
-          borderDash: [6, 4], // Efecto Punteado
-          pointRadius: 0, // Sin puntos para no molestar visualmente
+          borderDash: [6, 4],
+          pointRadius: 0,
           tension: 0
         });
 
-        // Tarjeta de estimación para el panel inferior
         let estadoHtml = '';
         if (regresion.m >= -0.01) {
           estadoHtml = `<strong style="color: #4ade80;">📈 Stock Estable o en Alza</strong>`;
         } else {
           const dias = regresion.diasParaCero;
-          let colorDías = '#4ade80'; // Verde (muchos días)
-          if (dias <= 15) colorDías = '#f87171'; // Rojo (Crítico)
-          else if (dias <= 30) colorDías = '#facc15'; // Amarillo (Precaución)
+          let colorDías = '#4ade80';
+          if (dias <= 15) colorDías = '#f87171';
+          else if (dias <= 30) colorDías = '#facc15';
 
           estadoHtml = `En <strong style="color: ${colorDías}; font-size: 1.2rem;">${dias} días</strong> aprox.`;
         }
@@ -227,7 +228,6 @@ function actualizarGraficoTendencias() {
     }
   });
 
-  // Mostrar u Ocultar panel de proyecciones
   const panel = document.getElementById('panel-estimaciones');
   const grid = document.getElementById('grid-estimaciones');
   if (panel && grid) {
@@ -239,7 +239,6 @@ function actualizarGraficoTendencias() {
     }
   }
 
-  // Renderizar o Actualizar Chart.js
   const canvas = document.getElementById('chartTendenciasLines');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');

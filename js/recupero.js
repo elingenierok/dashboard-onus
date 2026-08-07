@@ -16,17 +16,28 @@ function normalizar(txt) {
     .toUpperCase();
 }
 
-// Lista Oficial Estricta de Equipos VIP
+// Lista Oficial Estricta de Equipos VIP (Incluye variantes con y sin CATV/Espacios)
 const LISTA_VIP_EXACTA = [
   "ONU ZTE F6201B V9.3 WIFI6 AX3000",
   "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
+  "ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)",
   "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
   "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
+  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)(USADA)",
   "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
+  "ONU ZTE F670L V1.1 DUAL BAND WIFI(USADA)",
   "ONU HUAWEI ECHOLIFE EG8147X6",
   "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)",
+  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)(USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV) (USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6(CATV) (USADO)",
+  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)(USADO)",
   "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)"
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)",
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)"
 ].map(normalizar);
 
 function esVIP(modelo) {
@@ -78,7 +89,6 @@ async function cargarModuloRecupero() {
 function obtenerPrecioEstimado(descNorm, preciosMap) {
   if (preciosMap.has(descNorm)) return preciosMap.get(descNorm);
   
-  // Búsqueda alternativa por modelo clave en el catálogo
   for (let [key, val] of preciosMap.entries()) {
     if (descNorm.includes(key) || key.includes(descNorm)) return val;
   }
@@ -99,7 +109,6 @@ function procesarYRenderizarRecupero(data, preciosMap) {
     const desc = row.descripcion || row.modelo || row.equipo || 'DESCONOCIDO';
     const descNorm = normalizar(desc);
     
-    // Inspecciona todas las columnas posibles de estado
     const condicion = normalizar(row.condicion || row.estado_final || row.estado || row.veredicto || '');
     
     const esEquipoVIP = esVIP(descNorm);
@@ -115,20 +124,16 @@ function procesarYRenderizarRecupero(data, preciosMap) {
     const esRechazado = ['DESCARTE', 'FALLA', 'BAJA', 'DEFECTUOSO', 'ROTO', 'RECHAZADO'].some(e => condicion.includes(e));
 
     if (!esEquipoVIP) {
-      // 1. Equipos obsoletos -> Directo a Descarte
       directoDescarteObs += cant;
       desgloseOperativo[descNorm].descObs += cant;
     } else if (esAprobado) {
-      // 2. VIP Aprobado -> En Circulación
       enCirculacionVIP += cant;
       capitalRevalorizado += (cant * precioUnit);
       desgloseOperativo[descNorm].circ += cant;
     } else if (esRechazado) {
-      // 3. VIP Rechazado tras prueba -> Fuera de Circulación
       fueraCirculacionVIP += cant;
       desgloseOperativo[descNorm].descVIP += cant;
     }
-    // Si la condición es 'PENDIENTE', suma al total recibido pero no contamina las métricas de prueba.
   });
 
   const probadosVIP = enCirculacionVIP + fueraCirculacionVIP;

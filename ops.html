@@ -41,7 +41,51 @@
   .btn-submit:hover { background: #0369a1; }
   .btn-submit:disabled { background: #334155; cursor: not-allowed; opacity: 0.5; }
   .btn-secondary { background: #334155; color: white; border: none; padding: 8px 12px; font-weight: 600; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+  
+  /* Botón de Impresión (Oculto por defecto) */
+  .btn-print { background: #059669; color: white; border: none; padding: 12px; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 0.95rem; margin-top: 6px; display: none; text-align: center; }
+  .btn-print:hover { background: #047857; }
   .status-msg { text-align: center; font-size: 0.82rem; font-weight: 600; line-height: 1.3; }
+
+  /* ========================================================= */
+  /* --- ESTILOS DE IMPRESIÓN ETIQUETA BROTHER (60mm x 30mm) --- */
+  /* ========================================================= */
+  #etiqueta-impresion { display: none; }
+
+  @media print {
+    @page {
+      size: 60mm 30mm;
+      margin: 0;
+    }
+    body {
+      background: #ffffff !important;
+      color: #000000 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    .suite-container {
+      display: none !important;
+    }
+    #etiqueta-impresion {
+      display: flex !important;
+      flex-direction: column;
+      justify-content: space-between;
+      width: 60mm;
+      height: 30mm;
+      padding: 1.5mm 2mm;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+      color: #000;
+      background: #fff;
+    }
+    .lbl-header { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 0.5mm; font-size: 5.5pt; font-weight: bold; }
+    .lbl-sn { font-size: 8.5pt; font-weight: 900; text-align: center; margin: 0.5mm 0; letter-spacing: 0.5px; }
+    .lbl-modelo { font-size: 5.5pt; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lbl-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #000; padding-top: 0.5mm; font-size: 5.5pt; }
+    .lbl-veredicto { font-size: 5.5pt; font-weight: bold; padding: 0.5mm 1mm; border-radius: 2px; text-align: center; max-width: 38mm; line-height: 1.1; }
+    .lbl-ok { background: #000; color: #fff; }
+    .lbl-fail { border: 1px solid #000; color: #000; }
+  }
 </style>
 </head>
 <body>
@@ -150,6 +194,10 @@
       <div id="boxVeredictoPrueba" class="veredicto-box veredicto-ok">Veredicto: 🟢 CIRCULACIÓN</div>
       <button type="submit" id="btnGuardarPrueba" class="btn-submit">💾 Guardar Resultado de Prueba</button>
     </div>
+
+    <!-- BOTÓN DE IMPRESIÓN DIRECTA -->
+    <button type="button" id="btnImprimir" class="btn-print" onclick="imprimirEtiquetaPrueba()">🖨️ Imprimir Etiqueta Brother (60x30mm)</button>
+    
     <div id="statusPrueba" class="status-msg"></div>
   </form>
 
@@ -192,6 +240,20 @@
     <button type="submit" class="btn-submit">💾 Registrar Auditoría</button>
     <div id="statusAuditoria" class="status-msg"></div>
   </form>
+</div>
+
+<!-- PLANTILLA OCULTA DE ETIQUETA IMPRESA -->
+<div id="etiqueta-impresion">
+  <div class="lbl-header">
+    <span>LABORATORIO ISP</span>
+    <span id="lbl_fecha">00/00/0000</span>
+  </div>
+  <div class="lbl-sn" id="lbl_sn">SN: XXXXXXXXXXXX</div>
+  <div class="lbl-modelo" id="lbl_modelo">MODELO DE EQUIPO</div>
+  <div class="lbl-footer">
+    <span>POT: <strong id="lbl_dbm">-00.0 dBm</strong></span>
+    <span id="lbl_veredicto_box" class="lbl-veredicto lbl-ok">CIRCULACIÓN</span>
+  </div>
 </div>
 
 <script>
@@ -278,6 +340,7 @@
     const bannerTesteado = document.getElementById('bannerTesteado');
     const blockControles = document.getElementById('blockControlesPrueba');
     const btnGuardar = document.getElementById('btnGuardarPrueba');
+    const btnImprimir = document.getElementById('btnImprimir');
     const msg = document.getElementById('statusPrueba');
 
     if (!sn) return;
@@ -298,6 +361,7 @@
       infoBox.style.display = 'none';
       bannerTesteado.style.display = 'none';
       blockControles.style.display = 'none';
+      btnImprimir.style.display = 'none';
       equipoCargadoActual = null;
       return;
     }
@@ -311,14 +375,18 @@
 
     const estadoActual = (equipoCargadoActual.condicion || equipoCargadoActual.estado_final || '').toUpperCase();
 
+    // MOSTRAR BOTÓN DE IMPRESIÓN AL ENCONTRAR UN VEREDICTO
+    btnImprimir.style.display = 'block';
+
     if (estadoActual !== 'PENDIENTE') {
       bannerTesteado.style.display = 'block';
       bannerTesteado.innerHTML = `ℹ️ <strong>Equipo ya testeado en fecha ${equipoCargadoActual.fecha_registro || 'previa'}</strong><br>` +
         `Veredicto previo: <strong>${estadoActual}</strong><br>` +
+        `Potencia guardada: <strong>${equipoCargadoActual.potencia_dbm !== null ? equipoCargadoActual.potencia_dbm + ' dBm' : 'N/D'}</strong><br>` +
         `Motivo / Detalle: ${equipoCargadoActual.motivo_falla || 'Ninguno'}`;
       
       blockControles.style.display = 'none';
-      msg.textContent = 'ℹ️ Este equipo ya posee valores cargados y no se encuentra pendiente.';
+      msg.textContent = 'ℹ️ Equipo probado previamente. Etiqueta lista para imprimir.';
       msg.style.color = '#a5b4fc';
     } else {
       bannerTesteado.style.display = 'none';
@@ -376,9 +444,12 @@
     msg.textContent = '⏳ Guardando prueba...';
     msg.style.color = '#38bdf8';
 
+    const potenciaIngresada = parseFloat(document.getElementById('test_dbm').value);
+
     const payloadUpdate = {
       condicion: veredictoFinalCalculado,
       estado_final: veredictoFinalCalculado,
+      potencia_dbm: isNaN(potenciaIngresada) ? null : potenciaIngresada,
       tecnico_obs: (equipoCargadoActual.tecnico_obs || '') + ' | Lab: ' + document.getElementById('pr_tecnico_lab').value.trim(),
       motivo_falla: veredictoFinalCalculado === 'DESCARTE' ? document.getElementById('pr_motivo').value : 'Ninguno'
     };
@@ -394,12 +465,49 @@
     } else {
       msg.textContent = '✅ ¡Resultado de laboratorio guardado!';
       msg.style.color = '#4ade80';
-      document.getElementById('pr_serial').value = '';
-      document.getElementById('infoEquipoEnc').style.display = 'none';
-      document.getElementById('blockControlesPrueba').style.display = 'none';
-      equipoCargadoActual = null;
+      document.getElementById('btnImprimir').style.display = 'block';
     }
   });
+
+  // IMPRESIÓN DE ETIQUETA 60x30mm
+  function imprimirEtiquetaPrueba() {
+    if (!equipoCargadoActual) return;
+
+    const sn = equipoCargadoActual.serial_number || document.getElementById('pr_serial').value.trim().toUpperCase();
+    const modelo = equipoCargadoActual.descripcion || equipoCargadoActual.modelo || 'GENERICO';
+    const dbm = document.getElementById('test_dbm').value || equipoCargadoActual.potencia_dbm || 'N/D';
+    
+    // Determinar el veredicto exacto (previo o actual)
+    let veredicto = 'CIRCULACIÓN';
+    const estadoPrevio = (equipoCargadoActual.condicion || equipoCargadoActual.estado_final || '').toUpperCase();
+    
+    if (estadoPrevio !== 'PENDIENTE') {
+      veredicto = estadoPrevio;
+      if (equipoCargadoActual.motivo_falla && equipoCargadoActual.motivo_falla !== 'Ninguno') {
+        veredicto += ' (' + equipoCargadoActual.motivo_falla + ')';
+      }
+    } else {
+      veredicto = document.getElementById('boxVeredictoPrueba').textContent.replace('Veredicto:', '').trim();
+    }
+
+    const fecha = new Date().toLocaleDateString('es-AR');
+
+    document.getElementById('lbl_sn').textContent = 'SN: ' + sn;
+    document.getElementById('lbl_modelo').textContent = modelo;
+    document.getElementById('lbl_dbm').textContent = dbm + ' dBm';
+    document.getElementById('lbl_fecha').textContent = fecha;
+
+    const lblVeredicto = document.getElementById('lbl_veredicto_box');
+    lblVeredicto.textContent = veredicto;
+
+    if (veredicto.includes('CIRCULACIÓN')) {
+      lblVeredicto.className = 'lbl-veredicto lbl-ok';
+    } else {
+      lblVeredicto.className = 'lbl-veredicto lbl-fail';
+    }
+
+    window.print();
+  }
 
   // 3. AUDITORÍA
   document.getElementById('form-auditoria').addEventListener('submit', async (e) => {
