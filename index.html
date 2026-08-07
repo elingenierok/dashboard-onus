@@ -75,29 +75,75 @@
     pointer-events: none;
   }
   .kpi-tooltip-container:hover .kpi-card-tooltip { display: block; }
+
+  /* --- SISTEMA DE LOGIN Y PERMISOS --- */
+  #login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
+  .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); width: 100%; max-width: 380px; border: 1px solid #cbd5e1; }
+  .login-box h2 { text-align: center; color: #0f172a; margin-bottom: 24px; font-weight: 800; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; margin-bottom: 6px; font-size: 0.85rem; font-weight: 600; color: #475569; }
+  .form-group input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; }
+  .form-group input:focus { outline: none; border-color: #0284c7; }
+  .btn-login { width: 100%; background: #0284c7; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 700; font-size: 1rem; cursor: pointer; transition: background 0.2s; }
+  .btn-login:hover { background: #0369a1; }
+  #login-error { color: #dc2626; font-size: 0.85rem; text-align: center; margin-top: 12px; font-weight: 600; min-height: 20px; }
+  .btn-logout { background: transparent; color: #f87171; border: 1px solid #f87171; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; margin-left: 12px; }
+  .btn-logout:hover { background: #f87171; color: white; }
+  
+  /* Clase maestra para ocultar elementos según rol */
+  .hidden-by-role { display: none !important; }
 </style>
 </head>
 <body>
 
-<div class="container">
+<!-- PANTALLA DE LOGIN -->
+<div id="login-container">
+  <div class="login-box">
+    <h2>🔐 Ingreso al Sistema</h2>
+    <div class="form-group">
+      <label>Correo Electrónico</label>
+      <input type="email" id="txt-email" placeholder="usuario@empresa.com">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="txt-pass" placeholder="••••••••">
+    </div>
+    <button class="btn-login" onclick="iniciarSesion()">Ingresar</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- CONTENEDOR PRINCIPAL DEL PROGRAMA (ARRANCA OCULTO) -->
+<div id="app-container" class="container" style="display: none;">
   <!-- Encabezado Principal con Botón de Actualización -->
   <header class="header">
-    <h1>Suministros y Logística - KPI del área</h1>
-    <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar de Supabase</button>
+    <div style="display:flex; align-items:center; gap: 12px;">
+      <h1>Suministros y Logística - KPI del área</h1>
+      <span id="user-badge" style="background:#1e293b; padding:4px 10px; border-radius:20px; font-size:0.75rem; border:1px solid #334155; color:#cbd5e1;"></span>
+    </div>
+    <div>
+      <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar Datos</button>
+      <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+    </div>
   </header>
 
   <!-- Pestañas Principales -->
   <nav class="nav-tabs">
-    <button class="tab-btn active" onclick="switchTab('tab-stock')">📦 STOCK</button>
-    <button class="tab-btn" onclick="switchTab('tab-recupero')">🔄 RECUPERO DE EQUIPOS</button>
-    <button class="tab-btn" onclick="switchTab('tab-flota')">🚚 FLOTA</button>
-    <button class="tab-btn" onclick="switchTab('tab-tendencias')">📈 Tendencias</button>
-    <button class="tab-btn" onclick="switchTab('tab-referencias')">⚙️ REFERENCIAS</button>
+    <!-- El atributo data-req-perm vincula la pestaña al interruptor de la base de datos -->
+    <button class="tab-btn active" id="btn-tab-stock" onclick="switchTab('tab-stock')">📦 STOCK</button>
+    <button class="tab-btn" id="btn-tab-recupero" onclick="switchTab('tab-recupero')">🔄 RECUPERO</button>
+    <button class="tab-btn" id="btn-tab-tendencias" onclick="switchTab('tab-tendencias')">📈 TENDENCIAS</button>
+    <button class="tab-btn" id="btn-tab-flota" onclick="switchTab('tab-flota')">🚚 FLOTA</button>
+    
+    <!-- Pestañas restingidas a roles específicos -->
+    <button class="tab-btn req-auditoria" id="btn-tab-referencias" onclick="switchTab('tab-referencias')">⚙️ REFERENCIAS</button>
+    <button class="tab-btn req-superadmin" id="btn-tab-admin" onclick="switchTab('tab-admin')">👑 GESTIÓN USUARIOS</button>
   </nav>
 
   <!-- PESTAÑA: STOCK -->
   <main id="tab-stock" class="tab-content active">
-    <section id="stock-estrategico" class="panel-estrategico">
+    <!-- Los bloques con req-estrategico se ocultan si el usuario no tiene permiso "ver_kpi_estrategicos" -->
+    <section id="stock-estrategico" class="panel-estrategico req-estrategico">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
         <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Nuevos vs. Usados)</h2>
         <span id="tagCSV" class="file-tag no">Conectando...</span>
@@ -106,7 +152,8 @@
         <div style="font-size: 0.88rem; color: #cbd5e1;">🔵 Dual Band: <strong id="val-db" style="color: #38bdf8; font-size: 1.05rem;">0</strong> <span id="pct-db" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
         <div style="font-size: 0.88rem; color: #cbd5e1;">🟠 CATV: <strong id="val-catv" style="color: #fb923c; font-size: 1.05rem;">0</strong> <span id="pct-catv" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
         <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Operativo: <strong id="val-total" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
-        <div style="font-size: 0.88rem; color: #cbd5e1;">💵 Valor Real: <strong id="val-costo" style="color: #4ade80; font-size: 1.05rem;">$0 USD</strong></div>
+        <!-- Esto se oculta con req-costos -->
+        <div class="req-costos" style="font-size: 0.88rem; color: #cbd5e1;">💵 Valor Real: <strong id="val-costo" style="color: #4ade80; font-size: 1.05rem;">$0 USD</strong></div>
       </div>
       <div style="position: relative; height: 220px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
         <canvas id="kpiStackedChart"></canvas>
@@ -116,7 +163,8 @@
     <section id="stock-tactico" class="card">
       <h2 class="card-title">🎯 Indicadores Tácticos (Control & Auditoría)</h2>
       <div id="grid-tactico-cards" class="grid-tactico"></div>
-      <div style="margin-top: 10px;">
+      
+      <div class="req-auditoria" style="margin-top: 10px;">
         <strong style="font-size: 0.9rem; color: #0f172a;">📋 Exactitud de Registro (Stock Sistema vs. Stock Físico)</strong>
         <div id="tablaAuditoriaWrapper" style="overflow-x: auto; margin-top: 8px;"></div>
       </div>
@@ -130,7 +178,7 @@
 
   <!-- PESTAÑA: RECUPERO DE EQUIPOS -->
   <main id="tab-recupero" class="tab-content">
-    <section id="recupero-estrategico" class="panel-estrategico">
+    <section id="recupero-estrategico" class="panel-estrategico req-estrategico">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
         <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Eficiencia de Recupero)</h2>
         <span id="tagRecupero" class="file-tag ok">Cargando datos...</span>
@@ -139,7 +187,7 @@
         <div style="font-size: 0.88rem; color: #cbd5e1;">🟢 En Circulación: <strong id="rec-val-circ" style="color: #4ade80; font-size: 1.05rem;">0 un.</strong> <span id="rec-pct-circ" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
         <div style="font-size: 0.88rem; color: #cbd5e1;">🔴 Fuera de Circulación: <strong id="rec-val-desc" style="color: #f87171; font-size: 1.05rem;">0 un.</strong> <span id="rec-pct-desc" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
         <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Recibidos: <strong id="rec-val-total-un" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
-        <div style="font-size: 0.88rem; color: #cbd5e1;">💵 Capital Revalorizado: <strong id="rec-val-dinero" style="color: #38bdf8; font-size: 1.05rem;">$0 USD</strong></div>
+        <div class="req-costos" style="font-size: 0.88rem; color: #cbd5e1;">💵 Capital Revalorizado: <strong id="rec-val-dinero" style="color: #38bdf8; font-size: 1.05rem;">$0 USD</strong></div>
       </div>
       <div style="position: relative; height: 160px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
         <canvas id="recuperoChart"></canvas>
@@ -156,7 +204,7 @@
   </main>
 
   <!-- PESTAÑA: TENDENCIAS Y EVOLUCIÓN HISTÓRICA -->
-  <main id="tab-tendencias" class="tab-content">
+  <main id="tab-tendencias" class="tab-content req-estrategico">
     <section class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h2 class="card-title" style="margin:0;">📈 Evolución de Stock y Consumo Histórico</h2>
@@ -217,10 +265,19 @@
   <main id="tab-flota" class="tab-content">
     <section class="card"><h2 class="card-title">🚚 Módulo de Gestión de Flota</h2><div class="placeholder-tactico">Próximamente... (Se creará en js/flota.js)</div></section>
   </main>
-  <main id="tab-referencias" class="tab-content">
+  
+  <main id="tab-referencias" class="tab-content req-auditoria">
     <section class="card">
       <h2 class="card-title">⚙️ Catálogo Maestro de Precios</h2>
       <div id="tablaPreciosWrapper" style="overflow-x: auto;"></div>
+    </section>
+  </main>
+
+  <!-- NUEVA PESTAÑA: GESTIÓN DE USUARIOS (SOLO SUPERADMIN) -->
+  <main id="tab-admin" class="tab-content req-superadmin">
+    <section class="card">
+      <h2 class="card-title" style="color: #991b1b;">👑 Panel de Gestión de Permisos y Usuarios</h2>
+      <div class="placeholder-tactico">Módulo de Administración de Roles (En construcción)</div>
     </section>
   </main>
 </div>
@@ -240,26 +297,124 @@
 <script src="js/recupero.js"></script>
 <script src="js/tendencias.js"></script>
 
-<!-- Orquestador Global de Actualización -->
+<!-- LÓGICA MAESTRA: LOGIN Y PERMISOS -->
 <script>
-  document.getElementById('btnReloadSupabase').addEventListener('click', async () => {
-    const btn = document.getElementById('btnReloadSupabase');
-    btn.disabled = true;
-    btn.textContent = '⏳ Actualizando...';
+  // Inicializa un cliente Supabase global (usa las mismas credenciales de tus otros módulos)
+  const GLOBAL_SUPA_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
+  const GLOBAL_SUPA_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
+  const superbaseAuth = supabase.createClient(GLOBAL_SUPA_URL, GLOBAL_SUPA_KEY);
 
-    // Ejecuta las 3 actualizaciones en paralelo sin importar en qué pestaña estés
+  let permisosActuales = null;
+
+  async function revisarSesionActiva() {
+    const { data: { session } } = await superbaseAuth.auth.getSession();
+    if (session && session.user) {
+      cargarPerfilUsuario(session.user);
+    } else {
+      mostrarPantallaLogin();
+    }
+  }
+
+  async function iniciarSesion() {
+    const email = document.getElementById('txt-email').value.trim();
+    const pass = document.getElementById('txt-pass').value.trim();
+    const errBox = document.getElementById('login-error');
+
+    if(!email || !pass) {
+      errBox.textContent = 'Ingrese correo y contraseña.';
+      return;
+    }
+
+    errBox.textContent = '⏳ Verificando credenciales...';
+    
+    const { data, error } = await superbaseAuth.auth.signInWithPassword({ email: email, password: pass });
+
+    if (error) {
+      errBox.textContent = '❌ Credenciales inválidas. Intente nuevamente.';
+    } else {
+      errBox.textContent = '';
+      cargarPerfilUsuario(data.user);
+    }
+  }
+
+  async function cerrarSesion() {
+    await superbaseAuth.auth.signOut();
+    window.location.reload(); // Recarga la página para destruir datos en memoria
+  }
+
+  function mostrarPantallaLogin() {
+    document.getElementById('login-container').style.display = 'flex';
+    document.getElementById('app-container').style.display = 'none';
+  }
+
+  async function cargarPerfilUsuario(usuario) {
+    // 1. Busca los permisos en tu tabla creada
+    const { data, error } = await superbaseAuth
+      .from('usuarios_permisos')
+      .select('*')
+      .eq('id', usuario.id)
+      .single();
+
+    if (error || !data) {
+      // Si el usuario no tiene permisos creados, lo tomamos como restringido absoluto
+      permisosActuales = { es_superadmin: false, ver_kpi_estrategicos: false, ver_costos_usd: false, acceso_auditoria: false };
+      document.getElementById('user-badge').textContent = `👤 ${usuario.email} (Sin Permisos)`;
+    } else {
+      permisosActuales = data;
+      document.getElementById('user-badge').textContent = `👤 ${data.nombre_completo || usuario.email}`;
+    }
+
+    aplicarRestriccionesVisuales();
+
+    // 2. Destruye el login y muestra el programa
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('app-container').style.display = 'flex';
+
+    // 3. Dispara la carga de tus módulos js como lo hacías antes
+    arrancarCargaDeDatos();
+  }
+
+  function aplicarRestriccionesVisuales() {
+    if (!permisosActuales) return;
+
+    // A) Control: Módulo de Super Admin
+    if (!permisosActuales.es_superadmin) {
+      document.querySelectorAll('.req-superadmin').forEach(el => el.classList.add('hidden-by-role'));
+    }
+    // B) Control: Costos en USD
+    if (!permisosActuales.ver_costos_usd) {
+      document.querySelectorAll('.req-costos').forEach(el => el.classList.add('hidden-by-role'));
+    }
+    // C) Control: Gráficos y KPI Estratégicos
+    if (!permisosActuales.ver_kpi_estrategicos) {
+      document.querySelectorAll('.req-estrategico').forEach(el => el.classList.add('hidden-by-role'));
+      // Si le sacás la estrategia, forzalo a ver táctico por defecto para que no vea la pantalla rota
+      if(document.getElementById('tab-tendencias').classList.contains('active')) switchTab('tab-stock');
+    }
+    // D) Control: Pestañas de Auditoría y Referencias
+    if (!permisosActuales.acceso_auditoria) {
+      document.querySelectorAll('.req-auditoria').forEach(el => el.classList.add('hidden-by-role'));
+    }
+  }
+
+  // Orquestador Global de Actualización (El que tenías antes, convertido a función)
+  async function arrancarCargaDeDatos() {
+    const btn = document.getElementById('btnReloadSupabase');
+    if(btn) { btn.disabled = true; btn.textContent = '⏳ Actualizando...'; }
+
     await Promise.allSettled([
-      typeof cargarDatosStock === 'function' ? cargarDatosStock() : Promise.resolve(),
+      typeof cargarStockModulo === 'function' ? cargarStockModulo() : Promise.resolve(),
       typeof cargarModuloRecupero === 'function' ? cargarModuloRecupero() : Promise.resolve(),
       typeof cargarModuloTendencias === 'function' ? cargarModuloTendencias() : Promise.resolve()
     ]);
 
-    btn.textContent = '⚡ Actualizar de Supabase';
-    btn.disabled = false;
-  });
-</script>
-</body>
-</html>
+    if(btn) { btn.textContent = '⚡ Actualizar Datos'; btn.disabled = false; }
+  }
 
+  document.getElementById('btnReloadSupabase').addEventListener('click', arrancarCargaDeDatos);
+
+  // Auto-Chequeo al abrir la página
+  window.onload = revisarSesionActiva;
+</script>
 </body>
 </html>
