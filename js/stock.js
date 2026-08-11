@@ -70,6 +70,26 @@ let mapaPrecios = new Map();
 let listaPreciosTabla = [];
 let kpiChart = null;
 
+// FUNCIÓN DE CONMUTACIÓN DE FILAS DESPLEGABLES
+function toggleGrupoStock(claseGrupo) {
+  const filas = document.querySelectorAll(`.${claseGrupo}`);
+  const flecha = document.getElementById(`arrow-${claseGrupo}`);
+  let mostrando = false;
+
+  filas.forEach(f => {
+    if (f.style.display === 'none' || f.style.display === '') {
+      f.style.display = 'table-row';
+      mostrando = true;
+    } else {
+      f.style.display = 'none';
+    }
+  });
+
+  if (flecha) {
+    flecha.textContent = mostrando ? '▼' : '▶';
+  }
+}
+
 // CARGA DESDE SUPABASE
 async function cargarStockModulo() {
   const tagCSV = document.getElementById('tagCSV');
@@ -158,7 +178,6 @@ function procesarYRenderizarStock() {
   stockData.forEach(row => {
     const descNorm = normalizar(row.descripcion);
 
-    // Solo procesamos ítems que sean ONUs
     if (!descNorm.includes('ONU')) return;
 
     const esVIP_DB = GRUPO_DUAL_BAND.includes(descNorm);
@@ -168,7 +187,6 @@ function procesarYRenderizarStock() {
     const precioUnitario = mapaPrecios.get(row.codigo) || mapaPrecios.get(descNorm) || COSTO_POR_DEFECTO;
     const valorFila = row.stock * precioUnitario;
 
-    // A) INDICADOR ESTRATÉGICO
     if (esAlmacenPrincipal && (esVIP_DB || esVIP_CATV)) {
       stratTotal += row.stock;
       stratValorUSD += valorFila;
@@ -181,7 +199,6 @@ function procesarYRenderizarStock() {
         arbolEstrategico[row.almacen].CATV += row.stock;
       }
 
-      // Clasificación de condición para la 2da barra
       if (descNorm.includes('USAD')) {
         stratUsados += row.stock;
       } else {
@@ -189,7 +206,6 @@ function procesarYRenderizarStock() {
       }
     }
 
-    // B) INDICADOR OPERATIVO Y TÁCTICO
     if (esAlmacenPrincipal) {
       if (esVIP_DB) {
         arbolOperativo[row.almacen].DB += row.stock;
@@ -236,7 +252,7 @@ function procesarYRenderizarStock() {
   renderAuditoriaTabla();
 }
 
-// RENDER: GRÁFICO ESTRATÉGICO CON 2 BARRAS PARALELAS DE IGUAL LONGITUD
+// RENDER: GRÁFICO ESTRATÉGICO
 function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, arbol) {
   const pctDB = total > 0 ? Math.round((db / total) * 100) : 0;
   const pctCATV = total > 0 ? Math.round((catv / total) * 100) : 0;
@@ -253,30 +269,10 @@ function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, ar
   const chartData = {
     labels: ['Tecnología VIP', 'Condición VIP'],
     datasets: [
-      {
-        label: 'Dual Band VIP',
-        data: [db, 0],
-        backgroundColor: '#0284c7',
-        borderRadius: 4
-      },
-      {
-        label: 'CATV VIP',
-        data: [catv, 0],
-        backgroundColor: '#ea580c',
-        borderRadius: 4
-      },
-      {
-        label: 'Nuevos',
-        data: [0, nuevos],
-        backgroundColor: '#22c55e',
-        borderRadius: 4
-      },
-      {
-        label: 'Usados / Reacond.',
-        data: [0, usados],
-        backgroundColor: '#eab308',
-        borderRadius: 4
-      }
+      { label: 'Dual Band VIP', data: [db, 0], backgroundColor: '#0284c7', borderRadius: 4 },
+      { label: 'CATV VIP', data: [catv, 0], backgroundColor: '#ea580c', borderRadius: 4 },
+      { label: 'Nuevos', data: [0, nuevos], backgroundColor: '#22c55e', borderRadius: 4 },
+      { label: 'Usados / Reacond.', data: [0, usados], backgroundColor: '#eab308', borderRadius: 4 }
     ]
   };
 
@@ -297,17 +293,9 @@ function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, ar
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: {
-            position: 'top',
-            labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' }, boxWidth: 12, padding: 12 }
-          },
+          legend: { position: 'top', labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' }, boxWidth: 12, padding: 12 } },
           tooltip: {
-            backgroundColor: '#0f172a',
-            titleColor: '#38bdf8',
-            bodyColor: '#f8fafc',
-            borderColor: '#334155',
-            borderWidth: 1,
-            padding: 12,
+            backgroundColor: '#0f172a', titleColor: '#38bdf8', bodyColor: '#f8fafc', borderColor: '#334155', borderWidth: 1, padding: 12,
             filter: (tooltipItem) => tooltipItem.raw > 0,
             callbacks: {
               label: (context) => {
@@ -328,7 +316,7 @@ function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, ar
   }
 }
 
-// RENDER: TÁCTICO CON TOOLTIPS EMERGENTES
+// RENDER: TÁCTICO CON TOOLTIPS
 function renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, valorDescarte, descVipCant, valorDescVip, catrielCant, itemsDev, itemsDesc, itemsDescVip, itemsCatriel) {
   const armarTooltipHTML = (titulo, objItems) => {
     let listHtml = `<strong style="color:#38bdf8; display:block; margin-bottom:6px; border-bottom:1px solid #334155; padding-bottom:4px;">${titulo}</strong>`;
@@ -410,7 +398,7 @@ async function renderAuditoriaTabla() {
   document.getElementById('tablaAuditoriaWrapper').innerHTML = html;
 }
 
-// RENDER: TABLA OPERATIVA (NUEVA MATRIZ PÍVOT CON SUMATORIA VERTICAL POR SUCURSAL)
+// RENDER: TABLA OPERATIVA CON SECCIONES DESPLEGABLES
 function renderStockOperativo(arbol) {
   let totDB = 0, totCATV = 0, totOtras = 0;
   SUCURSALES.forEach(s => {
@@ -419,7 +407,6 @@ function renderStockOperativo(arbol) {
     totOtras += arbol[s].Otras;
   });
 
-  // Recopilar modelos únicos por cada categoría
   const catvModels = new Set();
   const dbModels = new Set();
   const otrasModels = new Set();
@@ -432,7 +419,6 @@ function renderStockOperativo(arbol) {
 
   let html = '<table class="arbol" style="width:100%; border-collapse:collapse; text-align:left;">';
   
-  // Encabezado principal y columnas de sucursales
   html += `<thead>
     <tr>
       <td class="celda-total" colspan="${SUCURSALES.length + 1}" style="background:#0f172a; color:#f8fafc; font-weight:800; padding:10px; text-align:center;">
@@ -447,11 +433,11 @@ function renderStockOperativo(arbol) {
   });
   html += `</tr></thead><tbody>`;
 
-  // 1. SECCIÓN CATV VIP CON SUMATORIA POR SUCURSAL EN LA FILA DE ENCABEZADO
+  // 1. SECCIÓN CATV VIP (DESPLEGABLE)
   if (catvModels.size > 0) {
-    html += `<tr>
+    html += `<tr onclick="toggleGrupoStock('catv-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
       <td style="background:#ffedd5; color:#c2410c; font-weight:800; padding:8px 10px; border:1px solid #fed7aa;">
-        🟠 CATV VIP (${totCATV.toLocaleString('es-AR')} un.)
+        <span id="arrow-catv-rows" style="display:inline-block; width:15px;">▶</span> 🟠 CATV VIP (${totCATV.toLocaleString('es-AR')} un.)
       </td>`;
     SUCURSALES.forEach(s => {
       const totalCatvSucursal = arbol[s].CATV || 0;
@@ -462,8 +448,8 @@ function renderStockOperativo(arbol) {
     html += `</tr>`;
 
     Array.from(catvModels).sort().forEach(modelo => {
-      html += `<tr style="border-bottom:1px solid #e2e8f0;">
-        <td style="padding:8px 10px; font-weight:600; color:#1e293b;">${modelo}</td>`;
+      html += `<tr class="catv-rows" style="display:none; border-bottom:1px solid #e2e8f0;">
+        <td style="padding:8px 10px; font-weight:600; color:#1e293b; padding-left:25px;">${modelo}</td>`;
       SUCURSALES.forEach(s => {
         const cant = arbol[s].itemsCATV[modelo] || 0;
         html += `<td style="padding:8px 10px; text-align:center; font-weight:700; color:#ea580c;">${cant > 0 ? cant.toLocaleString('es-AR') : ''}</td>`;
@@ -472,11 +458,11 @@ function renderStockOperativo(arbol) {
     });
   }
 
-  // 2. SECCIÓN DUAL BAND VIP CON SUMATORIA POR SUCURSAL EN LA FILA DE ENCABEZADO
+  // 2. SECCIÓN DUAL BAND VIP (DESPLEGABLE)
   if (dbModels.size > 0) {
-    html += `<tr>
+    html += `<tr onclick="toggleGrupoStock('db-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
       <td style="background:#e0f2fe; color:#0369a1; font-weight:800; padding:8px 10px; border:1px solid #bae6fd;">
-        🔵 DUAL BAND VIP (${totDB.toLocaleString('es-AR')} un.)
+        <span id="arrow-db-rows" style="display:inline-block; width:15px;">▶</span> 🔵 DUAL BAND VIP (${totDB.toLocaleString('es-AR')} un.)
       </td>`;
     SUCURSALES.forEach(s => {
       const totalDbSucursal = arbol[s].DB || 0;
@@ -487,8 +473,8 @@ function renderStockOperativo(arbol) {
     html += `</tr>`;
 
     Array.from(dbModels).sort().forEach(modelo => {
-      html += `<tr style="border-bottom:1px solid #e2e8f0;">
-        <td style="padding:8px 10px; font-weight:600; color:#1e293b;">${modelo}</td>`;
+      html += `<tr class="db-rows" style="display:none; border-bottom:1px solid #e2e8f0;">
+        <td style="padding:8px 10px; font-weight:600; color:#1e293b; padding-left:25px;">${modelo}</td>`;
       SUCURSALES.forEach(s => {
         const cant = arbol[s].itemsDB[modelo] || 0;
         html += `<td style="padding:8px 10px; text-align:center; font-weight:700; color:#0284c7;">${cant > 0 ? cant.toLocaleString('es-AR') : ''}</td>`;
@@ -497,11 +483,11 @@ function renderStockOperativo(arbol) {
     });
   }
 
-  // 3. SECCIÓN OTRAS ONUs / LEGACY CON SUMATORIA POR SUCURSAL EN LA FILA DE ENCABEZADO
+  // 3. SECCIÓN OTRAS ONUs / LEGACY (DESPLEGABLE)
   if (otrasModels.size > 0) {
-    html += `<tr>
+    html += `<tr onclick="toggleGrupoStock('otras-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
       <td style="background:#f1f5f9; color:#475569; font-weight:800; padding:8px 10px; border:1px solid #cbd5e1;">
-        ⚙️ OTRAS ONUs / LEGACY (${totOtras.toLocaleString('es-AR')} un.)
+        <span id="arrow-otras-rows" style="display:inline-block; width:15px;">▶</span> ⚙️ OTRAS ONUs / LEGACY (${totOtras.toLocaleString('es-AR')} un.)
       </td>`;
     SUCURSALES.forEach(s => {
       const totalOtrasSucursal = arbol[s].Otras || 0;
@@ -512,8 +498,8 @@ function renderStockOperativo(arbol) {
     html += `</tr>`;
 
     Array.from(otrasModels).sort().forEach(modelo => {
-      html += `<tr style="border-bottom:1px solid #e2e8f0;">
-        <td style="padding:8px 10px; font-weight:600; color:#334155;">${modelo}</td>`;
+      html += `<tr class="otras-rows" style="display:none; border-bottom:1px solid #e2e8f0;">
+        <td style="padding:8px 10px; font-weight:600; color:#334155; padding-left:25px;">${modelo}</td>`;
       SUCURSALES.forEach(s => {
         const cant = arbol[s].itemsOtras[modelo] || 0;
         html += `<td style="padding:8px 10px; text-align:center; font-weight:700; color:#64748b;">${cant > 0 ? cant.toLocaleString('es-AR') : ''}</td>`;
