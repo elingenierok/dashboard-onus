@@ -2,11 +2,12 @@
 // MÓDULO AUTÓNOMO DE RECUPERO DE EQUIPOS (DASHBOARD)
 // ====================================================
 
+// 1. CONFIGURACIÓN E INICIALIZACIÓN DE SUPABASE
 const SUPABASE_URL_REC = 'https://ovluxdezwvuonlwnymna.supabase.co';
 const SUPABASE_KEY_REC = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
 const supabaseRecupero = supabase.createClient(SUPABASE_URL_REC, SUPABASE_KEY_REC);
 
-// Elimina tildes, espacios extra y convierte a mayúsculas
+// Función auxiliar: Elimina tildes, espacios extra y convierte a mayúsculas
 function normalizar(txt) {
   return (txt || '')
     .normalize("NFD")
@@ -16,7 +17,7 @@ function normalizar(txt) {
     .toUpperCase();
 }
 
-// Lista Oficial Estricta de Equipos VIP (Incluye variantes con y sin CATV/Espacios)
+// 2. LISTA Y CLASIFICACIÓN DE EQUIPOS VIP
 const LISTA_VIP_EXACTA = [
   "ONU ZTE F6201B V9.3 WIFI6 AX3000",
   "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
@@ -47,6 +48,7 @@ function esVIP(modelo) {
 
 let recuperoChartInstance = null;
 
+// 3. CONSULTA DE DATOS DESDE SUPABASE (MESA ACTIVA: recupero_operativo)
 async function cargarModuloRecupero() {
   const tag = document.getElementById('tagRecupero');
   if (tag) {
@@ -56,7 +58,7 @@ async function cargarModuloRecupero() {
 
   try {
     const [resRec, resPrecios] = await Promise.all([
-      supabaseRecupero.from('registro_recupero').select('*'),
+      supabaseRecupero.from('recupero_operativo').select('*'),
       supabaseRecupero.from('precios_catalogos').select('*')
     ]);
 
@@ -86,6 +88,7 @@ async function cargarModuloRecupero() {
   }
 }
 
+// Búsqueda de precio unitario en catálogo
 function obtenerPrecioEstimado(descNorm, preciosMap) {
   if (preciosMap.has(descNorm)) return preciosMap.get(descNorm);
   
@@ -95,6 +98,7 @@ function obtenerPrecioEstimado(descNorm, preciosMap) {
   return 0;
 }
 
+// 4. PROCESAMIENTO MATEMÁTICO DE MÉTRICAS Y VALORIZACIÓN
 function procesarYRenderizarRecupero(data, preciosMap) {
   let totalRecibidos = 0;
   let directoDescarteObs = 0;
@@ -145,6 +149,7 @@ function procesarYRenderizarRecupero(data, preciosMap) {
   renderRecuperoOperativo(desgloseOperativo);
 }
 
+// 5. RENDERIZADO: INDICADORES ESTRATÉGICOS Y GRÁFICO
 function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
   const elCirc = document.getElementById('rec-val-circ');
   const elPctCirc = document.getElementById('rec-pct-circ');
@@ -198,6 +203,7 @@ function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
   }
 }
 
+// 6. RENDERIZADO: TARJETAS TÁCTICAS
 function renderRecuperoTactico(totalRecibidos, directoDescarte, enCirc, fueraCirc, pctReap, valPromedio, capitalTotal) {
   const container = document.getElementById('grid-recupero-cards');
   if (!container) return;
@@ -236,6 +242,7 @@ function renderRecuperoTactico(totalRecibidos, directoDescarte, enCirc, fueraCir
   `;
 }
 
+// 7. RENDERIZADO: TABLA OPERATIVA POR MODELO
 function renderRecuperoOperativo(desglose) {
   const container = document.getElementById('tablaRecuperoOperativoWrapper');
   if (!container) return;
@@ -271,8 +278,142 @@ function renderRecuperoOperativo(desglose) {
   container.innerHTML = html;
 }
 
+// 8. DISPARADOR AUTOMÁTICO DE CARGA
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', cargarModuloRecupero);
 } else {
   cargarModuloRecupero();
+}
+
+// 9. LÓGICA DE CIERRE SEMANAL Y GENERACIÓN DE INFORME
+async function ejecutarCierreSemanal() {
+  const confirmacion = confirm(
+    "⚠️ ¿Estás seguro de cerrar la semana actual?\n\n" +
+    "- Los equipos con veredicto final (OK/Descarte) se archivarán en el historial.\n" +
+    "- Se generará un resumen numérico consolidado.\n" +
+    "- Los equipos 'PENDIENTES' se mantendrán en la mesa activa.\n\n" +
+    "Esta acción no se puede deshacer."
+  );
+
+  if (!confirmacion) return;
+
+  try {
+    // A) Obtener todos los registros de la mesa activa
+    const { data: todos, error: errLectura } = await supabaseRecupero
+      .from('recupero_operativo')
+      .select('*');
+
+    if (errLectura) throw errLectura;
+    if (!todos || todos.length === 0) {
+      alert("⚠️ No hay equipos registrados en la mesa activa.");
+      return;
+    }
+
+    // B) Separar probados (concluidos) de pendientes
+    const probados = todos.filter(row => {
+      const cond = normalizar(row.condicion || row.estado || '');
+      return ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO', 'DESCARTE', 'FALLA', 'BAJA', 'DEFECTUOSO', 'ROTO', 'RECHAZADO'].some(e => cond.includes(e));
+    });
+
+    if (probados.length === 0) {
+      alert("⚠️ No hay equipos con veredicto final para cerrar esta semana. Los equipos 'PENDIENTES' permanecerán en la mesa.");
+      return;
+    }
+
+    // C) Calcular métricas para el informe semanal
+    let enCirc = 0, descVip = 0, descObs = 0, valorUsd = 0;
+    const desglose = {};
+
+    // Carga de precios para valorización
+    const resPrecios = await supabaseRecupero.from('precios_catalogos').select('*');
+    const preciosMap = new Map();
+    (resPrecios.data || []).forEach(p => {
+      const val = parseFloat(p.precio_final) || parseFloat(p.precio_usd) || parseFloat(p.precio) || 0;
+      if (p.codigo) preciosMap.set(normalizar(p.codigo), val);
+      if (p.descripcion) preciosMap.set(normalizar(p.descripcion), val);
+    });
+
+    probados.forEach(row => {
+      const cant = parseInt(row.cantidad || 1, 10) || 1;
+      const desc = row.descripcion || row.modelo || 'DESCONOCIDO';
+      const descNorm = normalizar(desc);
+      const cond = normalizar(row.condicion || row.estado || '');
+      const esEquipoVIP = esVIP(descNorm);
+      const precio = obtenerPrecioEstimado(descNorm, preciosMap);
+
+      if (!desglose[descNorm]) {
+        desglose[descNorm] = { desc: desc, vip: esEquipoVIP, circ: 0, descVIP: 0, descObs: 0 };
+      }
+
+      const esAprobado = ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO'].some(e => cond.includes(e));
+
+      if (!esEquipoVIP) {
+        descObs += cant;
+        desglose[descNorm].descObs += cant;
+      } else if (esAprobado) {
+        enCirc += cant;
+        valorUsd += (cant * precio);
+        desglose[descNorm].circ += cant;
+      } else {
+        descVip += cant;
+        desglose[descNorm].descVIP += cant;
+      }
+    });
+
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    const semanaLabel = `Semana Cierre ${fechaHoy}`;
+
+    // D) Inyectar copia en recupero_historico_equipos
+    const copiaHistorico = probados.map(row => ({
+      fecha_ingreso: row.fecha_ingreso,
+      codigo: row.codigo,
+      descripcion: row.descripcion,
+      sn: row.sn,
+      condicion: row.condicion,
+      tecnico: row.tecnico,
+      almacen_origen: row.almacen_origen,
+      observaciones: row.observaciones
+    }));
+
+    const { error: errHist } = await supabaseRecupero
+      .from('recupero_historico_equipos')
+      .insert(copiaHistorico);
+
+    if (errHist) throw errHist;
+
+    // E) Inyectar fila consolidada en recupero_informes_semanales
+    const { error: errInforme } = await supabaseRecupero
+      .from('recupero_informes_semanales')
+      .insert([{
+        semana_label: semanaLabel,
+        total_recibidos: probados.length,
+        en_circulacion: enCirc,
+        descarte_vip: descVip,
+        descarte_obsoleto: descObs,
+        valor_recuperado_usd: valorUsd,
+        desglose_operativo: desglose
+      }]);
+
+    if (errInforme) throw errInforme;
+
+    // F) Limpiar registros procesados de la mesa activa recupero_operativo
+    const idsProcesados = probados.map(r => r.id);
+    const { error: errBorrado } = await supabaseRecupero
+      .from('recupero_operativo')
+      .delete()
+      .in('id', idsProcesados);
+
+    if (errBorrado) throw errBorrado;
+
+    alert(`🎉 Cierre semanal completado con éxito.\n\n` +
+          `- Procesados y Archivados: ${probados.length} equipos.\n` +
+          `- Pendientes conservados: ${todos.length - probados.length} equipos.`);
+
+    // Recargar vista de la aplicación
+    cargarModuloRecupero();
+
+  } catch (err) {
+    console.error("❌ Error en el cierre semanal:", err);
+    alert("Ocurrió un error al intentar realizar el cierre semanal. Revisar la consola.");
+  }
 }
