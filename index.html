@@ -51,32 +51,18 @@
   .tag-fecha-ok { color: #15803d; font-weight: 600; }
   .tag-fecha-warn { color: #b45309; font-weight: 700; }
 
-  /* Tooltips emergentes para tarjetas tácticas */
+  /* Tooltips emergentes */
   .kpi-tooltip-container { position: relative; cursor: pointer; }
   .kpi-card-tooltip {
-    display: none;
-    position: absolute;
-    bottom: 105%;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: #0f172a;
-    color: #f8fafc;
-    border: 1px solid #334155;
-    padding: 12px;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    width: 320px;
-    max-height: 220px;
-    overflow-y: auto;
-    font-size: 0.78rem;
-    line-height: 1.4;
-    text-align: left;
-    pointer-events: none;
+    display: none; position: absolute; bottom: 105%; left: 50%; transform: translateX(-50%);
+    background-color: #0f172a; color: #f8fafc; border: 1px solid #334155; padding: 12px;
+    border-radius: 8px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5); z-index: 1000;
+    width: 320px; max-height: 220px; overflow-y: auto; font-size: 0.78rem; line-height: 1.4;
+    text-align: left; pointer-events: none;
   }
   .kpi-tooltip-container:hover .kpi-card-tooltip { display: block; }
 
-  /* --- SISTEMA DE LOGIN Y PERMISOS --- */
+  /* LOGIN Y PERMISOS */
   #login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
   .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); width: 100%; max-width: 380px; border: 1px solid #cbd5e1; }
   .login-box h2 { text-align: center; color: #0f172a; margin-bottom: 24px; font-weight: 800; }
@@ -90,7 +76,6 @@
   .btn-logout { background: transparent; color: #f87171; border: 1px solid #f87171; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; margin-left: 12px; }
   .btn-logout:hover { background: #f87171; color: white; }
   
-  /* Clase maestra para ocultar elementos según rol */
   .hidden-by-role { display: none !important; }
 </style>
 </head>
@@ -113,9 +98,8 @@
   </div>
 </div>
 
-<!-- CONTENEDOR PRINCIPAL DEL PROGRAMA (ARRANCA OCULTO) -->
+<!-- CONTENEDOR PRINCIPAL DEL PROGRAMA -->
 <div id="app-container" class="container" style="display: none;">
-  <!-- Encabezado Principal con Botón de Actualización -->
   <header class="header">
     <div style="display:flex; align-items:center; gap: 12px;">
       <h1>Suministros y Logística - KPI del área</h1>
@@ -134,7 +118,6 @@
     <button class="tab-btn" id="btn-tab-tendencias" onclick="switchTab('tab-tendencias')">📈 TENDENCIAS</button>
     <button class="tab-btn" id="btn-tab-flota" onclick="switchTab('tab-flota')">🚚 FLOTA</button>
     
-    <!-- Pestañas restringidas a roles específicos -->
     <button class="tab-btn req-auditoria" id="btn-tab-referencias" onclick="switchTab('tab-referencias')">⚙️ REFERENCIAS</button>
     <button class="tab-btn req-superadmin" id="btn-tab-admin" onclick="switchTab('tab-admin')">👑 GESTIÓN USUARIOS</button>
   </nav>
@@ -213,10 +196,7 @@
         <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
       </div>
 
-      <!-- Panel de Filtros -->
       <div style="display: flex; gap: 24px; flex-wrap: wrap; background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
-        
-        <!-- Filtro Almacenes (Líneas) -->
         <div style="flex: 1; min-width: 250px;">
           <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">🏬 Seleccionar Almacenes:</strong>
           <div id="check-almacenes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; font-size: 0.85rem; color: #f8fafc;">
@@ -229,7 +209,6 @@
           </div>
         </div>
 
-        <!-- Filtro ONUs (Sumatoria) -->
         <div style="flex: 1; min-width: 240px;">
           <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.9rem;">📦 Grupos de ONUs:</strong>
           <div id="check-onus" style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; color: #f8fafc;">
@@ -238,7 +217,6 @@
           </div>
         </div>
 
-        <!-- Filtro Proyecciones -->
         <div style="flex: 1; min-width: 200px; border-left: 1px solid #334155; padding-left: 16px;">
           <strong style="color: #4ade80; display: block; margin-bottom: 10px; font-size: 0.9rem;">📉 Inteligencia Predictiva:</strong>
           <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px; font-size: 0.85rem;">
@@ -246,24 +224,19 @@
             Activar Proyección y Días a Cero
           </label>
         </div>
-
       </div>
 
-      <!-- Contenedor del Gráfico de Líneas -->
       <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
         <canvas id="chartTendenciasLines"></canvas>
       </div>
 
-      <!-- Panel de Estimaciones de Quiebre -->
       <div id="panel-estimaciones" style="display: none; margin-top: 16px; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
         <h3 style="color: #4ade80; font-size: 1rem; margin-bottom: 12px;">⏳ Estimación de Quiebre de Stock (Días hasta llegar a 0)</h3>
         <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
       </div>
-
     </section>
   </main>
 
-  <!-- PESTAÑAS FUTURAS -->
   <main id="tab-flota" class="tab-content">
     <section class="card"><h2 class="card-title">🚚 Módulo de Gestión de Flota</h2><div class="placeholder-tactico">Próximamente... (Se creará en js/flota.js)</div></section>
   </main>
@@ -275,11 +248,21 @@
     </section>
   </main>
 
-  <!-- NUEVA PESTAÑA: GESTIÓN DE USUARIOS (SOLO SUPERADMIN) -->
+  <!-- PESTAÑA: GESTIÓN DE USUARIOS Y CONTROL DE AUDITORÍA (SOLO SUPERADMIN) -->
   <main id="tab-admin" class="tab-content req-superadmin">
-    <section class="card">
-      <h2 class="card-title" style="color: #991b1b;">👑 Panel de Gestión de Permisos y Usuarios</h2>
-      <div class="placeholder-tactico">Módulo de Administración de Roles (En construcción)</div>
+    <section id="panel-admin-leadtime" class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2 class="card-title" style="margin:0; color:#991b1b;">⏱️ Control de Cuello de Botella (Lead Time de Estantería)</h2>
+        <span id="tagAdminLeadtime" class="file-tag ok">Consultando...</span>
+      </div>
+      
+      <!-- Contenedor dinámico de KPIs y Alertas rendered desde js/admin.js -->
+      <div id="grid-admin-leadtime" class="grid-tactico"></div>
+      
+      <div style="margin-top: 16px;">
+        <strong style="font-size: 0.9rem; color: #0f172a; display:block; margin-bottom:8px;">🚨 Listado de Equipos Estancados en Estantería (Sin Probar)</strong>
+        <div id="tablaLeadtimeWrapper" style="overflow-x: auto;"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -294,10 +277,11 @@
   }
 </script>
 
-<!-- Carga de Módulos Individuales -->
+<!-- Carga de Módulos Individuales en Orden -->
 <script src="js/stock.js"></script>
 <script src="js/recupero.js"></script>
 <script src="js/tendencias.js"></script>
+<script src="js/admin.js"></script>
 
 <!-- LÓGICA MAESTRA: LOGIN Y PERMISOS -->
 <script>
@@ -396,7 +380,8 @@
     await Promise.allSettled([
       typeof cargarStockModulo === 'function' ? cargarStockModulo() : Promise.resolve(),
       typeof cargarModuloRecupero === 'function' ? cargarModuloRecupero() : Promise.resolve(),
-      typeof cargarModuloTendencias === 'function' ? cargarModuloTendencias() : Promise.resolve()
+      typeof cargarModuloTendencias === 'function' ? cargarModuloTendencias() : Promise.resolve(),
+      typeof cargarModuloAdmin === 'function' ? cargarModuloAdmin() : Promise.resolve()
     ]);
 
     if(btn) { btn.textContent = '⚡ Actualizar Datos'; btn.disabled = false; }

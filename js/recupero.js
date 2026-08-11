@@ -285,11 +285,12 @@ if (document.readyState === 'loading') {
   cargarModuloRecupero();
 }
 
-// 9. LÓGICA DE CIERRE SEMANAL Y GENERACIÓN DE INFORME
+// 9. LÓGICA DE CIERRE SEMANAL Y GENERACIÓN DE INFORME (CON TRAZA DE TIEMPOS)
 async function ejecutarCierreSemanal() {
   const confirmacion = confirm(
     "⚠️ ¿Estás seguro de cerrar la semana actual?\n\n" +
     "- Los equipos con veredicto final (OK/Descarte) se archivarán en el historial.\n" +
+    "- Se conservarán las métricas exactas de tiempo de prueba y espera.\n" +
     "- Se generará un resumen numérico consolidado.\n" +
     "- Los equipos 'PENDIENTES' se mantendrán en la mesa activa.\n\n" +
     "Esta acción no se puede deshacer."
@@ -363,7 +364,7 @@ async function ejecutarCierreSemanal() {
     const fechaHoy = new Date().toISOString().split('T')[0];
     const semanaLabel = `Semana Cierre ${fechaHoy}`;
 
-    // D) Inyectar copia en recupero_historico_equipos
+    // D) Inyectar copia en recupero_historico_equipos (incluyendo campos de tiempo)
     const copiaHistorico = probados.map(row => ({
       fecha_ingreso: row.fecha_ingreso,
       codigo: row.codigo,
@@ -372,7 +373,11 @@ async function ejecutarCierreSemanal() {
       condicion: row.condicion,
       tecnico: row.tecnico,
       almacen_origen: row.almacen_origen,
-      observaciones: row.observaciones
+      observaciones: row.observaciones,
+      inicio_prueba: row.inicio_prueba,
+      fin_prueba: row.fin_prueba,
+      tiempo_prueba_seg: row.tiempo_prueba_seg,
+      tiempo_espera_hs: row.tiempo_espera_hs
     }));
 
     const { error: errHist } = await supabaseRecupero

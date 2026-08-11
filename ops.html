@@ -10,9 +10,10 @@
   body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 16px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
   .suite-container { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 16px; }
   
-  .header { text-align: center; margin-bottom: 4px; }
+  .header { text-align: center; margin-bottom: 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
   .header h1 { font-size: 1.3rem; color: #38bdf8; font-weight: 800; }
-  .header p { font-size: 0.8rem; color: #94a3b8; margin-top: 4px; }
+  .header p { font-size: 0.8rem; color: #94a3b8; }
+  .user-bar { display: flex; align-items: center; justify-content: space-between; width: 100%; background: #1e293b; padding: 8px 14px; border-radius: 8px; border: 1px solid #334155; font-size: 0.8rem; }
 
   .ops-nav { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; background: #1e293b; padding: 6px; border-radius: 10px; border: 1px solid #334155; }
   .ops-tab { padding: 10px 4px; border: none; background: transparent; color: #94a3b8; font-weight: 700; font-size: 0.78rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; text-align: center; }
@@ -25,6 +26,7 @@
   label { font-size: 0.82rem; font-weight: 600; color: #cbd5e1; }
   input, select { background: #0f172a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
   input:focus, select:focus { outline: none; border-color: #0284c7; }
+  input[readonly] { background: #1e293b; color: #94a3b8; cursor: not-allowed; border-color: #475569; }
 
   .info-equipo { background: #0f172a; border: 1px dashed #0284c7; padding: 10px 14px; border-radius: 8px; font-size: 0.82rem; color: #38bdf8; display: none; }
   .banner-testeado { background: #1e1b4b; border: 1px solid #6366f1; color: #a5b4fc; padding: 12px; border-radius: 8px; font-size: 0.82rem; display: none; line-height: 1.4; }
@@ -42,30 +44,24 @@
   .btn-submit:disabled { background: #334155; cursor: not-allowed; opacity: 0.5; }
   .btn-secondary { background: #334155; color: white; border: none; padding: 8px 12px; font-weight: 600; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
   
-  /* Botón de Impresión (Oculto por defecto) */
   .btn-print { background: #059669; color: white; border: none; padding: 12px; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 0.95rem; margin-top: 6px; display: none; text-align: center; }
   .btn-print:hover { background: #047857; }
   .status-msg { text-align: center; font-size: 0.82rem; font-weight: 600; line-height: 1.3; }
 
-  /* ========================================================= */
-  /* --- ESTILOS DE IMPRESIÓN ETIQUETA BROTHER (62mm x 29mm) --- */
-  /* ========================================================= */
+  /* SISTEMA DE LOGIN */
+  #login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; width: 100%; max-width: 380px; }
+  .login-box { background: #1e293b; padding: 30px; border-radius: 12px; width: 100%; border: 1px solid #334155; display: flex; flex-direction: column; gap: 16px; }
+  .login-box h2 { text-align: center; color: #38bdf8; font-weight: 800; }
+  .btn-login { background: #0284c7; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+  .btn-logout { background: transparent; color: #f87171; border: 1px solid #f87171; padding: 4px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; }
+
+  /* ESTILOS DE IMPRESIÓN ETIQUETA BROTHER */
   #etiqueta-impresion { display: none; }
 
   @media print {
-    @page {
-      size: 62mm 29mm;
-      margin: 0;
-    }
-    body {
-      background: #ffffff !important;
-      color: #000000 !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    }
-    .suite-container {
-      display: none !important;
-    }
+    @page { size: 62mm 29mm; margin: 0; }
+    body { background: #fff !important; color: #000 !important; padding: 0 !important; margin: 0 !important; }
+    .suite-container, #login-container { display: none !important; }
     #etiqueta-impresion {
       display: flex !important;
       flex-direction: column;
@@ -90,10 +86,32 @@
 </head>
 <body>
 
-<div class="suite-container">
+<!-- PANTALLA DE LOGIN -->
+<div id="login-container">
+  <div class="login-box">
+    <h2>🔐 Suite Operativa ISP</h2>
+    <div class="form-group">
+      <label>Correo Electrónico</label>
+      <input type="email" id="txt-email" placeholder="usuario@empresa.com">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="txt-pass" placeholder="••••••••">
+    </div>
+    <button class="btn-login" onclick="iniciarSesion()">Ingresar al Sistema</button>
+    <div id="login-error" class="status-msg" style="color:#ef4444;"></div>
+  </div>
+</div>
+
+<!-- APLICACIÓN PRINCIPAL -->
+<div id="app-container" class="suite-container" style="display:none;">
   <header class="header">
     <h1>🛠️ Suite Operativa ISP</h1>
     <p>Recepción, Pruebas de Laboratorio y Auditoría</p>
+    <div class="user-bar">
+      <span id="user-badge" style="color:#38bdf8; font-weight:700;">👤 Cargando perfil...</span>
+      <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+    </div>
   </header>
 
   <nav class="ops-nav">
@@ -126,6 +144,8 @@
         <option value="2.4 Huawei A5">2.4 Huawei A5 (OBSOLETA)</option>
         <option value="CHINA MOBILE">CHINA MOBILE (OBSOLETA)</option>
         <option value="OTRO MODELO / OBSOLETO">OTRO MODELO / OBSOLETO</option>
+        <option value="ANTENA">ANTENA</option>
+        <option value="Router">Router</option>
       </select>
     </div>
 
@@ -139,8 +159,8 @@
     </div>
 
     <div class="form-group">
-      <label>👤 Técnico Origen / Observaciones</label>
-      <input type="text" id="cg_tecnico" placeholder="Nombre del técnico o detalle de retiro">
+      <label>👤 Detalle / Técnico que Trajo el Equipo</label>
+      <input type="text" id="cg_tecnico" placeholder="Nombre del técnico o motivo de retiro">
     </div>
 
     <button type="submit" class="btn-submit">💾 Ingresar Equipo a Laboratorio</button>
@@ -187,8 +207,8 @@
       </div>
 
       <div class="form-group">
-        <label>👤 Técnico del Laboratorio</label>
-        <input type="text" id="pr_tecnico_lab" placeholder="Tu nombre..." required>
+        <label>👤 Técnico del Laboratorio (Operador Sesión)</label>
+        <input type="text" id="pr_tecnico_lab" readonly required>
       </div>
 
       <div id="boxVeredictoPrueba" class="veredicto-box veredicto-ok">Veredicto: 🟢 CIRCULACIÓN</div>
@@ -196,7 +216,7 @@
     </div>
 
     <!-- BOTÓN DE IMPRESIÓN DIRECTA -->
-    <button type="button" id="btnImprimir" class="btn-print" onclick="imprimirEtiquetaPrueba()">🖨️ Imprimir Etiqueta Brother (60x30mm)</button>
+    <button type="button" id="btnImprimir" class="btn-print" onclick="imprimirEtiquetaPrueba()">🖨️ Imprimir Etiqueta Brother (62x29mm)</button>
     
     <div id="statusPrueba" class="status-msg"></div>
   </form>
@@ -228,8 +248,8 @@
     </div>
 
     <div class="form-group">
-      <label>👤 Nombre del Auditor</label>
-      <input type="text" id="aud_nombre" placeholder="Tu nombre..." required>
+      <label>👤 Nombre del Auditor (Operador Sesión)</label>
+      <input type="text" id="aud_nombre" readonly required>
     </div>
 
     <div class="form-group">
@@ -275,6 +295,66 @@
 
   let equipoCargadoActual = null;
   let veredictoFinalCalculado = 'CIRCULACIÓN';
+  let usuarioOperadorNombre = '';
+  let fechaInicioPruebaTemp = null; // Cronómetro silencioso para medir rendimiento del técnico
+
+  // --- LÓGICA DE LOGIN Y SESIÓN ---
+  async function revisarSesionActiva() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session && session.user) {
+      cargarPerfilUsuario(session.user);
+    } else {
+      mostrarPantallaLogin();
+    }
+  }
+
+  async function iniciarSesion() {
+    const email = document.getElementById('txt-email').value.trim();
+    const pass = document.getElementById('txt-pass').value.trim();
+    const errBox = document.getElementById('login-error');
+
+    if(!email || !pass) {
+      errBox.textContent = 'Ingrese correo y contraseña.';
+      return;
+    }
+
+    errBox.textContent = '⏳ Verificando credenciales...';
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+
+    if (error) {
+      errBox.textContent = '❌ Credenciales inválidas.';
+    } else {
+      errBox.textContent = '';
+      cargarPerfilUsuario(data.user);
+    }
+  }
+
+  async function cerrarSesion() {
+    await supabaseClient.auth.signOut();
+    window.location.reload();
+  }
+
+  function mostrarPantallaLogin() {
+    document.getElementById('login-container').style.display = 'flex';
+    document.getElementById('app-container').style.display = 'none';
+  }
+
+  async function cargarPerfilUsuario(usuario) {
+    const { data } = await supabaseClient
+      .from('usuarios_permisos')
+      .select('nombre_completo')
+      .eq('id', usuario.id)
+      .single();
+
+    usuarioOperadorNombre = (data && data.nombre_completo) ? data.nombre_completo : usuario.email;
+
+    document.getElementById('user-badge').textContent = `👤 ${usuarioOperadorNombre}`;
+    document.getElementById('pr_tecnico_lab').value = usuarioOperadorNombre;
+    document.getElementById('aud_nombre').value = usuarioOperadorNombre;
+
+    document.getElementById('login-container').style.display = 'none';
+    document.getElementById('app-container').style.display = 'flex';
+  }
 
   function switchOps(tabId, btn) {
     document.querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
@@ -283,57 +363,54 @@
     document.getElementById(tabId).classList.add('active');
   }
 
-  // 1. CARGA DE EQUIPOS
+  // 1. CARGA DE EQUIPOS (TABLA NATIVA: recupero_operativo)
   document.getElementById('form-carga').addEventListener('submit', async (e) => {
     e.preventDefault();
     const msg = document.getElementById('statusCarga');
     const sn = document.getElementById('cg_serial').value.trim().toUpperCase();
 
-    msg.textContent = '⏳ Verificando duplicados...';
+    msg.textContent = '⏳ Verificando duplicados en la mesa activa...';
     msg.style.color = '#38bdf8';
 
     const { data: exist } = await supabaseClient
-      .from('registro_recupero')
-      .select('serial_number, condicion, fecha_registro')
-      .eq('serial_number', sn)
+      .from('recupero_operativo')
+      .select('sn, condicion, fecha_ingreso')
+      .eq('sn', sn)
       .limit(1);
 
     if (exist && exist.length > 0) {
       const reg = exist[0];
-      msg.textContent = `⚠️ El equipo con SN ${sn} ya se encuentra registrado con condición: [${reg.condicion}] (${reg.fecha_registro}).`;
+      msg.textContent = `⚠️ El equipo con SN ${sn} ya está en la mesa activa con condición: [${reg.condicion}].`;
       msg.style.color = '#fde047';
       return;
     }
 
     const modelo = document.getElementById('cg_modelo').value;
+    const detalleTecnico = document.getElementById('cg_tecnico').value.trim();
 
     const payload = {
-      serial_number: sn,
-      modelo: modelo,
+      sn: sn,
       descripcion: modelo,
-      origen: document.getElementById('cg_origen').value,
-      origen_tipo: document.getElementById('cg_origen').value,
-      tecnico_obs: document.getElementById('cg_tecnico').value.trim(),
-      condicion: 'PENDIENTE',
-      estado_final: 'PENDIENTE',
-      cantidad: 1,
-      fecha_registro: new Date().toISOString().split('T')[0]
+      almacen_origen: document.getElementById('cg_origen').value,
+      tecnico: usuarioOperadorNombre,
+      observaciones: (detalleTecnico ? detalleTecnico + ' | ' : '') + 'Cargado por: ' + usuarioOperadorNombre,
+      condicion: 'PENDIENTE'
     };
 
-    const { error } = await supabaseClient.from('registro_recupero').insert([payload]);
+    const { error } = await supabaseClient.from('recupero_operativo').insert([payload]);
 
     if (error) {
       msg.textContent = '❌ Error: ' + error.message;
       msg.style.color = '#ef4444';
     } else {
-      msg.textContent = '✅ ¡Equipo cargado para pruebas!';
+      msg.textContent = '✅ ¡Equipo cargado a la mesa activa para pruebas!';
       msg.style.color = '#4ade80';
       document.getElementById('cg_serial').value = '';
       document.getElementById('cg_serial').focus();
     }
   });
 
-  // 2. BUSCAR EQUIPO PARA PRUEBA
+  // 2. BUSCAR EQUIPO PARA PRUEBA (MESA ACTIVA: recupero_operativo)
   async function buscarEquipoParaPrueba() {
     const sn = document.getElementById('pr_serial').value.trim().toUpperCase();
     const infoBox = document.getElementById('infoEquipoEnc');
@@ -345,24 +422,25 @@
 
     if (!sn) return;
 
-    msg.textContent = '⏳ Buscando equipo...';
+    msg.textContent = '⏳ Buscando equipo en la mesa activa...';
     msg.style.color = '#38bdf8';
 
     const { data, error } = await supabaseClient
-      .from('registro_recupero')
+      .from('recupero_operativo')
       .select('*')
-      .eq('serial_number', sn)
+      .eq('sn', sn)
       .order('id', { ascending: false })
       .limit(1);
 
     if (error || !data || data.length === 0) {
-      msg.textContent = '⚠️ Este equipo no se encuentra en la lista de prueba.';
+      msg.textContent = '⚠️ Este equipo no se encuentra en la mesa de prueba activa.';
       msg.style.color = '#ef4444';
       infoBox.style.display = 'none';
       bannerTesteado.style.display = 'none';
       blockControles.style.display = 'none';
       btnImprimir.style.display = 'none';
       equipoCargadoActual = null;
+      fechaInicioPruebaTemp = null;
       return;
     }
 
@@ -370,30 +448,32 @@
     const descModelo = equipoCargadoActual.descripcion || equipoCargadoActual.modelo || '-';
     
     document.getElementById('infModelo').textContent = 'Modelo: ' + descModelo;
-    document.getElementById('infOrigen').textContent = 'Origen: ' + (equipoCargadoActual.origen || '-');
+    document.getElementById('infOrigen').textContent = 'Origen: ' + (equipoCargadoActual.almacen_origen || equipoCargadoActual.origen || '-');
     infoBox.style.display = 'block';
 
-    const estadoActual = (equipoCargadoActual.condicion || equipoCargadoActual.estado_final || '').toUpperCase();
+    const estadoActual = (equipoCargadoActual.condicion || '').toUpperCase();
 
-    // MOSTRAR BOTÓN DE IMPRESIÓN AL ENCONTRAR UN VEREDICTO
     btnImprimir.style.display = 'block';
 
     if (estadoActual !== 'PENDIENTE') {
       bannerTesteado.style.display = 'block';
-      bannerTesteado.innerHTML = `ℹ️ <strong>Equipo ya testeado en fecha ${equipoCargadoActual.fecha_registro || 'previa'}</strong><br>` +
+      bannerTesteado.innerHTML = `ℹ️ <strong>Equipo ya testeado</strong><br>` +
         `Veredicto previo: <strong>${estadoActual}</strong><br>` +
-        `Potencia guardada: <strong>${equipoCargadoActual.potencia_dbm !== null ? equipoCargadoActual.potencia_dbm + ' dBm' : 'N/D'}</strong><br>` +
-        `Motivo / Detalle: ${equipoCargadoActual.motivo_falla || 'Ninguno'}`;
+        `Detalle / Observación: ${equipoCargadoActual.observaciones || 'Ninguno'}`;
       
       blockControles.style.display = 'none';
       msg.textContent = 'ℹ️ Equipo probado previamente. Etiqueta lista para imprimir.';
       msg.style.color = '#a5b4fc';
+      fechaInicioPruebaTemp = null;
     } else {
       bannerTesteado.style.display = 'none';
       blockControles.style.display = 'flex';
       btnGuardar.disabled = false;
       msg.textContent = '✅ Equipo listo para prueba de laboratorio.';
       msg.style.color = '#4ade80';
+      
+      // Inicia el cronómetro silencioso del testeo
+      fechaInicioPruebaTemp = new Date();
       evaluarVeredictoPrueba();
     }
   }
@@ -430,7 +510,7 @@
     }
   }
 
-  // GUARDAR PRUEBA
+  // GUARDAR PRUEBA (MESA ACTIVA: recupero_operativo) CON CÁLCULO DE TIEMPOS SILENCIOSO
   document.getElementById('form-prueba').addEventListener('submit', async (e) => {
     e.preventDefault();
     const msg = document.getElementById('statusPrueba');
@@ -444,18 +524,30 @@
     msg.textContent = '⏳ Guardando prueba...';
     msg.style.color = '#38bdf8';
 
+    const fechaFinPrueba = new Date();
+    const fechaIngresoEquipo = (equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at) ? new Date(equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at) : fechaFinPrueba;
+
+    // A) Rendimiento individual del técnico (en segundos)
+    const tiempoPruebaSeg = fechaInicioPruebaTemp ? Math.round((fechaFinPrueba - fechaInicioPruebaTemp) / 1000) : null;
+
+    // B) Lead Time / Espera en estantería (en horas)
+    const tiempoEsperaHs = parseFloat(((fechaFinPrueba - fechaIngresoEquipo) / (1000 * 60 * 60)).toFixed(2));
+
     const potenciaIngresada = parseFloat(document.getElementById('test_dbm').value);
+    const motivoFalla = veredictoFinalCalculado === 'DESCARTE' ? document.getElementById('pr_motivo').value : 'Ninguno';
 
     const payloadUpdate = {
       condicion: veredictoFinalCalculado,
-      estado_final: veredictoFinalCalculado,
-      potencia_dbm: isNaN(potenciaIngresada) ? null : potenciaIngresada,
-      tecnico_obs: (equipoCargadoActual.tecnico_obs || '') + ' | Lab: ' + document.getElementById('pr_tecnico_lab').value.trim(),
-      motivo_falla: veredictoFinalCalculado === 'DESCARTE' ? document.getElementById('pr_motivo').value : 'Ninguno'
+      tecnico: usuarioOperadorNombre,
+      inicio_prueba: fechaInicioPruebaTemp ? fechaInicioPruebaTemp.toISOString() : null,
+      fin_prueba: fechaFinPrueba.toISOString(),
+      tiempo_prueba_seg: tiempoPruebaSeg,
+      tiempo_espera_hs: tiempoEsperaHs,
+      observaciones: (equipoCargadoActual.observaciones || '') + ' | Lab: ' + usuarioOperadorNombre + ' [Pot: ' + (isNaN(potenciaIngresada) ? 'N/D' : potenciaIngresada + 'dBm') + '] [Falla: ' + motivoFalla + ']' + (tiempoPruebaSeg !== null ? ' [Prueba: ' + tiempoPruebaSeg + 's]' : '')
     };
 
     const { error } = await supabaseClient
-      .from('registro_recupero')
+      .from('recupero_operativo')
       .update(payloadUpdate)
       .eq('id', equipoCargadoActual.id);
 
@@ -469,23 +561,19 @@
     }
   });
 
-  // IMPRESIÓN DE ETIQUETA 60x30mm
+  // IMPRESIÓN DE ETIQUETA 62x29mm
   function imprimirEtiquetaPrueba() {
     if (!equipoCargadoActual) return;
 
-    const sn = equipoCargadoActual.serial_number || document.getElementById('pr_serial').value.trim().toUpperCase();
-    const modelo = equipoCargadoActual.descripcion || equipoCargadoActual.modelo || 'GENERICO';
-    const dbm = document.getElementById('test_dbm').value || equipoCargadoActual.potencia_dbm || 'N/D';
+    const sn = equipoCargadoActual.sn || document.getElementById('pr_serial').value.trim().toUpperCase();
+    const modelo = equipoCargadoActual.descripcion || 'GENERICO';
+    const dbm = document.getElementById('test_dbm').value || 'N/D';
     
-    // Determinar el veredicto exacto (previo o actual)
     let veredicto = 'CIRCULACIÓN';
-    const estadoPrevio = (equipoCargadoActual.condicion || equipoCargadoActual.estado_final || '').toUpperCase();
+    const estadoPrevio = (equipoCargadoActual.condicion || '').toUpperCase();
     
     if (estadoPrevio !== 'PENDIENTE') {
       veredicto = estadoPrevio;
-      if (equipoCargadoActual.motivo_falla && equipoCargadoActual.motivo_falla !== 'Ninguno') {
-        veredicto += ' (' + equipoCargadoActual.motivo_falla + ')';
-      }
     } else {
       veredicto = document.getElementById('boxVeredictoPrueba').textContent.replace('Veredicto:', '').trim();
     }
@@ -524,7 +612,7 @@
       stock_real: real,
       stock_sistema: sis,
       diferencia: real - sis,
-      auditor_nombre: document.getElementById('aud_nombre').value.trim(),
+      auditor_nombre: usuarioOperadorNombre,
       observaciones: document.getElementById('aud_obs').value.trim()
     };
 
@@ -548,6 +636,8 @@
       buscarEquipoParaPrueba();
     }
   });
+
+  window.onload = revisarSesionActiva;
 </script>
 </body>
 </html>
