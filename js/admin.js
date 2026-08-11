@@ -145,9 +145,9 @@ function renderTablaLeadTime(lista) {
 
       html += `<tr>
         <td style="font-weight:700; color:#0284c7;">${item.sn}</td>
-        <td style="font-weight:600; color:#cbd5e1;">${item.descripcion}</td>
+        <td style="font-weight:600; color:#94a3b8;">${item.descripcion}</td>
         <td style="text-align:center; color:#94a3b8;">${item.origen}</td>
-        <td style="text-align:center; color:#cbd5e1;">${item.cargadoPor}</td>
+        <td style="text-align:center; color:#94a3b8;">${item.cargadoPor}</td>
         <td style="text-align:center; color:#94a3b8; font-size:0.78rem;">${item.fechaIngreso}</td>
         <td style="text-align:center; font-weight:800; font-size:1rem; color:${item.horas >= 24 ? '#f87171' : '#4ade80'};">${item.horas} hs</td>
         <td style="text-align:center;">${badgeTag}</td>

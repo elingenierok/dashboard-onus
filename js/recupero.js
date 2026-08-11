@@ -203,41 +203,62 @@ function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
   }
 }
 
-// 6. RENDERIZADO: TARJETAS TÁCTICAS
+// 6. RENDERIZADO: TARJETAS TÁCTICAS AGRUPADAS
 function renderRecuperoTactico(totalRecibidos, directoDescarte, enCirc, fueraCirc, pctReap, valPromedio, capitalTotal) {
   const container = document.getElementById('grid-recupero-cards');
   if (!container) return;
 
+  container.style.display = "flex";
+  container.style.flexWrap = "wrap";
+  container.style.gap = "16px";
+
   container.innerHTML = `
-    <div class="kpi-card-dark">
-      <div class="title">📥 1. EQUIPOS RECIBIDOS</div>
-      <div class="value">${totalRecibidos.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext">Ingreso Bruto Laboratorio</div>
+    <!-- BLOQUE 1: DEL TOTAL RECIBIDO -->
+    <div style="flex: 1; min-width: 280px; background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 12px; padding: 14px;">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #4d4f52; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+        📦 Del total recibido
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;">
+        <div class="kpi-card-dark" style="background: #1e293b;">
+          <div class="title" style="color: #cbd5e1;">📥 EQUIPOS RECIBIDOS</div>
+          <div class="value" style="color: #f8fafc;">${totalRecibidos.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
+          <div class="subtext" style="color: #94a3b8;">Ingreso Bruto Laboratorio</div>
+        </div>
+        <div class="kpi-card-dark" style="border-color:#eab308; background: #1e293b;">
+          <div class="title" style="color:#fde047;">📼 DIRECTO A DESCARTE</div>
+          <div class="value" style="color:#fde047;">${directoDescarte.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
+          <div class="subtext">Tecnología Obsoleta (Sin Prueba)</div>
+        </div>
+      </div>
     </div>
-    <div class="kpi-card-dark" style="border-color:#eab308;">
-      <div class="title" style="color:#fde047;">📼 DIRECTO A DESCARTE</div>
-      <div class="value" style="color:#fde047;">${directoDescarte.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext">Tecnología Obsoleta (Sin Prueba)</div>
-    </div>
-    <div class="kpi-card-dark" style="border-color:#16a34a;">
-      <div class="title" style="color:#4ade80;">♻️ 2. EN CIRCULACIÓN</div>
-      <div class="value" style="color:#4ade80;">${enCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext">Equipos VIP Recuperados</div>
-    </div>
-    <div class="kpi-card-dark" style="border-color:#dc2626;">
-      <div class="title" style="color:#f87171;">🗑️ 3. FUERA DE CIRCULACIÓN</div>
-      <div class="value" style="color:#f87171;">${fueraCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-      <div class="subtext">Descarte VIP Tras Prueba</div>
-    </div>
-    <div class="kpi-card-dark" style="border-color:#0284c7;">
-      <div class="title" style="color:#38bdf8;">📈 4. % REAPROVECHAMIENTO</div>
-      <div class="value" style="color:#38bdf8;">${pctReap}%</div>
-      <div class="subtext">Efectividad sobre VIP Probadas</div>
-    </div>
-    <div class="kpi-card-dark" style="border-color:#16a34a;">
-      <div class="title" style="color:#4ade80;">💵 5. VALOR PROMEDIO / TOTAL</div>
-      <div class="value" style="color:#4ade80;">$ ${valPromedio} <span style="font-size:0.9rem;">USD/un</span></div>
-      <div class="subtext">Total: <strong>$ ${Math.round(capitalTotal).toLocaleString('es-AR')} USD</strong></div>
+
+    <!-- BLOQUE 2: DE LOS EQUIPOS VIP -->
+    <div style="flex: 2; min-width: 320px; background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 12px; padding: 14px;">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #2b7fa3; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+        ⭐ De los equipos VIP
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
+        <div class="kpi-card-dark" style="border-color:#16a34a; background: #1e293b;">
+          <div class="title" style="color:#4ade80;">♻️ EN CIRCULACIÓN</div>
+          <div class="value" style="color:#4ade80;">${enCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
+          <div class="subtext">Equipos VIP Recuperados</div>
+        </div>
+        <div class="kpi-card-dark" style="border-color:#dc2626; background: #1e293b;">
+          <div class="title" style="color:#f87171;">🗑️ FUERA DE CIRCULACIÓN</div>
+          <div class="value" style="color:#f87171;">${fueraCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
+          <div class="subtext">Descarte VIP Tras Prueba</div>
+        </div>
+        <div class="kpi-card-dark" style="border-color:#0284c7; background: #1e293b;">
+          <div class="title" style="color:#38bdf8;">📈 % REAPROVECHAMIENTO</div>
+          <div class="value" style="color:#38bdf8;">${pctReap}%</div>
+          <div class="subtext">Efectividad sobre VIP Probadas</div>
+        </div>
+        <div class="kpi-card-dark" style="border-color:#16a34a; background: #1e293b;">
+          <div class="title" style="color:#4ade80;">💵 VALOR PROMEDIO / TOTAL</div>
+          <div class="value" style="color:#4ade80;">$ ${valPromedio} <span style="font-size:0.9rem;">USD/un</span></div>
+          <div class="subtext">Total: <strong>$ ${Math.round(capitalTotal).toLocaleString('es-AR')} USD</strong></div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -265,7 +286,7 @@ function renderRecuperoOperativo(desglose) {
   } else {
     entries.forEach(item => {
       html += `<tr>
-        <td style="font-weight:600; color:#cbd5e1;">${item.desc}</td>
+        <td style="font-weight:600; color:#95b4d9;">${item.desc}</td>
         <td style="text-align:center;">${item.vip ? '<span style="color:#0284c7; font-weight:700;">🔵 VIP</span>' : '<span style="color:#64748b;">⚙️ Obsoleto</span>'}</td>
         <td style="text-align:center; font-weight:700; color:#4ade80;">${item.circ} un.</td>
         <td style="text-align:center; font-weight:700; color:#f87171;">${item.descVIP} un.</td>
@@ -299,7 +320,6 @@ async function ejecutarCierreSemanal() {
   if (!confirmacion) return;
 
   try {
-    // A) Obtener todos los registros de la mesa activa
     const { data: todos, error: errLectura } = await supabaseRecupero
       .from('recupero_operativo')
       .select('*');
@@ -310,7 +330,6 @@ async function ejecutarCierreSemanal() {
       return;
     }
 
-    // B) Separar probados (concluidos) de pendientes
     const probados = todos.filter(row => {
       const cond = normalizar(row.condicion || row.estado || '');
       return ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO', 'DESCARTE', 'FALLA', 'BAJA', 'DEFECTUOSO', 'ROTO', 'RECHAZADO'].some(e => cond.includes(e));
@@ -321,11 +340,9 @@ async function ejecutarCierreSemanal() {
       return;
     }
 
-    // C) Calcular métricas para el informe semanal
     let enCirc = 0, descVip = 0, descObs = 0, valorUsd = 0;
     const desglose = {};
 
-    // Carga de precios para valorización
     const resPrecios = await supabaseRecupero.from('precios_catalogos').select('*');
     const preciosMap = new Map();
     (resPrecios.data || []).forEach(p => {
@@ -364,7 +381,6 @@ async function ejecutarCierreSemanal() {
     const fechaHoy = new Date().toISOString().split('T')[0];
     const semanaLabel = `Semana Cierre ${fechaHoy}`;
 
-    // D) Inyectar copia en recupero_historico_equipos (incluyendo campos de tiempo)
     const copiaHistorico = probados.map(row => ({
       fecha_ingreso: row.fecha_ingreso,
       codigo: row.codigo,
@@ -386,7 +402,6 @@ async function ejecutarCierreSemanal() {
 
     if (errHist) throw errHist;
 
-    // E) Inyectar fila consolidada en recupero_informes_semanales
     const { error: errInforme } = await supabaseRecupero
       .from('recupero_informes_semanales')
       .insert([{
@@ -401,7 +416,6 @@ async function ejecutarCierreSemanal() {
 
     if (errInforme) throw errInforme;
 
-    // F) Limpiar registros procesados de la mesa activa recupero_operativo
     const idsProcesados = probados.map(r => r.id);
     const { error: errBorrado } = await supabaseRecupero
       .from('recupero_operativo')
@@ -414,7 +428,6 @@ async function ejecutarCierreSemanal() {
           `- Procesados y Archivados: ${probados.length} equipos.\n` +
           `- Pendientes conservados: ${todos.length - probados.length} equipos.`);
 
-    // Recargar vista de la aplicación
     cargarModuloRecupero();
 
   } catch (err) {
