@@ -15,13 +15,16 @@ function normalizarTexto(txt) {
     .toUpperCase();
 }
 
-// MAPA DE IMÁGENES OFICIALES VINCULADAS
+// MAPA DE IMÁGENES OFICIALES VINCULADAS (Incluye nuevos modelos)
 const MAPA_IMAGENES_MODELOS = {
   "F6201B": "https://provetel.com.ar/wp-content/uploads/sites/18/2026/01/images-1.jpeg",
   "F6600P": "https://www.zte.com.cn/content/dam/zte-site/res-www-zte-com-cn/mediares/zte/global/productimages/fm_pictures/ont/ZXHN%20F6600P-2.JPG",
   "F670L": "https://provetel.com.ar/wp-content/uploads/sites/18/2023/06/Zte.jpg",
   "EG8147X6": "https://www.sawerin.com.ar/wp-content/uploads/2025/09/overview-600x450.png",
-  "F6600R": "https://www.ycict.net/wp-content/uploads/2024/05/ZXHN-F6600R-ycict.jpg"
+  "F6600R": "https://www.ycict.net/wp-content/uploads/2024/05/ZXHN-F6600R-ycict.jpg",
+  "HG8145V5": "https://www.sawerin.com.ar/wp-content/uploads/2025/09/overview-600x450.png",
+  "EG8145V5": "https://www.sawerin.com.ar/wp-content/uploads/2025/09/overview-600x450.png",
+  "WTXGV2": "https://www.ycict.net/wp-content/uploads/2024/05/ZXHN-F6600R-ycict.jpg"
 };
 
 function obtenerUrlImagenModelo(modelo) {
@@ -34,32 +37,14 @@ function obtenerUrlImagenModelo(modelo) {
   return '';
 }
 
+// LISTA STRICTA DE MODELOS VIP (Los que NO estén aquí pasan directo a DESCARTE)
 const LISTA_VIP_EXACTA = [
   "ONU ZTE F6201B V9.3 WIFI6 AX3000",
-// "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
-// "ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)",
-
   "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
-// "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
-// "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)(USADA)",
-
   "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
-// "ONU ZTE F670L V1.1 DUAL BAND WIFI(USADA)",
-
   "ONU HUAWEI ECHOLIFE EG8147X6",
-// "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
-// "ONU HUAWEI ECHOLIFE EG8147X6 (USADO)",
-
   "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)",
-// "ONU HUAWEI ECHOLIFE EG8147X6(CATV)",
-// "ONU HUAWEI ECHOLIFE EG8147X6(CATV)(USADO)",
-// "ONU HUAWEI ECHOLIFE EG8147X6 (CATV) (USADO)",
-// "ONU HUAWEI ECHOLIFE EG8147X6(CATV) (USADO)",
-// "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)(USADO)",
-
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
-// "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)",
-// "ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)"
+  "ONU ZTE F6600R DUAL BAND WIFI (CATV)"
 ].map(normalizarTexto);
 
 function esModeloVIP(modelo) {
@@ -153,7 +138,7 @@ document.getElementById('cg_modelo').addEventListener('change', (e) => {
   }
 });
 
-// --- 2. CARGA DE EQUIPOS (DERIVACIÓN AUTOMÁTICA DE OBSOLETOS) ---
+// --- 2. CARGA DE EQUIPOS (DERIVACIÓN AUTOMÁTICA DE OBSOLETOS A DESCARTE) ---
 document.getElementById('form-carga').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('statusCarga');
@@ -178,6 +163,7 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
   const modelo = document.getElementById('cg_modelo').value;
   const detalleTecnico = document.getElementById('cg_tecnico').value.trim();
 
+  // Evaluación de categoría VIP / Obsoleto
   const esVIP = esModeloVIP(modelo);
   const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
   
@@ -259,7 +245,6 @@ async function buscarEquipoParaPrueba() {
   document.getElementById('infModelo').textContent = 'Modelo: ' + descModelo;
   document.getElementById('infOrigen').textContent = 'Origen: ' + (equipoCargadoActual.almacen_origen || equipoCargadoActual.origen || '-');
   
-  // Vista previa de imagen en pruebas
   const urlImgPrueba = obtenerUrlImagenModelo(descModelo);
   if (urlImgPrueba) {
     imgPreviewPrueba.src = urlImgPrueba;
