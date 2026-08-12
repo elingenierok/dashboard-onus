@@ -7,7 +7,6 @@
 <!-- Librerías Externas -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f8fafc; padding: 20px; color: #0f172a; }
@@ -35,8 +34,6 @@
   .placeholder-tactico { background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 30px; text-align: center; color: #64748b; font-size: 0.85rem; font-weight: 600; }
   .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.82rem; }
   .btn-outline { background: white; border: 1px solid #cbd5e1; color: #334155; }
-  .btn-pdf { background: #0284c7; color: white; border: none; font-weight: 700; margin-right: 8px; }
-  .btn-pdf:hover { background: #0369a1; }
   .file-tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
   .file-tag.ok { background: #dcfce7; color: #166534; }
   .file-tag.no { background: #fee2e2; color: #991b1b; }
@@ -109,7 +106,6 @@
       <span id="user-badge" style="background:#1e293b; padding:4px 10px; border-radius:20px; font-size:0.75rem; border:1px solid #334155; color:#cbd5e1;"></span>
     </div>
     <div>
-      <button class="btn btn-pdf" onclick="descargarReporteKPIPDF()">📄 Exportar KPI (PDF)</button>
       <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar Datos</button>
       <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
@@ -193,89 +189,90 @@
   </main>
 
   <!-- PESTAÑA: TENDENCIAS Y EVOLUCIÓN HISTÓRICA -->
-  <main id="tab-tendencias" class="tab-content req-estrategico">
-    <section class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2 class="card-title" style="margin:0;">📈 Evolución de Stock e Inteligencia de Consumo</h2>
-        <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
+<main id="tab-tendencias" class="tab-content req-estrategico">
+  <section class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h2 class="card-title" style="margin:0;">📈 Evolución de Stock e Inteligencia de Consumo</h2>
+      <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
+    </div>
+
+    <!-- Panel de Filtros: Separación de Vista Visual vs. Tramo de Cálculo -->
+    <div style="display: flex; gap: 20px; flex-wrap: wrap; background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
+      
+      <!-- 1. Almacenes -->
+      <div style="flex: 1; min-width: 200px;">
+        <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🏬 Almacenes:</strong>
+        <div id="check-almacenes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; font-size: 0.82rem; color: #f8fafc;">
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> OBE Principal</label>
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_CATRIEL" checked onchange="actualizarGraficoTendencias()"> OBE Catriel</label>
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="SPD_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> San Pedro</label>
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="WND_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Wanda</label>
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ITU_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Ituzaingó</label>
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ELDO_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Eldorado</label>
+        </div>
       </div>
 
-      <!-- Panel de Filtros: Separación de Vista Visual vs. Tramo de Cálculo -->
-      <div style="display: flex; gap: 20px; flex-wrap: wrap; background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
-        
-        <!-- 1. Almacenes -->
-        <div style="flex: 1; min-width: 200px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🏬 Almacenes:</strong>
-          <div id="check-almacenes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; font-size: 0.82rem; color: #f8fafc;">
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> OBE Principal</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_CATRIEL" checked onchange="actualizarGraficoTendencias()"> OBE Catriel</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="SPD_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> San Pedro</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="WND_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Wanda</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ITU_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Ituzaingó</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ELDO_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Eldorado</label>
-          </div>
+      <!-- 2. Grupos de ONUs -->
+      <div style="flex: 1; min-width: 180px;">
+        <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">📦 Grupos ONUs:</strong>
+        <div id="check-onus" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: #f8fafc;">
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="DUAL_BAND" checked onchange="actualizarGraficoTendencias()"> 🔵 Dual Band VIP (Wi-Fi 6)</label>
+          <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="CATV" checked onchange="actualizarGraficoTendencias()"> 🟠 CATV VIP (EG8147X6 / F6600R)</label>
         </div>
+      </div>
 
-        <!-- 2. Grupos de ONUs -->
-        <div style="flex: 1; min-width: 180px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">📦 Grupos ONUs:</strong>
-          <div id="check-onus" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: #f8fafc;">
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="DUAL_BAND" checked onchange="actualizarGraficoTendencias()"> 🔵 Dual Band VIP (Wi-Fi 6)</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="CATV" checked onchange="actualizarGraficoTendencias()"> 🟠 CATV VIP (EG8147X6 / F6600R)</label>
-          </div>
-        </div>
+      <!-- 3. Escala Visual (Zoom de Pantalla) -->
+      <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px;">
+        <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🔍 Zoom / Vista General:</strong>
+        <select id="zoom-vista" style="background:#1e293b; border:1px solid #334155; color:white; padding:6px; border-radius:6px; font-size:0.82rem; width:100%;" onchange="actualizarGraficoTendencias()">
+          <option value="ALL" selected>Todo el Historial</option>
+          <option value="30">Últimos 30 días</option>
+          <option value="90">Últimos 90 días</option>
+          <option value="180">Últimos 6 meses</option>
+          <option value="365">Último año</option>
+        </select>
+      </div>
 
-        <!-- 3. Escala Visual (Zoom de Pantalla) -->
-        <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🔍 Zoom / Vista General:</strong>
-          <select id="zoom-vista" style="background:#1e293b; border:1px solid #334155; color:white; padding:6px; border-radius:6px; font-size:0.82rem; width:100%;" onchange="actualizarGraficoTendencias()">
-            <option value="ALL" selected>Todo el Historial</option>
-            <option value="30">Últimos 30 días</option>
-            <option value="90">Últimos 90 días</option>
-            <option value="180">Últimos 6 meses</option>
-            <option value="365">Último año</option>
-          </select>
-        </div>
-
-        <!-- 4. Tramo Específico de Cálculo para Tendencia -->
-        <div style="flex: 1; min-width: 220px; border-left: 1px solid #334155; padding-left: 14px;">
-          <strong style="color: #fde047; display: block; margin-bottom: 10px; font-size: 0.88rem;">📐 Tramo para Calcular Tendencia:</strong>
-          <div style="display: flex; flex-direction: column; gap: 6px;">
-            <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
-              Desde: 
-              <input type="date" id="tendencia-desde" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
-            </label>
-            <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
-              Hasta: 
-              <input type="date" id="tendencia-hasta" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
-            </label>
-          </div>
-        </div>
-
-        <!-- 5. Switch Proyección -->
-        <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px; display:flex; flex-direction:column; justify-content:center;">
-          <strong style="color: #4ade80; display: block; margin-bottom: 8px; font-size: 0.88rem;">📉 Proyección:</strong>
-          <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px; font-size: 0.82rem;">
-            <input type="checkbox" id="check-proyeccion-global" onchange="actualizarGraficoTendencias()"> 
-            Activar Proyección en Gráfico
+      <!-- 4. Tramo Específico de Cálculo para Tendencia -->
+      <div style="flex: 1; min-width: 220px; border-left: 1px solid #334155; padding-left: 14px;">
+        <strong style="color: #fde047; display: block; margin-bottom: 10px; font-size: 0.88rem;">📐 Tramo para Calcular Tendencia:</strong>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
+            Desde: 
+            <input type="date" id="tendencia-desde" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
+          </label>
+          <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
+            Hasta: 
+            <input type="date" id="tendencia-hasta" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
           </label>
         </div>
-
       </div>
 
-      <!-- Gráfico Principal -->
-      <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
-        <canvas id="chartTendenciasLines"></canvas>
+      <!-- 5. Switch Proyección -->
+      <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px; display:flex; flex-direction:column; justify-content:center;">
+        <strong style="color: #4ade80; display: block; margin-bottom: 8px; font-size: 0.88rem;">📉 Proyección:</strong>
+        <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px; font-size: 0.82rem;">
+          <input type="checkbox" id="check-proyeccion-global" onchange="actualizarGraficoTendencias()"> 
+          Activar Proyección en Gráfico
+        </label>
       </div>
 
-      <!-- Panel de Estimaciones de Quiebre -->
-      <div id="panel-estimaciones" style="display: none; margin-top: 16px; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
-        <h3 style="color: #4ade80; font-size: 0.95rem; margin-bottom: 12px;">⏳ Estimación de Quiebre basada en el Tramo Seleccionado</h3>
-        <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
-      </div>
+    </div>
 
-    </section>
-  </main>
+    <!-- Gráfico Principal -->
+    <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+      <canvas id="chartTendenciasLines"></canvas>
+    </div>
+
+    <!-- Panel de Estimaciones de Quiebre -->
+    <div id="panel-estimaciones" style="display: none; margin-top: 16px; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+      <h3 style="color: #4ade80; font-size: 0.95rem; margin-bottom: 12px;">⏳ Estimación de Quiebre basada en el Tramo Seleccionado</h3>
+      <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
+    </div>
+
+  </section>
+</main>
+
 
   <main id="tab-flota" class="tab-content">
     <section class="card"><h2 class="card-title">🚚 Módulo de Gestión de Flota</h2><div class="placeholder-tactico">Próximamente... (Se creará en js/flota.js)</div></section>
@@ -296,6 +293,7 @@
         <span id="tagAdminLeadtime" class="file-tag ok">Consultando...</span>
       </div>
       
+      <!-- Contenedor dinámico de KPIs y Alertas rendered desde js/admin.js -->
       <div id="grid-admin-leadtime" class="grid-tactico"></div>
       
       <div style="margin-top: 16px;">
@@ -313,102 +311,6 @@
     if (event && event.currentTarget) event.currentTarget.classList.add('active');
     const target = document.getElementById(tabId);
     if (target) target.classList.add('active');
-  }
-
-  // FUNCIÓN DE EXPORTACIÓN A PDF MONOESPACIADO Y LIMPIO
-  function descargarReporteKPIPDF() {
-    const usuario = document.getElementById('user-badge')?.textContent || 'Operador';
-    const fechaHora = new Date().toLocaleDateString('es-AR') + ' ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-
-    const valDb = document.getElementById('val-db')?.textContent || '0';
-    const valCatv = document.getElementById('val-catv')?.textContent || '0';
-    const valTotal = document.getElementById('val-total')?.textContent || '0 un.';
-    const valCosto = document.getElementById('val-costo')?.textContent || '$0 USD';
-
-    const recCirc = document.getElementById('rec-val-circ')?.textContent || '0 un.';
-    const recDesc = document.getElementById('rec-val-desc')?.textContent || '0 un.';
-    const recTotal = document.getElementById('rec-val-total-un')?.textContent || '0 un.';
-    const recDinero = document.getElementById('rec-val-dinero')?.textContent || '$0 USD';
-
-    const pdfTemplate = `
-      <div style="font-family: 'Consolas', 'Courier New', monospace; padding: 24px; color: #000; background: #fff; width: 100%; box-sizing: border-box; line-height: 1.3;">
-        
-        <!-- ENCABEZADO MONOESPACIADO -->
-        <div style="border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end;">
-          <div>
-            <div style="font-size: 14pt; font-weight: bold; text-transform: uppercase;">[ INFORME RESUMEN KPI - LOGISTICA ISP ]</div>
-            <div style="font-size: 8pt; color: #333;">SISTEMA DE CONTROL DE SUMINISTROS Y LABORATORIO</div>
-          </div>
-          <div style="text-align: right; font-size: 8pt;">
-            FECHA: ${fechaHora}<br>
-            EMISOR: ${usuario.replace('👤', '').trim()}
-          </div>
-        </div>
-
-        <!-- SECCIÓN 1: STOCK -->
-        <div style="margin-bottom: 20px;">
-          <div style="font-size: 9.5pt; font-weight: bold; background: #eee; padding: 4px 6px; border: 1px solid #000; margin-bottom: 6px;">
-            1. ESTADO GENERAL DE STOCK OPERATIVO
-          </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt;">
-            <thead>
-              <tr style="background: #f0f0f0;">
-                <th style="border: 1px solid #000; padding: 5px; text-align: left;">CONCEPTO</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: right;">CANTIDAD / VALOR</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">ONUs Dual Band (Wi-Fi 6)</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${valDb}</td></tr>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">ONUs CATV (EG8147X6 / F6600R)</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${valCatv}</td></tr>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">Total Stock Operativo en Red</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${valTotal}</td></tr>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">Valorización Real Total (USD)</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${valCosto}</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- SECCIÓN 2: RECUPERO -->
-        <div style="margin-bottom: 20px;">
-          <div style="font-size: 9.5pt; font-weight: bold; background: #eee; padding: 4px 6px; border: 1px solid #000; margin-bottom: 6px;">
-            2. EFICIENCIA DE RECUPERO Y LABORATORIO
-          </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt;">
-            <thead>
-              <tr style="background: #f0f0f0;">
-                <th style="border: 1px solid #000; padding: 5px; text-align: left;">METRICA DE LABORATORIO</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: right;">VALOR REGISTRADO</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">Total Equipos Recibidos en Mesa</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${recTotal}</td></tr>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">Equipos VIP Recuperados (Circulación)</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${recCirc}</td></tr>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">Equipos Descartados (Fuera de Circulación)</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${recDesc}</td></tr>
-              <tr><td style="border: 1px solid #ccc; padding: 4px;">Capital Revalorizado Recuperado</td><td style="border: 1px solid #ccc; padding: 4px; text-align: right; font-weight: bold;">${recDinero}</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- PIE DE PAGINA LIMPIO -->
-        <div style="font-size: 7.5pt; color: #444; border-top: 1px dashed #000; padding-top: 6px; text-align: center; margin-top: 24px;">
-          === REGISTRO SISTÉMICO GENERADO AUTOMÁTICAMENTE - FIN DEL INFORME ===
-        </div>
-      </div>
-    `;
-
-    const contenedorTemp = document.createElement('div');
-    contenedorTemp.innerHTML = pdfTemplate;
-    document.body.appendChild(contenedorTemp);
-
-    const opciones = {
-      margin:       8,
-      filename:     `Informe_KPI_ISP_${new Date().toISOString().split('T')[0]}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, logging: false },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    html2pdf().set(opciones).from(contenedorTemp).save().then(() => {
-      document.body.removeChild(contenedorTemp);
-    });
   }
 </script>
 
