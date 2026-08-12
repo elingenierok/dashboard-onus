@@ -6,6 +6,14 @@ const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Memoria local para almacenar el catálogo descargado de Supabase
+let catalogoEquiposMemoria = [];
+
+let equipoCargadoActual = null;
+let veredictoFinalCalculado = 'CIRCULACIÓN';
+let usuarioOperadorNombre = '';
+let fechaInicioPruebaTemp = null;
+
 function normalizarTexto(txt) {
   return (txt || '')
     .normalize("NFD")
@@ -15,47 +23,53 @@ function normalizarTexto(txt) {
     .toUpperCase();
 }
 
-// MAPA DE IMÁGENES OFICIALES VINCULADAS (Incluye nuevos modelos)
-const MAPA_IMAGENES_MODELOS = {
-  "F6201B": "https://provetel.com.ar/wp-content/uploads/sites/18/2026/01/images-1.jpeg",
-  "F6600P": "https://www.zte.com.cn/content/dam/zte-site/res-www-zte-com-cn/mediares/zte/global/productimages/fm_pictures/ont/ZXHN%20F6600P-2.JPG",
-  "F670L": "https://provetel.com.ar/wp-content/uploads/sites/18/2023/06/Zte.jpg",
-  "EG8147X6": "https://www.sawerin.com.ar/wp-content/uploads/2025/09/overview-600x450.png",
-  "F6600R": "https://www.ycict.net/wp-content/uploads/2024/05/ZXHN-F6600R-ycict.jpg",
-  "HG8145V5": "https://www.sawerin.com.ar/wp-content/uploads/2025/09/overview-600x450.png",
-  "EG8145V5": "https://www.sawerin.com.ar/wp-content/uploads/2025/09/overview-600x450.png",
-  "WTXGV2": "https://www.ycict.net/wp-content/uploads/2024/05/ZXHN-F6600R-ycict.jpg"
-};
+// --- CARGA DINÁMICA DEL CATÁLOGO DE EQUIPOS DESDE SUPABASE ---
+async function cargarCatalogoEquipos() {
+  const selectModelo = document.getElementById('cg_modelo');
+  if (!selectModelo) return;
 
+  try {
+    const { data, error } = await supabaseClient
+      .from('catalogo_equipos')
+      .select('*')
+      .order('modelo', { ascending: true });
+
+    if (error) throw error;
+
+    catalogoEquiposMemoria = data || [];
+
+    selectModelo.innerHTML = '<option value="" disabled selected>-- Seleccionar Modelo --</option>';
+    catalogoEquiposMemoria.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.modelo;
+      opt.textContent = item.modelo + (!item.es_vip ? ' (OBSOLETO)' : '');
+      selectModelo.appendChild(opt);
+    });
+  } catch (err) {
+    console.error('Error al cargar catálogo de equipos:', err);
+    selectModelo.innerHTML = '<option value="" disabled selected>❌ Error al cargar modelos</option>';
+  }
+}
+
+// Búsqueda dinámica de imagen en catálogo de memoria
 function obtenerUrlImagenModelo(modelo) {
   const norm = normalizarTexto(modelo);
-  for (let key in MAPA_IMAGENES_MODELOS) {
-    if (norm.includes(key)) {
-      return MAPA_IMAGENES_MODELOS[key];
-    }
-  }
-  return '';
+  const encontrado = catalogoEquiposMemoria.find(item => {
+    const itemNorm = item.modelo_norm || normalizarTexto(item.modelo);
+    return norm.includes(itemNorm) || itemNorm.includes(norm);
+  });
+  return encontrado ? (encontrado.imagen_url || '') : '';
 }
 
-// LISTA STRICTA DE MODELOS VIP (Los que NO estén aquí pasan directo a DESCARTE)
-const LISTA_VIP_EXACTA = [
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
-  "ONU HUAWEI ECHOLIFE EG8147X6",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)"
-].map(normalizarTexto);
-
+// Búsqueda dinámica de bandera VIP en catálogo de memoria
 function esModeloVIP(modelo) {
-  const m = normalizarTexto(modelo);
-  return LISTA_VIP_EXACTA.some(vip => m.includes(vip) || vip.includes(m));
+  const norm = normalizarTexto(modelo);
+  const encontrado = catalogoEquiposMemoria.find(item => {
+    const itemNorm = item.modelo_norm || normalizarTexto(item.modelo);
+    return norm.includes(itemNorm) || itemNorm.includes(norm);
+  });
+  return encontrado ? Boolean(encontrado.es_vip) : false;
 }
-
-let equipoCargadoActual = null;
-let veredictoFinalCalculado = 'CIRCULACIÓN';
-let usuarioOperadorNombre = '';
-let fechaInicioPruebaTemp = null;
 
 // --- 1. LÓGICA DE LOGIN Y SESIÓN ---
 async function revisarSesionActiva() {
@@ -113,6 +127,9 @@ async function cargarPerfilUsuario(usuario) {
 
   document.getElementById('login-container').style.display = 'none';
   document.getElementById('app-container').style.display = 'flex';
+
+  // Descarga el catálogo maestro y llena el desplegable de Carga
+  await cargarCatalogoEquipos();
 }
 
 function switchOps(tabId, btn) {
@@ -163,7 +180,7 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
   const modelo = document.getElementById('cg_modelo').value;
   const detalleTecnico = document.getElementById('cg_tecnico').value.trim();
 
-  // Evaluación de categoría VIP / Obsoleto
+  // Evaluación dinámica leyendo el catálogo cargado de Supabase
   const esVIP = esModeloVIP(modelo);
   const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
   

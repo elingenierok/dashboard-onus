@@ -7,6 +7,10 @@ const SUPABASE_URL_REC = 'https://ovluxdezwvuonlwnymna.supabase.co';
 const SUPABASE_KEY_REC = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
 const supabaseRecupero = supabase.createClient(SUPABASE_URL_REC, SUPABASE_KEY_REC);
 
+let recuperoChartInstance = null;
+let totalPieChartInstance = null;
+let vipPieChartInstance = null;
+
 // Función auxiliar: Elimina tildes, espacios extra y convierte a mayúsculas
 function normalizar(txt) {
   return (txt || '')
@@ -17,38 +21,25 @@ function normalizar(txt) {
     .toUpperCase();
 }
 
-// 2. LISTA Y CLASIFICACIÓN DE EQUIPOS VIP
-const LISTA_VIP_EXACTA = [
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000",
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)(USADA)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI(USADA)",
-  "ONU HUAWEI ECHOLIFE EG8147X6",
-  "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)(USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV) (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV) (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)(USADO)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)"
-].map(normalizar);
+// 2. CONSULTA AL CATÁLOGO MAESTRO DE EQUIPOS (REEMPLAZA LA LISTA ESTÁTICA)
+function obtenerInfoCatalogo(descNorm, catalogo) {
+  const encontrado = catalogo.find(item => {
+    const itemNorm = item.modelo_norm || normalizar(item.modelo);
+    return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+  });
 
-function esVIP(modelo) {
-  const m = normalizar(modelo);
-  return LISTA_VIP_EXACTA.some(vip => m.includes(vip) || vip.includes(m));
+  if (encontrado) {
+    return {
+      esVIP: Boolean(encontrado.es_vip),
+      precioUsd: parseFloat(encontrado.precio_usd) || 0.0
+    };
+  }
+
+  // Si el equipo no figura en el catálogo, se trata como no VIP / Obsoleto por defecto
+  return { esVIP: false, precioUsd: 0.0 };
 }
 
-let recuperoChartInstance = null;
-
-// 3. CONSULTA DE DATOS DESDE SUPABASE (MESA ACTIVA: recupero_operativo)
+// 3. CONSULTA DE DATOS DESDE SUPABASE (MESA ACTIVA Y CATÁLOGO MAESTRO)
 async function cargarModuloRecupero() {
   const tag = document.getElementById('tagRecupero');
   if (tag) {
@@ -57,28 +48,23 @@ async function cargarModuloRecupero() {
   }
 
   try {
-    const [resRec, resPrecios] = await Promise.all([
+    const [resRec, resCatalogo] = await Promise.all([
       supabaseRecupero.from('recupero_operativo').select('*'),
-      supabaseRecupero.from('precios_catalogos').select('*')
+      supabaseRecupero.from('catalogo_equipos').select('*')
     ]);
 
     if (resRec.error) throw resRec.error;
+    if (resCatalogo.error) throw resCatalogo.error;
 
     const dataRec = resRec.data || [];
-    const preciosMap = new Map();
-
-    (resPrecios.data || []).forEach(p => {
-      const precio = parseFloat(p.precio_final) || parseFloat(p.precio_usd) || parseFloat(p.precio) || 0;
-      if (p.codigo) preciosMap.set(normalizar(p.codigo), precio);
-      if (p.descripcion) preciosMap.set(normalizar(p.descripcion), precio);
-    });
+    const catalogo = resCatalogo.data || [];
 
     if (tag) {
       tag.textContent = `Supabase: ✅ ${dataRec.length} Registros`;
       tag.className = 'file-tag ok';
     }
 
-    procesarYRenderizarRecupero(dataRec, preciosMap);
+    procesarYRenderizarRecupero(dataRec, catalogo);
   } catch (err) {
     console.error('Error al cargar módulo Recupero:', err);
     if (tag) {
@@ -88,18 +74,8 @@ async function cargarModuloRecupero() {
   }
 }
 
-// Búsqueda de precio unitario en catálogo
-function obtenerPrecioEstimado(descNorm, preciosMap) {
-  if (preciosMap.has(descNorm)) return preciosMap.get(descNorm);
-  
-  for (let [key, val] of preciosMap.entries()) {
-    if (descNorm.includes(key) || key.includes(descNorm)) return val;
-  }
-  return 0;
-}
-
 // 4. PROCESAMIENTO MATEMÁTICO DE MÉTRICAS Y VALORIZACIÓN
-function procesarYRenderizarRecupero(data, preciosMap) {
+function procesarYRenderizarRecupero(data, catalogo) {
   let totalRecibidos = 0;
   let directoDescarteObs = 0;
   let enCirculacionVIP = 0;
@@ -115,10 +91,12 @@ function procesarYRenderizarRecupero(data, preciosMap) {
     
     const condicion = normalizar(row.condicion || row.estado_final || row.estado || row.veredicto || '');
     
-    const esEquipoVIP = esVIP(descNorm);
-    totalRecibidos += cant;
+    // Lectura de bandera VIP y precio directamente del Catálogo Maestro
+    const infoCat = obtenerInfoCatalogo(descNorm, catalogo);
+    const esEquipoVIP = infoCat.esVIP;
+    const precioUnit = infoCat.precioUsd;
 
-    const precioUnit = obtenerPrecioEstimado(descNorm, preciosMap);
+    totalRecibidos += cant;
 
     if (!desgloseOperativo[descNorm]) {
       desgloseOperativo[descNorm] = { desc: desc, vip: esEquipoVIP, circ: 0, descVIP: 0, descObs: 0 };
@@ -203,10 +181,12 @@ function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
   }
 }
 
-// 6. RENDERIZADO: TARJETAS TÁCTICAS AGRUPADAS
+// 6. RENDERIZADO: TARJETAS TÁCTICAS AGRUPADAS CON GRÁFICOS TIPO DONA
 function renderRecuperoTactico(totalRecibidos, directoDescarte, enCirc, fueraCirc, pctReap, valPromedio, capitalTotal) {
   const container = document.getElementById('grid-recupero-cards');
   if (!container) return;
+
+  const vipRecibidos = totalRecibidos - directoDescarte;
 
   container.style.display = "flex";
   container.style.flexWrap = "wrap";
@@ -214,53 +194,126 @@ function renderRecuperoTactico(totalRecibidos, directoDescarte, enCirc, fueraCir
 
   container.innerHTML = `
     <!-- BLOQUE 1: DEL TOTAL RECIBIDO -->
-    <div style="flex: 1; min-width: 280px; background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 12px; padding: 14px;">
-      <div style="font-size: 0.8rem; font-weight: 800; color: #4d4f52; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+    <div style="flex: 1; min-width: 320px; background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column;">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
         📦 Del total recibido
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px;">
-        <div class="kpi-card-dark" style="background: #1e293b;">
-          <div class="title" style="color: #cbd5e1;">📥 EQUIPOS RECIBIDOS</div>
-          <div class="value" style="color: #f8fafc;">${totalRecibidos.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-          <div class="subtext" style="color: #94a3b8;">Ingreso Bruto Laboratorio</div>
+      <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between; flex: 1;">
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; flex: 1;">
+          <div class="kpi-card-dark" style="background: #1e293b; padding: 10px;">
+            <div class="title" style="color: #cbd5e1; font-size: 0.72rem;">📥 RECIBIDOS</div>
+            <div class="value" style="color: #f8fafc; font-size: 1.4rem;">${totalRecibidos.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
+            <div class="subtext" style="color: #94a3b8;">Bruto Ingreso</div>
+          </div>
+          <div class="kpi-card-dark" style="border-color:#eab308; background: #1e293b; padding: 10px;">
+            <div class="title" style="color:#fde047; font-size: 0.72rem;">📼 DESCARTE OBS.</div>
+            <div class="value" style="color:#fde047; font-size: 1.4rem;">${directoDescarte.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
+            <div class="subtext">Sin Prueba</div>
+          </div>
         </div>
-        <div class="kpi-card-dark" style="border-color:#eab308; background: #1e293b;">
-          <div class="title" style="color:#fde047;">📼 DIRECTO A DESCARTE</div>
-          <div class="value" style="color:#fde047;">${directoDescarte.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-          <div class="subtext">Tecnología Obsoleta (Sin Prueba)</div>
+        <div style="width: 85px; height: 85px; position: relative; flex-shrink: 0;" title="Proporción: Obsoleto vs VIP">
+          <canvas id="chartRecuperoTotalPie"></canvas>
         </div>
       </div>
     </div>
 
     <!-- BLOQUE 2: DE LOS EQUIPOS VIP -->
-    <div style="flex: 2; min-width: 320px; background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 12px; padding: 14px;">
-      <div style="font-size: 0.8rem; font-weight: 800; color: #2b7fa3; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+    <div style="flex: 2; min-width: 460px; background: rgba(30, 41, 59, 0.4); border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column;">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
         ⭐ De los equipos VIP
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
-        <div class="kpi-card-dark" style="border-color:#16a34a; background: #1e293b;">
-          <div class="title" style="color:#4ade80;">♻️ EN CIRCULACIÓN</div>
-          <div class="value" style="color:#4ade80;">${enCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-          <div class="subtext">Equipos VIP Recuperados</div>
+      <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between; flex: 1;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; flex: 1;">
+          <div class="kpi-card-dark" style="border-color:#16a34a; background: #1e293b; padding: 10px;">
+            <div class="title" style="color:#4ade80; font-size: 0.72rem;">♻️ EN CIRCULACIÓN</div>
+            <div class="value" style="color:#4ade80; font-size: 1.4rem;">${enCirc.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
+            <div class="subtext">VIP Recuperados</div>
+          </div>
+          <div class="kpi-card-dark" style="border-color:#dc2626; background: #1e293b; padding: 10px;">
+            <div class="title" style="color:#f87171; font-size: 0.72rem;">🗑️ FUERA CIRC.</div>
+            <div class="value" style="color:#f87171; font-size: 1.4rem;">${fueraCirc.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
+            <div class="subtext">Descarte VIP</div>
+          </div>
+          <div class="kpi-card-dark" style="border-color:#0284c7; background: #1e293b; padding: 10px;">
+            <div class="title" style="color:#38bdf8; font-size: 0.72rem;">📈 % REAPROV.</div>
+            <div class="value" style="color:#38bdf8; font-size: 1.4rem;">${pctReap}%</div>
+            <div class="subtext">Efectividad VIP</div>
+          </div>
+          <div class="kpi-card-dark" style="border-color:#16a34a; background: #1e293b; padding: 10px;">
+            <div class="title" style="color:#4ade80; font-size: 0.72rem;">💵 VALOR PROM/TOT</div>
+            <div class="value" style="color:#4ade80; font-size: 1.2rem;">$ ${valPromedio} <span style="font-size:0.75rem;">USD/un</span></div>
+            <div class="subtext">Total: <strong>$ ${Math.round(capitalTotal).toLocaleString('es-AR')} USD</strong></div>
+          </div>
         </div>
-        <div class="kpi-card-dark" style="border-color:#dc2626; background: #1e293b;">
-          <div class="title" style="color:#f87171;">🗑️ FUERA DE CIRCULACIÓN</div>
-          <div class="value" style="color:#f87171;">${fueraCirc.toLocaleString('es-AR')} <span style="font-size:1rem;">un.</span></div>
-          <div class="subtext">Descarte VIP Tras Prueba</div>
-        </div>
-        <div class="kpi-card-dark" style="border-color:#0284c7; background: #1e293b;">
-          <div class="title" style="color:#38bdf8;">📈 % REAPROVECHAMIENTO</div>
-          <div class="value" style="color:#38bdf8;">${pctReap}%</div>
-          <div class="subtext">Efectividad sobre VIP Probadas</div>
-        </div>
-        <div class="kpi-card-dark" style="border-color:#16a34a; background: #1e293b;">
-          <div class="title" style="color:#4ade80;">💵 VALOR PROMEDIO / TOTAL</div>
-          <div class="value" style="color:#4ade80;">$ ${valPromedio} <span style="font-size:0.9rem;">USD/un</span></div>
-          <div class="subtext">Total: <strong>$ ${Math.round(capitalTotal).toLocaleString('es-AR')} USD</strong></div>
+        <div style="width: 85px; height: 85px; position: relative; flex-shrink: 0;" title="Proporción VIP: En Circulación vs Descarte VIP">
+          <canvas id="chartRecuperoVipPie"></canvas>
         </div>
       </div>
     </div>
   `;
+
+  renderPieChartsTacticos(directoDescarte, vipRecibidos, enCirc, fueraCirc);
+}
+
+// RENDERIZADO DE LOS DOS GRÁFICOS COMPACTOS TIPO DONA
+function renderPieChartsTacticos(directoDescarte, vipRecibidos, enCirc, fueraCirc) {
+  const ctxTotal = document.getElementById('chartRecuperoTotalPie');
+  if (ctxTotal) {
+    if (totalPieChartInstance) totalPieChartInstance.destroy();
+    totalPieChartInstance = new Chart(ctxTotal, {
+      type: 'doughnut',
+      data: {
+        labels: ['Descarte Obsoleto', 'Equipos VIP'],
+        datasets: [{
+          data: [directoDescarte, Math.max(0, vipRecibidos)],
+          backgroundColor: ['#eab308', '#38bdf8'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${ctx.label}: ${ctx.raw} un.`
+            }
+          }
+        },
+        cutout: '65%'
+      }
+    });
+  }
+
+  const ctxVip = document.getElementById('chartRecuperoVipPie');
+  if (ctxVip) {
+    if (vipPieChartInstance) vipPieChartInstance.destroy();
+    vipPieChartInstance = new Chart(ctxVip, {
+      type: 'doughnut',
+      data: {
+        labels: ['En Circulación', 'Fuera de Circulación'],
+        datasets: [{
+          data: [enCirc, fueraCirc],
+          backgroundColor: ['#4ade80', '#f87171'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ` ${ctx.label}: ${ctx.raw} un.`
+            }
+          }
+        },
+        cutout: '65%'
+      }
+    });
+  }
 }
 
 // 7. RENDERIZADO: TABLA OPERATIVA POR MODELO
@@ -306,7 +359,7 @@ if (document.readyState === 'loading') {
   cargarModuloRecupero();
 }
 
-// 9. LÓGICA DE CIERRE SEMANAL Y GENERACIÓN DE INFORME (CON TRAZA DE TIEMPOS)
+// 9. LÓGICA DE CIERRE SEMANAL Y GENERACIÓN DE INFORME
 async function ejecutarCierreSemanal() {
   const confirmacion = confirm(
     "⚠️ ¿Estás seguro de cerrar la semana actual?\n\n" +
@@ -320,12 +373,18 @@ async function ejecutarCierreSemanal() {
   if (!confirmacion) return;
 
   try {
-    const { data: todos, error: errLectura } = await supabaseRecupero
-      .from('recupero_operativo')
-      .select('*');
+    const [resTodos, resCatalogo] = await Promise.all([
+      supabaseRecupero.from('recupero_operativo').select('*'),
+      supabaseRecupero.from('catalogo_equipos').select('*')
+    ]);
 
-    if (errLectura) throw errLectura;
-    if (!todos || todos.length === 0) {
+    if (resTodos.error) throw resTodos.error;
+    if (resCatalogo.error) throw resCatalogo.error;
+
+    const todos = resTodos.data || [];
+    const catalogo = resCatalogo.data || [];
+
+    if (todos.length === 0) {
       alert("⚠️ No hay equipos registrados en la mesa activa.");
       return;
     }
@@ -343,21 +402,15 @@ async function ejecutarCierreSemanal() {
     let enCirc = 0, descVip = 0, descObs = 0, valorUsd = 0;
     const desglose = {};
 
-    const resPrecios = await supabaseRecupero.from('precios_catalogos').select('*');
-    const preciosMap = new Map();
-    (resPrecios.data || []).forEach(p => {
-      const val = parseFloat(p.precio_final) || parseFloat(p.precio_usd) || parseFloat(p.precio) || 0;
-      if (p.codigo) preciosMap.set(normalizar(p.codigo), val);
-      if (p.descripcion) preciosMap.set(normalizar(p.descripcion), val);
-    });
-
     probados.forEach(row => {
       const cant = parseInt(row.cantidad || 1, 10) || 1;
       const desc = row.descripcion || row.modelo || 'DESCONOCIDO';
       const descNorm = normalizar(desc);
       const cond = normalizar(row.condicion || row.estado || '');
-      const esEquipoVIP = esVIP(descNorm);
-      const precio = obtenerPrecioEstimado(descNorm, preciosMap);
+
+      const infoCat = obtenerInfoCatalogo(descNorm, catalogo);
+      const esEquipoVIP = infoCat.esVIP;
+      const precio = infoCat.precioUsd;
 
       if (!desglose[descNorm]) {
         desglose[descNorm] = { desc: desc, vip: esEquipoVIP, circ: 0, descVIP: 0, descObs: 0 };

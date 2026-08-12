@@ -133,33 +133,10 @@
 
     <div class="form-group">
       <label>📦 Modelo de Equipo</label>
+      <!-- El desplegable se puebla dinámicamente desde catalogo_equipos mediante js/ops.js -->
       <select id="cg_modelo" required>
-        <option value="" disabled selected>-- Seleccionar Modelo --</option>
-        
-        <option value="ONU ZTE F6201B V9.3 WIFI6 AX3000">ONU ZTE F6201B V9.3 WIFI6 AX3000</option>
-        <!-- <option value="ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)">ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)</option> -->
-        
-        <option value="ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)">ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)</option>
-        <!-- <option value="ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)">ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)</option> -->
-        
-        <option value="ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)">ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)</option>
-        
-        <option value="ONU HUAWEI ECHOLIFE EG8147X6">ONU HUAWEI ECHOLIFE EG8147X6</option>
-        <!-- <option value="ONU HUAWEI ECHOLIFE EG8147X6(USADO)">ONU HUAWEI ECHOLIFE EG8147X6 (USADO)</option> -->
-        
-        <option value="ONU ZTE F6600R DUAL BAND WIFI (CATV)">ONU ZTE F6600R DUAL BAND WIFI (CATV)</option>
-        <!-- <option value="ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)">ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)</option> -->
-        
-        <option value="ONU HUAWEI 2.4 H5">ONU HUAWEI 2.4 H5 (OBSOLETA)</option>
-        <option value="2.4 Huawei A5">2.4 Huawei A5 (OBSOLETA)</option>
-        <option value="CHINA MOBILE">CHINA MOBILE (OBSOLETA)</option>
-        <option value="OTRO MODELO / OBSOLETO">OTRO MODELO / OBSOLETO</option>
-        <option value="ANTENA">ANTENA</option>
-        <option value="Router">Router</option>
-        <option value="HUAWEI HG8145V5 (Conector Verde)">HUAWEI HG8145V5 (Conector Verde)</option>
-        <option value="HUAWEI EG8145V5 (Conector Azul)">HUAWEI EG8145V5 (Conector Azul)</option>
-        <option value="WIRETECH WTXGV2 (Replica HG8145V5)">WIRETECH WTXGV2 (Replica HG8145V5)</option>
-</select>
+        <option value="" disabled selected>⏳ Cargando catálogo de equipos...</option>
+      </select>
       <!-- CONTENEDOR VISTA PREVIA CARGA -->
       <div id="boxPreviewCarga" class="img-preview-box">
         <img id="imgPreviewCarga" src="" alt="Vista previa de equipo">
