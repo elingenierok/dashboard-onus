@@ -1,5 +1,5 @@
 // ====================================================
-// MÓDULO AUTÓNOMO: TENDENCIAS, PAGINACIÓN E INTELIGENCIA PREDICTIVA
+// MÓDULO AUTÓNOMO: TENDENCIAS E INTELIGENCIA PREDICTIVA
 // ====================================================
 
 const SUPABASE_URL_TEN = 'https://ovluxdezwvuonlwnymna.supabase.co';
@@ -15,68 +15,78 @@ const COLORES_SUCURSAL = {
   'ELDO_ALM_PRINCIPAL':{ nombre: 'Eldorado',      color: '#a855f7' }
 };
 
-const DUAL_BAND_LIST = [
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000",
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)(USADA)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI(USADA)"
-];
-
-const CATV_LIST = [
-  "ONU HUAWEI ECHOLIFE EG8147X6",
-  "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)(USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV) (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV) (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)(USADO)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)"
-];
-
 let rawHistoricoData = [];
+let catalogoEquiposMemoria = [];
 let tendenciasChart = null;
 
-function calcularRegresionLineal(fechas, valores) {
-  if (fechas.length < 2) return null;
+function normalizar(txt) {
+  return (txt || '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
 
-  const fecha0 = new Date(fechas[0]).getTime() / 86400000;
-  const xData = fechas.map(f => (new Date(f).getTime() / 86400000) - fecha0);
-  const yData = valores;
-  const n = xData.length;
+function obtenerCategoriaCatalogo(descNorm) {
+  const encontrado = catalogoEquiposMemoria.find(item => {
+    const itemNorm = item.modelo_norm || normalizar(item.modelo);
+    return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+  });
+
+  return encontrado && encontrado.categoria ? encontrado.categoria.toUpperCase() : 'OBSOLETO';
+}
+
+// CÁLCULO DE REGRESIÓN IGNORANDO DÍAS NULOS (SÁBADOS/DOMINGOS SIN DATOS)
+function calcularRegresionLinealTramo(fechasCalculo, valoresCalculo, todasFechasVisibles) {
+  // 1. Filtrar únicamente los puntos que tienen datos reales (que no son null)
+  const puntosValidos = [];
+  for (let i = 0; i < fechasCalculo.length; i++) {
+    if (valoresCalculo[i] !== null && valoresCalculo[i] !== undefined) {
+      puntosValidos.push({
+        fecha: fechasCalculo[i],
+        valor: valoresCalculo[i]
+      });
+    }
+  }
+
+  if (puntosValidos.length < 2) return null;
+
+  // 2. Regresión lineal matemática $y = m*x + b$ sobre los puntos válidos
+  const fecha0Calculo = new Date(puntosValidos[0].fecha).getTime() / 86400000;
+  const xDataCalculo = puntosValidos.map(p => (new Date(p.fecha).getTime() / 86400000) - fecha0Calculo);
+  const yDataCalculo = puntosValidos.map(p => p.valor);
+  const n = xDataCalculo.length;
 
   let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
   for (let i = 0; i < n; i++) {
-    sumX += xData[i];
-    sumY += yData[i];
-    sumXY += xData[i] * yData[i];
-    sumXX += xData[i] * xData[i];
+    sumX += xDataCalculo[i];
+    sumY += yDataCalculo[i];
+    sumXY += xDataCalculo[i] * yDataCalculo[i];
+    sumXX += xDataCalculo[i] * xDataCalculo[i];
   }
 
   const divisor = (n * sumXX - sumX * sumX);
   if (divisor === 0) return null;
 
-  const m = (n * sumXY - sumX * sumY) / divisor;
+  const m = (n * sumXY - sumX * sumY) / divisor; // Pendiente (consumo por día)
   const b = (sumY - m * sumX) / n;
 
-  const trendData = xData.map(x => Math.max(0, m * x + b));
+  // 3. Proyectar línea sobre todas las fechas visibles
+  const trendDataVisible = todasFechasVisibles.map(f => {
+    const xVis = (new Date(f).getTime() / 86400000) - fecha0Calculo;
+    return Math.max(0, parseFloat((m * xVis + b).toFixed(2)));
+  });
 
+  // 4. Días a cero desde el último dato real medido
   let diasParaCero = null;
-  const lastX = xData[n - 1];
-  
   if (m < -0.01) {
+    const lastX = xDataCalculo[n - 1];
     const xZero = -b / m;
     diasParaCero = Math.max(0, Math.round(xZero - lastX));
   }
 
-  return { trendData, m, diasParaCero };
+  return { trendDataVisible, m, diasParaCero };
 }
 
 async function cargarModuloTendencias() {
@@ -87,38 +97,20 @@ async function cargarModuloTendencias() {
   }
 
   try {
-    let allData = [];
-    let from = 0;
-    const step = 999;
-    let hasMore = true;
+    const [resHist, resCat] = await Promise.all([
+      descargarHistorialCompleto(),
+      supabaseTendencias.from('catalogo_equipos').select('*')
+    ]);
 
-    while (hasMore) {
-      const { data, error } = await supabaseTendencias
-        .from('stock_historico')
-        .select('fecha_registro, almacen, descripcion, stock_total')
-        .ilike('descripcion', '%ONU%')
-        .order('fecha_registro', { ascending: true })
-        .range(from, from + step);
-
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        allData = allData.concat(data);
-        from += (step + 1);
-      }
-      
-      if (!data || data.length <= step) {
-        hasMore = false;
-      }
-    }
-
-    rawHistoricoData = allData;
+    rawHistoricoData = resHist || [];
+    catalogoEquiposMemoria = resCat.data || [];
 
     if (tag) {
       tag.textContent = `Supabase: ✅ ${rawHistoricoData.length} Registros Cargados`;
       tag.className = 'file-tag ok';
     }
 
+    inicializarLimitesFechas();
     actualizarGraficoTendencias();
   } catch (err) {
     console.error('Error al consultar Supabase:', err);
@@ -126,6 +118,50 @@ async function cargarModuloTendencias() {
       tag.textContent = 'Supabase: ❌ Error de lectura';
       tag.className = 'file-tag no';
     }
+  }
+}
+
+async function descargarHistorialCompleto() {
+  let allData = [];
+  let from = 0;
+  const step = 999;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabaseTendencias
+      .from('stock_historico')
+      .select('fecha_registro, almacen, descripcion, stock_total')
+      .ilike('descripcion', '%ONU%')
+      .order('fecha_registro', { ascending: true })
+      .range(from, from + step);
+
+    if (error) throw error;
+    
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      from += (step + 1);
+    }
+    
+    if (!data || data.length <= step) {
+      hasMore = false;
+    }
+  }
+  return allData;
+}
+
+function inicializarLimitesFechas() {
+  if (!rawHistoricoData.length) return;
+
+  const todasFechas = [...new Set(rawHistoricoData.map(d => d.fecha_registro))].sort();
+  const inputDesde = document.getElementById('tendencia-desde');
+  const inputHasta = document.getElementById('tendencia-hasta');
+
+  if (inputDesde && !inputDesde.value) {
+    const indiceInicio = Math.max(0, todasFechas.length - 30);
+    inputDesde.value = todasFechas[indiceInicio];
+  }
+  if (inputHasta && !inputHasta.value) {
+    inputHasta.value = todasFechas[todasFechas.length - 1];
   }
 }
 
@@ -137,15 +173,39 @@ function actualizarGraficoTendencias() {
   const checkProyeccion = document.getElementById('check-proyeccion-global');
   const activarProyecciones = checkProyeccion ? checkProyeccion.checked : false;
 
+  const zoomVistaVal = document.getElementById('zoom-vista')?.value || 'ALL';
+  const fechaDesdeVal = document.getElementById('tendencia-desde')?.value || '';
+  const fechaHastaVal = document.getElementById('tendencia-hasta')?.value || '';
+
   const incluirDB = onusTildadas.includes('DUAL_BAND');
   const incluirCATV = onusTildadas.includes('CATV');
 
-  const fechasUnicas = [...new Set(rawHistoricoData.map(d => d.fecha_registro))].sort();
+  const todasFechas = [...new Set(rawHistoricoData.map(d => d.fecha_registro))].sort();
 
+  // 1. Filtrar fechas a mostrar en pantalla (Zoom)
+  let fechasVisibles = [...todasFechas];
+  if (zoomVistaVal !== 'ALL') {
+    const diasZoom = parseInt(zoomVistaVal, 10);
+    const limiteFecha = new Date();
+    limiteFecha.setDate(limiteFecha.getDate() - diasZoom);
+    const strLimite = limiteFecha.toISOString().split('T')[0];
+    fechasVisibles = todasFechas.filter(f => f >= strLimite);
+  }
+
+  // 2. Fechas para el tramo de cálculo de tendencia
+  const fechasCalculo = todasFechas.filter(f => {
+    if (fechaDesdeVal && f < fechaDesdeVal) return false;
+    if (fechaHastaVal && f > fechaHastaVal) return false;
+    return true;
+  });
+
+  if (fechasVisibles.length === 0) return;
+
+  // 3. MAPEO INICIALIZADO EN `null` (Para no marcar '0' en días vacíos)
   const mapaSuma = {};
   almacenesTildados.forEach(alm => {
     mapaSuma[alm] = {};
-    fechasUnicas.forEach(f => mapaSuma[alm][f] = 0);
+    todasFechas.forEach(f => mapaSuma[alm][f] = null); // <-- Inicializado en null
   });
 
   rawHistoricoData.forEach(row => {
@@ -153,23 +213,20 @@ function actualizarGraficoTendencias() {
     if (alm === 'SPD_PRINCIPAL') alm = 'SPD_ALM_PRINCIPAL';
     if (alm === 'WND_PRINCIPAL' || alm === 'WND-PRINCIPAL') alm = 'WND_ALM_PRINCIPAL';
 
-    const fecha = row.fecha_registro;
-    const descNorm = (row.descripcion || '').replace(/\s+/g, ' ').trim().toUpperCase();
-
     if (!almacenesTildados.includes(alm)) return;
 
-    const esDB = DUAL_BAND_LIST.some(item => {
-      const itemNorm = item.replace(/\s+/g, ' ').trim().toUpperCase();
-      return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
-    });
+    const fecha = row.fecha_registro;
+    const descNorm = normalizar(row.descripcion);
+    const cat = obtenerCategoriaCatalogo(descNorm);
 
-    const esCATV = CATV_LIST.some(item => {
-      const itemNorm = item.replace(/\s+/g, ' ').trim().toUpperCase();
-      return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
-    });
+    const esDB = (cat === 'DUAL_BAND');
+    const esCATV = (cat === 'CATV');
 
     if ((esDB && incluirDB) || (esCATV && incluirCATV)) {
-      mapaSuma[alm][fecha] = (mapaSuma[alm][fecha] || 0) + (parseInt(row.stock_total, 10) || 0);
+      if (mapaSuma[alm][fecha] === null) {
+        mapaSuma[alm][fecha] = 0; // Si hay datos, convierte null en 0 para empezar a sumar
+      }
+      mapaSuma[alm][fecha] += (parseInt(row.stock_total, 10) || 0);
     }
   });
 
@@ -178,32 +235,35 @@ function actualizarGraficoTendencias() {
 
   almacenesTildados.forEach(alm => {
     const meta = COLORES_SUCURSAL[alm] || { nombre: alm, color: '#cbd5e1' };
-    const dataPuntos = fechasUnicas.map(f => mapaSuma[alm][f]);
+    const dataPuntosVisibles = fechasVisibles.map(f => mapaSuma[alm][f]);
 
     datasets.push({
       label: meta.nombre,
-      data: dataPuntos,
+      data: dataPuntosVisibles,
       borderColor: meta.color,
       backgroundColor: meta.color,
-      tension: 0.3,
+      tension: 0.2,
       borderWidth: 3,
-      pointRadius: 5,
-      pointHoverRadius: 8
+      pointRadius: 4,
+      pointHoverRadius: 7,
+      spanGaps: true // <-- SALTA LOS DÍAS NULOS UNIENDO LOS PUNTOS VALIDOS
     });
 
-    if (activarProyecciones) {
-      const regresion = calcularRegresionLineal(fechasUnicas, dataPuntos);
-      
+    if (activarProyecciones && fechasCalculo.length >= 2) {
+      const valoresCalculo = fechasCalculo.map(f => mapaSuma[alm][f]);
+      const regresion = calcularRegresionLinealTramo(fechasCalculo, valoresCalculo, fechasVisibles);
+
       if (regresion) {
         datasets.push({
           label: `Tendencia ${meta.nombre}`,
-          data: regresion.trendData,
+          data: regresion.trendDataVisible,
           borderColor: meta.color,
           backgroundColor: 'transparent',
           borderWidth: 2,
           borderDash: [6, 4],
           pointRadius: 0,
-          tension: 0
+          tension: 0,
+          spanGaps: true
         });
 
         let estadoHtml = '';
@@ -211,17 +271,17 @@ function actualizarGraficoTendencias() {
           estadoHtml = `<strong style="color: #4ade80;">📈 Stock Estable o en Alza</strong>`;
         } else {
           const dias = regresion.diasParaCero;
-          let colorDías = '#4ade80';
-          if (dias <= 15) colorDías = '#f87171';
-          else if (dias <= 30) colorDías = '#facc15';
+          let colorDias = '#4ade80';
+          if (dias <= 15) colorDias = '#f87171';
+          else if (dias <= 30) colorDias = '#facc15';
 
-          estadoHtml = `En <strong style="color: ${colorDías}; font-size: 1.2rem;">${dias} días</strong> aprox.`;
+          estadoHtml = `Quiebre en <strong style="color: ${colorDias}; font-size: 1.15rem;">${dias} días</strong> aprox.`;
         }
 
         htmlEstimaciones += `
-          <div style="background: #0f172a; border: 1px solid ${meta.color}; border-left: 4px solid ${meta.color}; padding: 12px; border-radius: 6px;">
-            <div style="color: #cbd5e1; font-size: 0.8rem; font-weight: bold; margin-bottom: 4px;">${meta.nombre}</div>
-            <div style="color: #f8fafc; font-size: 1rem;">${estadoHtml}</div>
+          <div style="background: #0f172a; border: 1px solid ${meta.color}; border-left: 4px solid ${meta.color}; padding: 10px 14px; border-radius: 6px;">
+            <div style="color: #cbd5e1; font-size: 0.78rem; font-weight: bold; margin-bottom: 2px;">${meta.nombre}</div>
+            <div style="color: #f8fafc; font-size: 0.9rem;">${estadoHtml}</div>
           </div>
         `;
       }
@@ -244,20 +304,20 @@ function actualizarGraficoTendencias() {
   const ctx = canvas.getContext('2d');
 
   if (tendenciasChart) {
-    tendenciasChart.data.labels = fechasUnicas;
+    tendenciasChart.data.labels = fechasVisibles;
     tendenciasChart.data.datasets = datasets;
     tendenciasChart.update();
   } else {
     tendenciasChart = new Chart(ctx, {
       type: 'line',
-      data: { labels: fechasUnicas, datasets: datasets },
+      data: { labels: fechasVisibles, datasets: datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: { 
             position: 'top', 
-            labels: { color: '#cbd5e1', font: { size: 12, weight: 'bold' } } 
+            labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' } } 
           },
           tooltip: {
             backgroundColor: '#0f172a',
@@ -265,11 +325,11 @@ function actualizarGraficoTendencias() {
             bodyColor: '#f8fafc',
             borderColor: '#334155',
             borderWidth: 1,
-            padding: 12
+            padding: 10
           }
         },
         scales: {
-          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
           y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
         }
       }
