@@ -158,12 +158,36 @@ document.getElementById('cg_modelo').addEventListener('change', (e) => {
   }
 });
 
-// CARGA DE EQUIPOS
+// --- 2. CARGA DE EQUIPOS (CON CONFIRMACIÓN DOBLE) ---
 document.getElementById('form-carga').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('statusCarga');
   const sn = document.getElementById('cg_serial').value.trim().toUpperCase();
+  const modelo = document.getElementById('cg_modelo').value;
+  const detalleTecnico = document.getElementById('cg_tecnico').value.trim();
 
+  // 1. Verificación básica en pantalla
+  if (!sn || !modelo) {
+    msg.textContent = '⚠️ Debe ingresar el Número de Serie y seleccionar un Modelo.';
+    msg.style.color = '#fde047';
+    return;
+  }
+
+  // 2. VENTANA EXTRA DE CONFIRMACIÓN AL OPERADOR
+  const mensajeConfirmacion = `⚠️ CONFIRMACIÓN DE INGRESO\n\n` +
+                              `¿Seguro que desea guardar este registro?\n\n` +
+                              `• Número de Serie (SN): ${sn}\n` +
+                              `• Modelo de Equipo: ${modelo}`;
+
+  const confirmado = window.confirm(mensajeConfirmacion);
+
+  if (!confirmado) {
+    msg.textContent = '⏹️ Carga cancelada por el operador.';
+    msg.style.color = '#cbd5e1';
+    return;
+  }
+
+  // 3. Verificación de duplicados en la mesa activa
   msg.textContent = '⏳ Verificando duplicados en la mesa activa...';
   msg.style.color = '#38bdf8';
 
@@ -180,9 +204,7 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
     return;
   }
 
-  const modelo = document.getElementById('cg_modelo').value;
-  const detalleTecnico = document.getElementById('cg_tecnico').value.trim();
-
+  // 4. Evaluación de Tecnología VIP / Obsoleta
   const esVIP = esModeloVIP(modelo);
   const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
   
@@ -200,6 +222,7 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
     condicion: condicionAsignada
   };
 
+  // 5. Registro definitivo en Supabase
   const { error } = await supabaseClient.from('recupero_operativo').insert([payload]);
 
   if (error) {
@@ -447,9 +470,8 @@ async function iniciarSnapshotSistema() {
 
     if (errStock) throw errStock;
 
-    // Conteo global por almacén y conteo fino por (almacen, modelo)
     const sumaPorAlmacen = {};
-    const sumaPorModelo = {}; // { 'OBE_ALM_PRINCIPAL': { 'ONU ZTE F6600R...': 8 } }
+    const sumaPorModelo = {};
 
     Object.keys(NOMBRES_ALMACEN_AUDITORIA).forEach(k => {
       sumaPorAlmacen[k] = 0;
@@ -473,7 +495,6 @@ async function iniciarSnapshotSistema() {
 
     const ahoraIso = new Date().toISOString();
 
-    // 1. Guardar resumen general por almacén
     const listaPayloadsActivo = Object.keys(NOMBRES_ALMACEN_AUDITORIA).map(key => {
       const stockSis = sumaPorAlmacen[key] || 0;
       return {
@@ -494,7 +515,6 @@ async function iniciarSnapshotSistema() {
 
     if (errUpsertActivo) throw errUpsertActivo;
 
-    // 2. Guardar desglose por modelo en auditoria_control_detalle
     const listaPayloadsDetalle = [];
     Object.keys(sumaPorModelo).forEach(key => {
       Object.keys(sumaPorModelo[key]).forEach(mod => {
@@ -536,7 +556,7 @@ async function iniciarSnapshotSistema() {
   }
 }
 
-// B. DESPLEGAR TABLA CIEGA DE MODELOS (VIPS PRIMERO, SIN VALORES DEL SISTEMA)
+// B. DESPLEGAR TABLA CIEGA DE MODELOS
 async function cargarTablaConteoFisico() {
   const selectSuc = document.getElementById('aud_sucursal');
   const contenedorTabla = document.getElementById('contenedorTablaConteo');
@@ -550,7 +570,6 @@ async function cargarTablaConteoFisico() {
   status.style.color = '#38bdf8';
 
   try {
-    // Ordenar catálogo: VIPs primero
     const listaCatalogoOrdenada = [...catalogoEquiposMemoria].sort((a, b) => {
       const vipA = Boolean(a.es_vip);
       const vipB = Boolean(b.es_vip);
@@ -612,7 +631,6 @@ async function guardarConteoFisicoReal() {
   try {
     const ahoraIso = new Date().toISOString();
 
-    // 1. Obtener los conteos del sistema congelados para este almacén
     const { data: detallesPrevios } = await supabaseClient
       .from('auditoria_control_detalle')
       .select('modelo, stock_sistema')
@@ -624,10 +642,9 @@ async function guardarConteoFisicoReal() {
     });
 
     let totalFisicoGeneral = 0;
-    let sumaAbsolutaDesviaciones = 0; // CALCULADOR ABSOLUTO
+    let sumaAbsolutaDesviaciones = 0;
     const listaUpsertDetalle = [];
 
-    // 2. Iterar sobre todos los casilleros completados por el auditor
     document.querySelectorAll('.input-conteo-modelo').forEach(input => {
       const modelo = input.getAttribute('data-modelo');
       const cantFisica = parseInt(input.value, 10) || 0;
@@ -636,7 +653,6 @@ async function guardarConteoFisicoReal() {
       const stockSis = mapStockSistemaModelo[modelo] || 0;
       const dif = cantFisica - stockSis;
 
-      // Suma absoluta: |-2| + |+2| = 4
       sumaAbsolutaDesviaciones += Math.abs(dif);
 
       listaUpsertDetalle.push({
@@ -650,7 +666,6 @@ async function guardarConteoFisicoReal() {
       });
     });
 
-    // 3. Upsert en auditoria_control_detalle (Desglose fino por modelo)
     if (listaUpsertDetalle.length > 0) {
       const { error: errDet } = await supabaseClient
         .from('auditoria_control_detalle')
@@ -659,7 +674,6 @@ async function guardarConteoFisicoReal() {
       if (errDet) throw errDet;
     }
 
-    // 4. Actualizar total general en auditoria_control_activo guardando Desviación Absoluta
     const { data: audActiva } = await supabaseClient
       .from('auditoria_control_activo')
       .select('stock_sistema')
@@ -667,14 +681,12 @@ async function guardarConteoFisicoReal() {
       .maybeSingle();
 
     const stockSistemaTotal = audActiva ? (audActiva.stock_sistema || 0) : 0;
-    
-    // Porcentaje basado en Desviación Absoluta
     const desvPctTotal = stockSistemaTotal > 0 ? parseFloat(((sumaAbsolutaDesviaciones / stockSistemaTotal) * 100).toFixed(2)) : 0.00;
 
     const payloadActivo = {
       almacen_nombre: nombreAlmacen,
       stock_fisico: totalFisicoGeneral,
-      diferencia: sumaAbsolutaDesviaciones, // <--- AHORA GUARDA LA DESVIACIÓN ABSOLUTA TOTAL
+      diferencia: sumaAbsolutaDesviaciones,
       desviacion_pct: desvPctTotal,
       fecha_inspeccion: ahoraIso,
       auditor_nombre: usuarioOperadorNombre
