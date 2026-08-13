@@ -21,7 +21,7 @@ const SUCURSALES_CORTAS = ['OBE PRINC', 'OBE CATR', 'SPD PRINC', 'WND PRINC', 'I
 
 const ALMACEN_DEV = 'OBE_ALM_DEVOLUCIONES';
 const ALMACEN_DESC = 'OBE_ALM_DESCARTE';
-const ALMACEN_DESC_VIP = 'OBE_ALM_DESCARTE_VIP'; // Nuevo almacén futuro
+const ALMACEN_DESC_VIP = 'OBE_ALM_DESCARTE_VIP';
 
 const LISTA_AUDITORIA = [
   { key: 'OBE_ALM_PRINCIPAL', nombre: 'OBE Principal' },
@@ -38,7 +38,7 @@ function normalizar(str) {
   return (str || '').replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-// 2. LISTAS ESTRATÉGICAS DEFINITIVAS (EQUIPOS VIP INCLUYENDO VARIANTES DE ESPACIADO)
+// 2. LISTAS ESTRATÉGICAS DEFINITIVAS (EQUIPOS VIP)
 const GRUPO_DUAL_BAND = [
   "ONU ZTE F6201B V9.3 WIFI6 AX3000",
   "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
@@ -70,7 +70,6 @@ let mapaPrecios = new Map();
 let listaPreciosTabla = [];
 let kpiChart = null;
 
-// FUNCIÓN DE CONMUTACIÓN DE FILAS DESPLEGABLES
 function toggleGrupoStock(claseGrupo) {
   const filas = document.querySelectorAll(`.${claseGrupo}`);
   const flecha = document.getElementById(`arrow-${claseGrupo}`);
@@ -363,39 +362,88 @@ function renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, v
   `;
 }
 
-// RENDER: TABLA AUDITORÍA
+// RENDER: TABLA AUDITORÍA CONECTADA A SUPABASE
 async function renderAuditoriaTabla() {
-  let html = `<table class="tabla-auditoria">
-    <thead>
-      <tr>
-        <th>Almacén / Depósito</th>
-        <th style="text-align:center;">Stock Sistema (ONUs)</th>
-        <th style="text-align:center;">Stock Físico Real</th>
-        <th style="text-align:center;">Detalle de Desviación</th>
-        <th style="text-align:center;">Desv. Absoluta (%)</th>
-        <th style="text-align:center;">Última Inspección</th>
-      </tr>
-    </thead>
-    <tbody>`;
+  const wrapper = document.getElementById('tablaAuditoriaWrapper');
+  if (!wrapper) return;
 
-  LISTA_AUDITORIA.forEach(item => {
-    const stockSistemaTotal = stockData.reduce((acc, d) => {
-      const dNorm = normalizar(d.descripcion);
-      return (d.almacen === item.key && dNorm.includes('ONU')) ? acc + d.stock : acc;
-    }, 0);
+  try {
+    const { data: audData } = await supabaseClient
+      .from('auditoria_control_activo')
+      .select('*');
 
-    html += `<tr>
-      <td style="font-weight:600; color:#334155;">${item.nombre}</td>
-      <td style="text-align:center; font-weight:700;">${stockSistemaTotal.toLocaleString('es-AR')} un.</td>
-      <td style="text-align:center; color:#0284c7; font-weight:700;">${stockSistemaTotal.toLocaleString('es-AR')} un.</td>
-      <td style="text-align:center;"><span class="tag-sin-desviacion">🟢 Exacto (0)</span></td>
-      <td style="text-align:center; font-weight:700;">0.0%</td>
-      <td style="text-align:center;"><span style="color:#94a3b8; font-style:italic;">Al día</span></td>
-    </tr>`;
-  });
+    const mapAuditoria = new Map();
+    if (audData) {
+      audData.forEach(item => mapAuditoria.set(item.almacen_key, item));
+    }
 
-  html += `</tbody></table>`;
-  document.getElementById('tablaAuditoriaWrapper').innerHTML = html;
+    let html = `<table class="tabla-auditoria">
+      <thead>
+        <tr>
+          <th>Almacén / Depósito</th>
+          <th style="text-align:center;">Stock Sistema (ONUs)</th>
+          <th style="text-align:center;">Stock Físico Real</th>
+          <th style="text-align:center;">Detalle de Desviación</th>
+          <th style="text-align:center;">Desv. Absoluta (%)</th>
+          <th style="text-align:center;">Última Inspección</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    LISTA_AUDITORIA.forEach(item => {
+      const stockSistemaCalculado = stockData.reduce((acc, d) => {
+        const dNorm = normalizar(d.descripcion);
+        return (d.almacen === item.key && dNorm.includes('ONU')) ? acc + d.stock : acc;
+      }, 0);
+
+      const audInfo = mapAuditoria.get(item.key);
+
+      let stockSistema = stockSistemaCalculado;
+      let stockFisico = stockSistemaCalculado;
+      let tagDesviacion = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
+      let pctDesv = '0.0%';
+      let fechaInspStr = '<span style="color:#94a3b8; font-style:italic;">Al día</span>';
+
+      if (audInfo && audInfo.fecha_inspeccion) {
+        stockSistema = audInfo.stock_sistema;
+        stockFisico = audInfo.stock_fisico;
+        const dif = audInfo.diferencia;
+        pctDesv = `${parseFloat(audInfo.desviacion_pct || 0).toFixed(1)}%`;
+
+        if (dif === 0) {
+          tagDesviacion = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
+        } else if (dif < 0) {
+          tagDesviacion = `<span style="color:#ef4444; font-weight:700; background:#fee2e2; padding:2px 8px; border-radius:4px;">🔴 Faltan ${Math.abs(dif)} un.</span>`;
+        } else {
+          tagDesviacion = `<span style="color:#0284c7; font-weight:700; background:#e0f2fe; padding:2px 8px; border-radius:4px;">🔵 Sobran ${dif} un.</span>`;
+        }
+
+        const f = new Date(audInfo.fecha_inspeccion);
+        fechaInspStr = `<span class="tag-fecha-ok">${f.toLocaleDateString('es-AR')} ${f.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'})}</span>`;
+      } else if (audInfo && audInfo.fecha_snapshot) {
+        stockSistema = audInfo.stock_sistema;
+        stockFisico = 0;
+        tagDesviacion = '<span style="color:#b45309; font-weight:700; background:#fef3c7; padding:2px 8px; border-radius:4px;">⏳ Pendiente de Conteo</span>';
+        pctDesv = '100.0%';
+        fechaInspStr = '<span class="tag-fecha-warn">Sin Inspeccionar</span>';
+      }
+
+      html += `<tr>
+        <td style="font-weight:600; color:#334155;">${item.nombre}</td>
+        <td style="text-align:center; font-weight:700;">${stockSistema.toLocaleString('es-AR')} un.</td>
+        <td style="text-align:center; color:#0284c7; font-weight:700;">${stockFisico.toLocaleString('es-AR')} un.</td>
+        <td style="text-align:center;">${tagDesviacion}</td>
+        <td style="text-align:center; font-weight:700;">${pctDesv}</td>
+        <td style="text-align:center;">${fechaInspStr}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    wrapper.innerHTML = html;
+
+  } catch (err) {
+    console.error('Error al renderizar auditoría:', err);
+  }
 }
 
 // RENDER: TABLA OPERATIVA CON SECCIONES DESPLEGABLES
@@ -433,7 +481,6 @@ function renderStockOperativo(arbol) {
   });
   html += `</tr></thead><tbody>`;
 
-  // 1. SECCIÓN CATV VIP (DESPLEGABLE)
   if (catvModels.size > 0) {
     html += `<tr onclick="toggleGrupoStock('catv-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
       <td style="background:#ffedd5; color:#c2410c; font-weight:800; padding:8px 10px; border:1px solid #fed7aa;">
@@ -458,7 +505,6 @@ function renderStockOperativo(arbol) {
     });
   }
 
-  // 2. SECCIÓN DUAL BAND VIP (DESPLEGABLE)
   if (dbModels.size > 0) {
     html += `<tr onclick="toggleGrupoStock('db-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
       <td style="background:#e0f2fe; color:#0369a1; font-weight:800; padding:8px 10px; border:1px solid #bae6fd;">
@@ -483,7 +529,6 @@ function renderStockOperativo(arbol) {
     });
   }
 
-  // 3. SECCIÓN OTRAS ONUs / LEGACY (DESPLEGABLE)
   if (otrasModels.size > 0) {
     html += `<tr onclick="toggleGrupoStock('otras-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
       <td style="background:#f1f5f9; color:#475569; font-weight:800; padding:8px 10px; border:1px solid #cbd5e1;">
@@ -531,6 +576,93 @@ function renderTablaPrecios() {
   
   html += '</table>';
   document.getElementById('tablaPreciosWrapper').innerHTML = html;
+}
+
+// ====================================================
+// NAVEGACIÓN Y CONTROL DETALLADO MODELO POR MODELO
+// ====================================================
+
+let memoriaControlDetalle = [];
+
+async function cargarModuloControlAuditoria() {
+  const wrapper = document.getElementById('tablaControlDetalleWrapper');
+  if (!wrapper) return;
+
+  wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;">⏳ Cargando desglose fino de auditoría desde Supabase...</div>';
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('auditoria_control_detalle')
+      .select('*')
+      .order('almacen_key', { ascending: true });
+
+    if (error) throw error;
+
+    memoriaControlDetalle = data || [];
+    filtrarTablaControlAuditoria();
+
+  } catch (err) {
+    console.error('Error al cargar control de auditoría:', err);
+    wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#ef4444;">❌ Error al cargar datos de control.</div>';
+  }
+}
+
+function filtrarTablaControlAuditoria() {
+  const wrapper = document.getElementById('tablaControlDetalleWrapper');
+  const filtroAlm = document.getElementById('filtro-control-almacen')?.value || 'TODOS';
+  const soloDiferencias = document.getElementById('check-solo-diferencias')?.checked || false;
+
+  let filtrados = memoriaControlDetalle.filter(item => {
+    const pasaAlm = (filtroAlm === 'TODOS') || (item.almacen_key === filtroAlm);
+    const pasaDif = soloDiferencias ? (item.diferencia !== 0) : true;
+    return pasaAlm && pasaDif;
+  });
+
+  if (filtrados.length === 0) {
+    wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;">No hay registros de auditoría que coincidan con los filtros seleccionados.</div>';
+    return;
+  }
+
+  let html = `<table class="tabla-auditoria" style="width:100%;">
+    <thead>
+      <tr>
+        <th style="text-align:left;">Almacén</th>
+        <th style="text-align:left;">Modelo de ONU</th>
+        <th style="text-align:center;">Sistema</th>
+        <th style="text-align:center;">Físico Real</th>
+        <th style="text-align:center;">Diferencia Exacta</th>
+        <th style="text-align:center;">Última Inspección</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  filtrados.forEach(row => {
+    const almNombre = LISTA_AUDITORIA.find(a => a.key === row.almacen_key)?.nombre || row.almacen_key;
+    const dif = row.diferencia || 0;
+
+    let tagDif = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
+    if (dif < 0) {
+      tagDif = `<span style="color:#ef4444; font-weight:700; background:#fee2e2; padding:2px 8px; border-radius:4px;">🔴 Faltan ${Math.abs(dif)} un.</span>`;
+    } else if (dif > 0) {
+      tagDif = `<span style="color:#0284c7; font-weight:700; background:#e0f2fe; padding:2px 8px; border-radius:4px;">🔵 Sobran ${dif} un.</span>`;
+    }
+
+    const fechaStr = row.fecha_inspeccion 
+      ? new Date(row.fecha_inspeccion).toLocaleDateString('es-AR') + ' ' + new Date(row.fecha_inspeccion).toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'})
+      : '<span style="color:#94a3b8; font-style:italic;">Sin datos</span>';
+
+    html += `<tr>
+      <td style="font-weight:600; color:#334155;">${almNombre}</td>
+      <td style="font-weight:700; color:#0f172a;">${row.modelo}</td>
+      <td style="text-align:center; font-weight:600;">${row.stock_sistema} un.</td>
+      <td style="text-align:center; font-weight:700; color:#0284c7;">${row.stock_fisico} un.</td>
+      <td style="text-align:center;">${tagDif}</td>
+      <td style="text-align:center; font-size:0.78rem;">${fechaStr}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table>`;
+  wrapper.innerHTML = html;
 }
 
 // INICIALIZACIÓN

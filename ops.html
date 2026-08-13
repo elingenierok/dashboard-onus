@@ -48,18 +48,15 @@
   .btn-print:hover { background: #047857; }
   .status-msg { text-align: center; font-size: 0.82rem; font-weight: 600; line-height: 1.3; }
 
-  /* VISTA PREVIA DE IMAGEN DE EQUIPO */
   .img-preview-box { display: none; align-items: center; justify-content: center; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 8px; margin-top: 6px; }
   .img-preview-box img { max-height: 120px; max-width: 100%; object-fit: contain; border-radius: 4px; }
 
-  /* SISTEMA DE LOGIN */
   #login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; width: 100%; max-width: 380px; }
   .login-box { background: #1e293b; padding: 30px; border-radius: 12px; width: 100%; border: 1px solid #334155; display: flex; flex-direction: column; gap: 16px; }
   .login-box h2 { text-align: center; color: #38bdf8; font-weight: 800; }
   .btn-login { background: #0284c7; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
   .btn-logout { background: transparent; color: #f87171; border: 1px solid #f87171; padding: 4px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; }
 
-  /* ESTILOS DE IMPRESIÓN ETIQUETA BROTHER */
   #etiqueta-impresion { display: none; }
 
   @media print {
@@ -133,11 +130,9 @@
 
     <div class="form-group">
       <label>📦 Modelo de Equipo</label>
-      <!-- El desplegable se puebla dinámicamente desde catalogo_equipos mediante js/ops.js -->
       <select id="cg_modelo" required>
         <option value="" disabled selected>⏳ Cargando catálogo de equipos...</option>
       </select>
-      <!-- CONTENEDOR VISTA PREVIA CARGA -->
       <div id="boxPreviewCarga" class="img-preview-box">
         <img id="imgPreviewCarga" src="" alt="Vista previa de equipo">
       </div>
@@ -174,7 +169,6 @@
     <div id="infoEquipoEnc" class="info-equipo">
       <strong id="infModelo">Modelo: -</strong><br>
       <span id="infOrigen">Origen: -</span>
-      <!-- CONTENEDOR VISTA PREVIA PRUEBAS -->
       <div id="boxPreviewPrueba" class="img-preview-box" style="margin-top:10px;">
         <img id="imgPreviewPrueba" src="" alt="Vista previa de equipo en prueba">
       </div>
@@ -213,51 +207,76 @@
       <button type="submit" id="btnGuardarPrueba" class="btn-submit">💾 Guardar Resultado de Prueba</button>
     </div>
 
-    <!-- BOTÓN DE IMPRESIÓN DIRECTA -->
     <button type="button" id="btnImprimir" class="btn-print" onclick="imprimirEtiquetaPrueba()">🖨️ Imprimir Etiqueta Brother (62x29mm)</button>
-    
     <div id="statusPrueba" class="status-msg"></div>
   </form>
 
-  <!-- 3. AUDITORÍA DE STOCK -->
-  <form id="form-auditoria" class="card-form">
+  <!-- 3. AUDITORÍA DE STOCK Y CONTEO FÍSICO CIEGO -->
+  <div id="form-auditoria" class="card-form">
+    
+    <!-- PASO 1: SNAPSHOT DEL SISTEMA -->
+    <div style="background:#0f172a; border:1px solid #0284c7; padding:12px; border-radius:8px; display:flex; flex-direction:column; gap:8px;">
+      <strong style="color:#38bdf8; font-size:0.85rem;">📸 Paso 1: Congelar Foto del Sistema</strong>
+      <p style="font-size:0.75rem; color:#94a3b8; line-height:1.3;">
+        Inicia la auditoría congelando el stock registrado en el sistema para todas las sucursales.
+      </p>
+      <button type="button" id="btnSnapshot" class="btn-submit" style="background:#0284c7; font-size:0.85rem; padding:8px;" onclick="iniciarSnapshotSistema()">
+        📸 Iniciar Control de Stock
+      </button>
+      <div id="statusSnapshot" class="status-msg" style="font-size:0.78rem;"></div>
+    </div>
+
+    <hr style="border:0; border-top:1px solid #334155; margin:2px 0;">
+
+    <strong style="color:#f8fafc; font-size:0.88rem;">📝 Paso 2: Conteo Físico Real en Estantería</strong>
+
+    <!-- PASO 2: DESPLEGABLE AGRUPADO POR SUCURSAL -->
     <div class="form-group">
       <label>🏬 Sucursal / Depósito a Auditar</label>
-      <select id="aud_sucursal" required>
-        <option value="OBE_ALM_PRINCIPAL">OBE Principal</option>
-        <option value="OBE_ALM_CATRIEL">OBE Catriel (Compras)</option>
-        <option value="OBE_ALM_DEVOLUCIONES">OBE Devoluciones (Triage)</option>
-        <option value="OBE_ALM_DESCARTE">OBE Descarte (Inmovilizado)</option>
-        <option value="SPD_ALM_PRINCIPAL">San Pedro Principal</option>
-        <option value="WND_ALM_PRINCIPAL">Wanda Principal</option>
-        <option value="ITU_ALM_PRINCIPAL">Ituzaingó Principal</option>
-        <option value="ELDO_ALM_PRINCIPAL">Eldorado Principal</option>
+      <select id="aud_sucursal" onchange="cargarTablaConteoFisico()" required>
+        <option value="" disabled selected>-- Seleccionar Almacén --</option>
+        <optgroup label="📍 OBERÁ">
+          <option value="OBE_ALM_PRINCIPAL">OBE Principal</option>
+          <option value="OBE_ALM_CATRIEL">OBE Catriel (Compras)</option>
+          <option value="OBE_ALM_DEVOLUCIONES">OBE Devoluciones (Triage)</option>
+          <option value="OBE_ALM_DESCARTE">OBE Descarte (Inmovilizado)</option>
+        </optgroup>
+        <optgroup label="📍 SAN PEDRO">
+          <option value="SPD_ALM_PRINCIPAL">San Pedro Principal</option>
+        </optgroup>
+        <optgroup label="📍 WANDA">
+          <option value="WND_ALM_PRINCIPAL">Wanda Principal</option>
+        </optgroup>
+        <optgroup label="📍 ITUZAINGÓ">
+          <option value="ITU_ALM_PRINCIPAL">Ituzaingó Principal</option>
+        </optgroup>
+        <optgroup label="📍 ELDORADO">
+          <option value="ELDO_ALM_PRINCIPAL">Eldorado Principal</option>
+        </optgroup>
       </select>
     </div>
 
-    <div class="form-group">
-      <label>📦 Stock Físico Contado (Real)</label>
-      <input type="number" id="aud_fisico" placeholder="Cantidad física en estantería..." required min="0">
+    <!-- TABLA RELLENABLE DE MODELOS (CIEGA: SIN NÚMEROS DEL SISTEMA) -->
+    <div id="contenedorTablaConteo" style="display:none; flex-direction:column; gap:10px;">
+      <div style="max-height: 320px; overflow-y: auto; border: 1px solid #334155; border-radius: 8px;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+          <thead>
+            <tr style="background:#0f172a; color:#38bdf8; text-align:left;">
+              <th style="padding:8px; border-bottom:1px solid #334155;">Modelo de Equipo</th>
+              <th style="padding:8px; border-bottom:1px solid #334155; text-align:right; width:110px;">Cantidad Contada</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyConteoModelos"></tbody>
+        </table>
+      </div>
+
+      <button type="button" id="btnGuardarAuditoria" class="btn-submit" style="background:#166534; font-size:0.9rem;" onclick="guardarConteoFisicoReal()">
+        💾 Guardar Conteo Físico Real
+      </button>
     </div>
 
-    <div class="form-group">
-      <label>💻 Stock que figura en Sistema</label>
-      <input type="number" id="aud_sistema" placeholder="Cantidad según sistema..." required min="0">
-    </div>
-
-    <div class="form-group">
-      <label>👤 Nombre del Auditor (Operador Sesión)</label>
-      <input type="text" id="aud_nombre" readonly required>
-    </div>
-
-    <div class="form-group">
-      <label>📝 Observación / Motivo de Desviación</label>
-      <input type="text" id="aud_obs" placeholder="Ej: Faltan 2 ONUs enviadas sin remito">
-    </div>
-
-    <button type="submit" class="btn-submit">💾 Registrar Auditoría</button>
     <div id="statusAuditoria" class="status-msg"></div>
-  </form>
+  </div>
 </div>
 
 <!-- PLANTILLA OCULTA DE ETIQUETA IMPRESA -->
@@ -274,7 +293,6 @@
   </div>
 </div>
 
-<!-- Carga del Módulo JavaScript Externo -->
 <script src="js/ops.js"></script>
 </body>
 </html>
