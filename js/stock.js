@@ -98,16 +98,19 @@ async function cargarStockModulo() {
   }
 
   try {
+    // 1. Pedimos también el created_at para la hora exacta
     const { data: ult, error: errUlt } = await supabaseClient
       .from('registro_stock')
-      .select('fecha_registro')
+      .select('fecha_registro, created_at')
       .order('fecha_registro', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1);
 
     if (errUlt) throw errUlt;
     if (!ult || !ult.length) throw new Error('Sin datos de stock');
 
     const ultimaFecha = ult[0].fecha_registro;
+    const marcaTiempo = ult[0].created_at; // Ejemplo: "2026-08-14T13:45:31.955Z"
 
     const [resStock, resPrecios] = await Promise.all([
       supabaseClient.from('registro_stock').select('codigo, descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha),
@@ -138,7 +141,12 @@ async function cargarStockModulo() {
     });
 
     if (tagCSV) {
-      tagCSV.textContent = `Supabase: ✅ ${ultimaFecha}`;
+      // 2. Formateamos la hora en formato local
+      const fechaObj = new Date(marcaTiempo);
+      const diaFormat = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const horaFormat = fechaObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      
+      tagCSV.textContent = `Supabase: ✅ ${diaFormat} ${horaFormat} hs`;
       tagCSV.className = 'file-tag ok';
     }
 

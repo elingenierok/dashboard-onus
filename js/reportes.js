@@ -50,8 +50,7 @@ async function descargarReporteKPIPDF() {
       }
     });
 
-    // 2. CONSULTA PURA Y DIRECTA A SUPABASE (IGUAL A JS/STOCK.JS)
-    // A. Buscar última fecha en registro_stock
+    // 2. CONSULTA PURA Y DIRECTA A SUPABASE (DEVOLUCIONES + CATÁLOGO)
     const { data: ultData } = await supabaseReportes
       .from('registro_stock')
       .select('fecha_registro')
@@ -64,7 +63,6 @@ async function descargarReporteKPIPDF() {
     if (ultData && ultData.length > 0) {
       const ultimaFecha = ultData[0].fecha_registro;
 
-      // B. Consultar el stock real de OBE_ALM_DEVOLUCIONES para esa fecha + catalogo
       const [resDev, resCat] = await Promise.all([
         supabaseReportes
           .from('registro_stock')
@@ -80,57 +78,74 @@ async function descargarReporteKPIPDF() {
       dataCatalogo = resCat.data || [];
     }
 
-    // C. Agrupar por modelo exactamente igual que stock.js
-    const itemsDevMap = {};
+    // 3. AGRUPACIÓN INTELIGENTE USANDO LA COLUMNA "CATEGORÍA" DE SUPABASE
+    let cantDualBand = 0;
+    let cantCatv = 0;
+    let cantOtros = 0;
+
     dataStockDev.forEach(row => {
-      const desc = (row.descripcion || '').trim();
-      const descNorm = normalizarTextoRep(desc);
+      const descNorm = normalizarTextoRep(row.descripcion);
       const stock = parseInt(row.stock_total, 10) || 0;
 
-      if (descNorm.includes('ONU') && stock > 0) {
-        itemsDevMap[desc] = (itemsDevMap[desc] || 0) + stock;
+      if (!descNorm.includes('ONU') || stock <= 0) return;
+
+      // MATCH POR INCLUSIÓN: Compara si el catálogo está incluido en el stock (Cubre los "(USADO)")
+      const matchCat = dataCatalogo.find(c => {
+        const normCat = normalizarTextoRep(c.modelo_norm || c.modelo);
+        return descNorm.includes(normCat) || normCat.includes(descNorm);
+      });
+
+      if (matchCat) {
+        const categoria = (matchCat.categoria || '').toUpperCase();
+        if (categoria === 'DUAL_BAND') {
+          cantDualBand += stock;
+        } else if (categoria === 'CATV') {
+          cantCatv += stock;
+        } else {
+          // Si dice OBSOLETO o cualquier otra cosa
+          cantOtros += stock; 
+        }
+      } else {
+        // Si el modelo no existe en la base de datos de catálogo, por seguridad es "Otros"
+        cantOtros += stock;
       }
     });
 
-    // D. Clasificar VIP u Obsoleto leyendo catalogo_equipos
-    const listaEquiposTriage = Object.keys(itemsDevMap).map(modelo => {
-      const normMod = normalizarTextoRep(modelo);
-      const matchCat = dataCatalogo.find(c => {
-        const normCat = c.modelo_norm || normalizarTextoRep(c.modelo);
-        return normMod.includes(normCat) || normCat.includes(normMod);
-      });
-
-      return {
-        modelo: modelo,
-        cantidad: itemsDevMap[modelo],
-        esVip: matchCat ? Boolean(matchCat.es_vip) : false
-      };
-    });
-
-    // E. Ordenar: Todos los VIP arriba
-    listaEquiposTriage.sort((a, b) => (b.esVip === a.esVip ? 0 : b.esVip ? 1 : -1));
-
+    // 4. GENERACIÓN DE FILAS HTML PARA EL PDF
     let filasDevolucionesHtml = '';
-    if (listaEquiposTriage.length === 0) {
+    
+    if (cantDualBand === 0 && cantCatv === 0 && cantOtros === 0) {
       filasDevolucionesHtml = `
         <tr>
-          <td colspan="3" style="border: 1px solid #ccc; padding: 4px; text-align: center; color: #666;">
-            Sin equipos registrados en el depósito de devoluciones.
+          <td colspan="2" style="border: 1px solid #ccc; padding: 4px; text-align: center; color: #666;">
+            Sin equipos registrados en el depósito de devoluciones (Triage).
           </td>
         </tr>`;
     } else {
-      listaEquiposTriage.forEach(item => {
+      if (cantDualBand > 0) {
         filasDevolucionesHtml += `
           <tr>
-            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: left;">${item.modelo}</td>
-            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: center; font-weight: bold;">${item.esVip ? '🔵 VIP' : '⚙️ Obsoleto'}</td>
-            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: right; font-weight: bold;">${item.cantidad} un.</td>
-          </tr>
-        `;
-      });
+            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: left; font-weight: bold; color: #0369a1;">🔵 ONUs Dual Band VIP (Wi-Fi 6)</td>
+            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: right; font-weight: bold;">${cantDualBand.toLocaleString('es-AR')} un.</td>
+          </tr>`;
+      }
+      if (cantCatv > 0) {
+        filasDevolucionesHtml += `
+          <tr>
+            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: left; font-weight: bold; color: #c2410c;">🟠 ONUs CATV VIP (RF)</td>
+            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: right; font-weight: bold;">${cantCatv.toLocaleString('es-AR')} un.</td>
+          </tr>`;
+      }
+      if (cantOtros > 0) {
+        filasDevolucionesHtml += `
+          <tr>
+            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: left; color: #475569;">⚙️ Otras ONUs / Equipos Obsoletos</td>
+            <td style="border: 1px solid #ccc; padding: 2px 5px; text-align: right; font-weight: bold;">${cantOtros.toLocaleString('es-AR')} un.</td>
+          </tr>`;
+      }
     }
 
-    // 3. Extraer filas de Exactitud de Registro (Auditoría de Stock de almacenes)
+    // 5. Extraer filas de Exactitud de Registro (Auditoría de Stock de almacenes)
     let filasAuditoriaHtml = '';
     const filasAuditoriaDOM = document.querySelectorAll('#tablaAuditoriaWrapper table tbody tr');
 
@@ -158,7 +173,7 @@ async function descargarReporteKPIPDF() {
       });
     }
 
-    // 4. Métricas de Recupero
+    // 6. Métricas de Recupero
     const recCirc = document.getElementById('rec-val-circ')?.textContent || '0 un.';
     const recDesc = document.getElementById('rec-val-desc')?.textContent || '0 un.';
     const recTotal = document.getElementById('rec-val-total-un')?.textContent || '0 un.';
@@ -255,15 +270,14 @@ async function descargarReporteKPIPDF() {
             </div>
           </div>
 
-          <!-- TABLA DEVOLUCIONES / A PROBAR -->
+          <!-- TABLA DEVOLUCIONES / A PROBAR (CONSOLIDADA) -->
           <div style="font-size: 7pt; font-weight: bold; margin-bottom: 3px; text-transform: uppercase; color: #111;">
-            📥 DETALLE DE EQUIPOS EN DEPÓSITO DEVOLUCIONES (A PROBAR / TRIAGE):
+            📥 RESUMEN DE EQUIPOS EN DEPÓSITO DEVOLUCIONES (A PROBAR / TRIAGE):
           </div>
           <table style="width: 100%; border-collapse: collapse; font-size: 6.5pt; margin-bottom: 8px;">
             <thead>
               <tr style="background: #f0f0f0;">
-                <th style="border: 1px solid #000; padding: 2px 4px; text-align: left;">MODELO DE EQUIPO</th>
-                <th style="border: 1px solid #000; padding: 2px 4px; text-align: center;">CLASIFICACIÓN</th>
+                <th style="border: 1px solid #000; padding: 2px 4px; text-align: left;">CATEGORÍA DE EQUIPO</th>
                 <th style="border: 1px solid #000; padding: 2px 4px; text-align: right;">CANTIDAD PENDIENTE</th>
               </tr>
             </thead>

@@ -1,3 +1,4 @@
 ﻿user_data/
 *.zip
 node_modules/
+.env

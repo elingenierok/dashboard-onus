@@ -12,8 +12,8 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f8fafc; padding: 20px; color: #0f172a; }
   .container { max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-  .header { background: #0f172a; color: white; padding: 18px 28px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
-  .header h1 { font-size: 1.25rem; font-weight: 700; }
+  .header { background: #0f172a; color: white; padding: 18px 28px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
+  .header h1 { font-size: 1.25rem; font-weight: 700; display:flex; align-items:center; gap: 12px;}
   
   /* Tabs */
   .nav-tabs { display: flex; gap: 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; overflow-x: auto; }
@@ -37,9 +37,9 @@
   .btn-outline { background: white; border: 1px solid #cbd5e1; color: #334155; }
   .btn-pdf { background: #0284c7; color: white; border: none; font-weight: 700; margin-right: 8px; }
   .btn-pdf:hover { background: #0369a1; }
-  .file-tag { font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
-  .file-tag.ok { background: #dcfce7; color: #166534; }
-  .file-tag.no { background: #fee2e2; color: #991b1b; }
+  .file-tag { font-size: 0.75rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; letter-spacing: 0.5px;}
+  .file-tag.ok { background: #dcfce7; color: #166534; border: 1px solid #22c55e;}
+  .file-tag.no { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444;}
   
   /* Tablas */
   table.arbol, table.tabla-auditoria { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -103,12 +103,18 @@
 
 <!-- CONTENEDOR PRINCIPAL DEL PROGRAMA -->
 <div id="app-container" class="container" style="display: none;">
+  
+  <!-- NUEVO HEADER CON ETIQUETA GLOBAL -->
   <header class="header">
-    <div style="display:flex; align-items:center; gap: 12px;">
-      <h1>Suministros y Logística - KPI del área</h1>
-      <span id="user-badge" style="background:#1e293b; padding:4px 10px; border-radius:20px; font-size:0.75rem; border:1px solid #334155; color:#cbd5e1;"></span>
-    </div>
-    <div>
+    <h1>
+      Suministros y Logística - KPI del área
+      <span id="user-badge" style="background:#1e293b; padding:4px 10px; border-radius:20px; font-size:0.75rem; border:1px solid #334155; color:#cbd5e1; margin-left: 8px;"></span>
+    </h1>
+    
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <!-- Etiqueta Global de Actualización de Supabase -->
+      <span id="tagCSV" class="file-tag no">Sincronizando con Servidor...</span>
+      
       <button class="btn btn-pdf" onclick="descargarReporteKPIPDF()">📄 Exportar KPI (PDF)</button>
       <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar Datos</button>
       <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
@@ -131,7 +137,7 @@
     <section id="stock-estrategico" class="panel-estrategico req-estrategico">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
         <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Nuevos vs. Usados)</h2>
-        <span id="tagCSV" class="file-tag no">Conectando...</span>
+        <!-- Etiqueta tagCSV eliminada de aquí (ahora está en el header global) -->
       </div>
       <div class="summary-bar">
         <div style="font-size: 0.88rem; color: #cbd5e1;">🔵 Dual Band: <strong id="val-db" style="color: #38bdf8; font-size: 1.05rem;">0</strong> <span id="pct-db" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
@@ -169,6 +175,7 @@
           <button class="btn btn-outline req-superadmin" style="background:#ef4444; color:white; border:none;" onclick="ejecutarCierreSemanal()">
             🔒 Cerrar Semana y Generar Informe
           </button>
+          <!-- Etiqueta de cantidad restaurada -->
           <span id="tagRecupero" class="file-tag ok">Cargando datos...</span>
         </div>
       </div>
@@ -197,12 +204,12 @@
     <section class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h2 class="card-title" style="margin:0;">📈 Evolución de Stock e Inteligencia de Consumo</h2>
+        <!-- Etiqueta de cantidad restaurada -->
         <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
       </div>
 
-      <!-- Panel de Filtros: Separación de Vista Visual vs. Tramo de Cálculo -->
+      <!-- Panel de Filtros -->
       <div style="display: flex; gap: 20px; flex-wrap: wrap; background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
-        
         <!-- 1. Almacenes -->
         <div style="flex: 1; min-width: 200px;">
           <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🏬 Almacenes:</strong>
@@ -225,7 +232,7 @@
           </div>
         </div>
 
-        <!-- 3. Escala Visual (Zoom de Pantalla) -->
+        <!-- 3. Escala Visual -->
         <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px;">
           <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🔍 Zoom / Vista General:</strong>
           <select id="zoom-vista" style="background:#1e293b; border:1px solid #334155; color:white; padding:6px; border-radius:6px; font-size:0.82rem; width:100%;" onchange="actualizarGraficoTendencias()">
@@ -237,22 +244,20 @@
           </select>
         </div>
 
-        <!-- 4. Tramo Específico de Cálculo para Tendencia -->
+        <!-- 4. Tramo Específico de Cálculo -->
         <div style="flex: 1; min-width: 220px; border-left: 1px solid #334155; padding-left: 14px;">
           <strong style="color: #fde047; display: block; margin-bottom: 10px; font-size: 0.88rem;">📐 Tramo para Calcular Tendencia:</strong>
           <div style="display: flex; flex-direction: column; gap: 6px;">
             <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
-              Desde: 
-              <input type="date" id="tendencia-desde" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
+              Desde: <input type="date" id="tendencia-desde" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
             </label>
             <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
-              Hasta: 
-              <input type="date" id="tendencia-hasta" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
+              Hasta: <input type="date" id="tendencia-hasta" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
             </label>
           </div>
         </div>
 
-        <!-- 5. Switch Proyección -->
+        <!-- 5. Proyección -->
         <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px; display:flex; flex-direction:column; justify-content:center;">
           <strong style="color: #4ade80; display: block; margin-bottom: 8px; font-size: 0.88rem;">📉 Proyección:</strong>
           <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px; font-size: 0.82rem;">
@@ -260,7 +265,6 @@
             Activar Proyección en Gráfico
           </label>
         </div>
-
       </div>
 
       <!-- Gráfico Principal -->
@@ -273,7 +277,6 @@
         <h3 style="color: #4ade80; font-size: 0.95rem; margin-bottom: 12px;">⏳ Estimación de Quiebre basada en el Tramo Seleccionado</h3>
         <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
       </div>
-
     </section>
   </main>
 
@@ -325,6 +328,7 @@
     <section id="panel-admin-leadtime" class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h2 class="card-title" style="margin:0; color:#991b1b;">⏱️ Control de Cuello de Botella (Lead Time de Estantería)</h2>
+        <!-- Etiqueta de cantidad restaurada -->
         <span id="tagAdminLeadtime" class="file-tag ok">Consultando...</span>
       </div>
       
@@ -419,7 +423,6 @@
     } else {
       permisosActuales = data;
 
-      // JERARQUÍA SUPERADMIN: Si es superadmin, se fuerzan todos los accesos a TRUE
       if (permisosActuales.es_superadmin) {
         permisosActuales.ver_kpi_estrategicos = true;
         permisosActuales.ver_costos_usd = true;
@@ -440,10 +443,8 @@
   function aplicarRestriccionesVisuales() {
     if (!permisosActuales) return;
 
-    // 1. Limpia cualquier restricción previa
     document.querySelectorAll('.hidden-by-role').forEach(el => el.classList.remove('hidden-by-role'));
 
-    // 2. Aplica ocultamientos según permisos individuales
     if (!permisosActuales.es_superadmin) {
       document.querySelectorAll('.req-superadmin').forEach(el => el.classList.add('hidden-by-role'));
     }

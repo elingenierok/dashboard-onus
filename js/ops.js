@@ -304,8 +304,20 @@ async function buscarEquipoParaPrueba() {
 
   if (estadoActual !== 'PENDIENTE') {
     bannerTesteado.style.display = 'block';
+
+    // Helper para formatear fecha corta + hora (ej: 19/08/2026 14:30 hs)
+    const formatearFechaHora = (fechaIso) => {
+      if (!fechaIso) return 'Sin registro';
+      const f = new Date(fechaIso);
+      return `${f.toLocaleDateString('es-AR')} ${f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs`;
+    };
+
+    const fechaIngresoStr = formatearFechaHora(equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at);
+    const fechaPruebaStr = formatearFechaHora(equipoCargadoActual.fin_prueba);
+
     bannerTesteado.innerHTML = `ℹ️ <strong>Equipo ya testeado o procesado</strong><br>` +
       `Veredicto previo: <strong>${estadoActual}</strong><br>` +
+      `📥 Ingreso: <strong>${fechaIngresoStr}</strong> | 🔬 Testeado: <strong>${fechaPruebaStr}</strong><br>` +
       `Detalle / Observación: ${equipoCargadoActual.observaciones || 'Ninguno'}`;
     
     blockControles.style.display = 'none';
