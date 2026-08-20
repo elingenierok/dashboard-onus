@@ -166,14 +166,12 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
   const modelo = document.getElementById('cg_modelo').value;
   const detalleTecnico = document.getElementById('cg_tecnico').value.trim();
 
-  // 1. Verificación básica en pantalla
   if (!sn || !modelo) {
     msg.textContent = '⚠️ Debe ingresar el Número de Serie y seleccionar un Modelo.';
     msg.style.color = '#fde047';
     return;
   }
 
-  // 2. VENTANA EXTRA DE CONFIRMACIÓN AL OPERADOR
   const mensajeConfirmacion = `⚠️ CONFIRMACIÓN DE INGRESO\n\n` +
                               `¿Seguro que desea guardar este registro?\n\n` +
                               `• Número de Serie (SN): ${sn}\n` +
@@ -187,7 +185,6 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
     return;
   }
 
-  // 3. Verificación de duplicados en la mesa activa
   msg.textContent = '⏳ Verificando duplicados en la mesa activa...';
   msg.style.color = '#38bdf8';
 
@@ -204,7 +201,6 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
     return;
   }
 
-  // 4. Evaluación de Tecnología VIP / Obsoleta
   const esVIP = esModeloVIP(modelo);
   const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
   
@@ -222,7 +218,6 @@ document.getElementById('form-carga').addEventListener('submit', async (e) => {
     condicion: condicionAsignada
   };
 
-  // 5. Registro definitivo en Supabase
   const { error } = await supabaseClient.from('recupero_operativo').insert([payload]);
 
   if (error) {
@@ -305,7 +300,6 @@ async function buscarEquipoParaPrueba() {
   if (estadoActual !== 'PENDIENTE') {
     bannerTesteado.style.display = 'block';
 
-    // Helper para formatear fecha corta + hora (ej: 19/08/2026 14:30 hs)
     const formatearFechaHora = (fechaIso) => {
       if (!fechaIso) return 'Sin registro';
       const f = new Date(fechaIso);
@@ -315,8 +309,16 @@ async function buscarEquipoParaPrueba() {
     const fechaIngresoStr = formatearFechaHora(equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at);
     const fechaPruebaStr = formatearFechaHora(equipoCargadoActual.fin_prueba);
 
+    // Formatear veredicto previo con color y emoji
+    let veredictoFormateado = `<strong>${estadoActual}</strong>`;
+    if (estadoActual === 'CIRCULACIÓN' || estadoActual === 'CIRCULACION') {
+      veredictoFormateado = `<strong style="color: #4ade80;">🟢 CIRCULACIÓN</strong>`;
+    } else if (estadoActual === 'DESCARTE') {
+      veredictoFormateado = `<strong style="color: #f87171;">🚨 DESCARTE</strong>`;
+    }
+
     bannerTesteado.innerHTML = `ℹ️ <strong>Equipo ya testeado o procesado</strong><br>` +
-      `Veredicto previo: <strong>${estadoActual}</strong><br>` +
+      `Veredicto previo: ${veredictoFormateado}<br>` +
       `📥 Ingreso: <strong>${fechaIngresoStr}</strong> | 🔬 Testeado: <strong>${fechaPruebaStr}</strong><br>` +
       `Detalle / Observación: ${equipoCargadoActual.observaciones || 'Ninguno'}`;
     
@@ -438,10 +440,41 @@ function imprimirEtiquetaPrueba() {
   document.getElementById('lbl_dbm').textContent = dbm + ' dBm';
   document.getElementById('lbl_fecha').textContent = fecha;
 
+  // Inyectar quién testeó en la etiqueta
+  const lblTecnico = document.getElementById('lbl_tecnico');
+  if (lblTecnico) {
+    lblTecnico.textContent = equipoCargadoActual.tecnico || usuarioOperadorNombre || 'Operador';
+  }
+
+  // Inyectar fallas en la etiqueta si veredicto es DESCARTE o si existen en observaciones
+  const containerFallas = document.getElementById('lbl_fallas_container');
+  const txtFallas = document.getElementById('lbl_fallas_texto');
+  
+  let fallaDetectada = '';
+  if (veredicto.includes('DESCARTE')) {
+    const motivoSelect = document.getElementById('pr_motivo')?.value;
+    if (motivoSelect && motivoSelect !== 'Ninguno') {
+      fallaDetectada = motivoSelect;
+    } else if (equipoCargadoActual.observaciones) {
+      fallaDetectada = equipoCargadoActual.observaciones;
+    } else {
+      fallaDetectada = 'DESCARTE / FALLA DE LAB';
+    }
+  }
+
+  if (containerFallas && txtFallas) {
+    if (fallaDetectada && fallaDetectada.trim() !== '' && !fallaDetectada.toUpperCase().includes('NINGUNO')) {
+      txtFallas.textContent = fallaDetectada;
+      containerFallas.style.display = 'block';
+    } else {
+      containerFallas.style.display = 'none';
+    }
+  }
+
   const lblVeredicto = document.getElementById('lbl_veredicto_box');
   lblVeredicto.textContent = veredicto;
 
-  if (veredicto.includes('CIRCULACIÓN')) {
+  if (veredicto.includes('CIRCULACIÓN') || veredicto.includes('CIRCULACION')) {
     lblVeredicto.className = 'lbl-veredicto lbl-ok';
   } else {
     lblVeredicto.className = 'lbl-veredicto lbl-fail';
@@ -454,7 +487,7 @@ function imprimirEtiquetaPrueba() {
 // 4. LÓGICA DE AUDITORÍA CIEGA ÍTEM POR ÍTEM (POR MODELO)
 // ====================================================
 
-// A. INICIAR CONTROL DE STOCK (CONGELA FOTO TOTAL Y MODELO POR MODELO)
+// A. INICIAR CONTROL DE STOCK
 async function iniciarSnapshotSistema() {
   const btn = document.getElementById('btnSnapshot');
   const status = document.getElementById('statusSnapshot');
@@ -621,7 +654,7 @@ async function cargarTablaConteoFisico() {
   }
 }
 
-// C. GUARDAR CONTEO FÍSICO REAL (CON DESVIACIÓN ABSOLUTA REAL)
+// C. GUARDAR CONTEO FÍSICO REAL
 async function guardarConteoFisicoReal() {
   const selectSuc = document.getElementById('aud_sucursal');
   const btnGuardar = document.getElementById('btnGuardarAuditoria');
