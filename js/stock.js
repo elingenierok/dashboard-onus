@@ -1,5 +1,5 @@
 // ====================================================
-// MÓDULO AUTÓNOMO DE STOCK - FILTRADO Y TOOLTIPS TÁCTICOS
+// MÓDULO AUTÓNOMO DE STOCK - DATOS, ESTADO & UI
 // ====================================================
 
 const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
@@ -8,7 +8,26 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const COSTO_POR_DEFECTO = 0;
 
-// 1. ALMACENES OFICIALES REVISADOS
+// ESTADO GLOBAL EXPUESTO PARA EL GENERADOR DE REPORTES
+window.EstadoStock = {
+  cargado: false,
+  totalDualBand: 0,
+  totalCatv: 0,
+  totalNuevos: 0,
+  totalUsados: 0,
+  totalOperativo: 0,
+  costoTotalUsd: 0,
+  devolucionesCant: 0,
+  devolucionesValorUsd: 0,
+  descarteCant: 0,
+  descarteValorUsd: 0,
+  descarteVipCant: 0,
+  descarteVipValorUsd: 0,
+  catrielCant: 0,
+  fechaSincronizacion: '--/--/----'
+};
+
+// 1. ALMACENES OFICIALES
 const SUCURSALES = [
   'OBE_ALM_PRINCIPAL', 
   'OBE_ALM_CATRIEL', 
@@ -98,7 +117,6 @@ async function cargarStockModulo() {
   }
 
   try {
-    // 1. Pedimos también el created_at para la hora exacta
     const { data: ult, error: errUlt } = await supabaseClient
       .from('registro_stock')
       .select('fecha_registro, created_at')
@@ -110,7 +128,7 @@ async function cargarStockModulo() {
     if (!ult || !ult.length) throw new Error('Sin datos de stock');
 
     const ultimaFecha = ult[0].fecha_registro;
-    const marcaTiempo = ult[0].created_at; // Ejemplo: "2026-08-14T13:45:31.955Z"
+    const marcaTiempo = ult[0].created_at;
 
     const [resStock, resPrecios] = await Promise.all([
       supabaseClient.from('registro_stock').select('codigo, descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha),
@@ -140,17 +158,16 @@ async function cargarStockModulo() {
       if (p.descripcion) mapaPrecios.set(normalizar(p.descripcion), val);
     });
 
+    const fechaObj = new Date(marcaTiempo);
+    const diaFormat = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const horaFormat = fechaObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
     if (tagCSV) {
-      // 2. Formateamos la hora en formato local
-      const fechaObj = new Date(marcaTiempo);
-      const diaFormat = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      const horaFormat = fechaObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-      
       tagCSV.textContent = `Supabase: ✅ ${diaFormat} ${horaFormat} hs`;
       tagCSV.className = 'file-tag ok';
     }
 
-    procesarYRenderizarStock();
+    procesarYRenderizarStock(`${diaFormat} ${horaFormat} hs`);
     renderTablaPrecios();
   } catch (err) {
     console.error('Error al consultar Supabase:', err);
@@ -161,8 +178,8 @@ async function cargarStockModulo() {
   }
 }
 
-// PROCESAMIENTO
-function procesarYRenderizarStock() {
+// PROCESAMIENTO MATEMÁTICO Y ACTUALIZACIÓN DE ESTADO GLOBAL
+function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
   let stratDB = 0, stratCATV = 0, stratTotal = 0, stratValorUSD = 0;
   let stratNuevos = 0, stratUsados = 0;
 
@@ -184,7 +201,6 @@ function procesarYRenderizarStock() {
 
   stockData.forEach(row => {
     const descNorm = normalizar(row.descripcion);
-
     if (!descNorm.includes('ONU')) return;
 
     const esVIP_DB = GRUPO_DUAL_BAND.includes(descNorm);
@@ -252,6 +268,26 @@ function procesarYRenderizarStock() {
       }
     }
   });
+
+  // ACTUALIZAR OBJETO GLOBAL
+  window.EstadoStock = {
+    cargado: true,
+    totalDualBand: stratDB,
+    totalCatv: stratCATV,
+    totalNuevos: stratNuevos,
+    totalUsados: stratUsados,
+    totalOperativo: stratTotal,
+    costoTotalUsd: stratValorUSD,
+    devolucionesCant: devCant,
+    devolucionesCatvCant: devCatvCant,
+    devolucionesValorUsd: valorDevoluciones,
+    descarteCant: descCant,
+    descarteValorUsd: valorDescarte,
+    descarteVipCant: descVipCant,
+    descarteVipValorUsd: valorDescVip,
+    catrielCant: catrielCant,
+    fechaSincronizacion: fechaSincroStr
+  };
 
   renderStockEstrategico(stratDB, stratCATV, stratNuevos, stratUsados, stratTotal, stratValorUSD, arbolEstrategico);
   renderStockOperativo(arbolOperativo);

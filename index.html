@@ -80,6 +80,14 @@
   .btn-logout:hover { background: #f87171; color: white; }
   
   .hidden-by-role { display: none !important; }
+
+  /* MODO IMPRESIÓN LIMPIO DEDICADO A HOJA A4 */
+  @media print {
+    body * { visibility: hidden; }
+    #modal-reportes, #modal-reportes *, #hoja-a4-preview, #hoja-a4-preview * { visibility: visible; }
+    #modal-reportes { position: absolute; left: 0; top: 0; width: 100%; height: auto; background: white !important; padding: 0 !important; }
+    #hoja-a4-preview { width: 100% !important; min-height: auto !important; box-shadow: none !important; padding: 0 !important; }
+  }
 </style>
 </head>
 <body>
@@ -115,7 +123,7 @@
       <!-- Etiqueta Global de Actualización de Supabase -->
       <span id="tagCSV" class="file-tag no">Sincronizando con Servidor...</span>
       
-      <button class="btn btn-pdf" onclick="descargarReporteKPIPDF()">📄 Exportar KPI (PDF)</button>
+      <button class="btn btn-pdf req-reportes" onclick="abrirModalReportes()">📄 Generar Reporte / PDF</button>
       <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar Datos</button>
       <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
     </div>
@@ -338,9 +346,103 @@
   </main>
 </div>
 
+<!-- MODAL DE GENERACIÓN DE REPORTES MODULARES -->
+<div id="modal-reportes" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.85); z-index: 9999; justify-content: center; align-items: center; padding: 20px;">
+  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 1200px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+    
+    <!-- Header Modal -->
+    <div style="background: #0f172a; padding: 14px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">
+      <h2 style="color: #38bdf8; font-size: 1.1rem; font-weight: 800;">📄 Generador de Reportes a la Medida</h2>
+      <button onclick="cerrarModalReportes()" style="background: transparent; border: none; color: #f87171; font-size: 1.2rem; cursor: pointer; font-weight: bold;">✕ Cerrar</button>
+    </div>
+
+    <!-- Cuerpo 2 Columnas -->
+    <div style="display: flex; flex: 1; overflow: hidden;">
+      
+      <!-- Panel Izquierdo: Controles -->
+      <div style="width: 320px; background: #0f172a; border-right: 1px solid #334155; padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;">
+        
+        <!-- 📅 1. PERÍODO DEL REPORTE -->
+        <div style="background: #1e293b; padding: 10px; border-radius: 6px; border: 1px solid #334155;">
+          <strong style="color: #f87171; font-size: 0.85rem; display: block; margin-bottom: 8px;">1. Período del Reporte</strong>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <select id="rep-rango-rapido" style="background: #0f172a; border: 1px solid #334155; color: white; padding: 6px; border-radius: 4px; font-size: 0.8rem;" onchange="cambiarRangoReporte()">
+              <option value="HOY" selected>Hoy (Mesa Activa / Último Stock)</option>
+              <option value="SEMANA">Últimos 7 Días</option>
+              <option value="MES">Últimos 30 Días</option>
+              <option value="CUSTOM">Rango Personalizado...</option>
+            </select>
+            
+            <div id="rep-custom-dates" style="display: none; flex-direction: column; gap: 6px;">
+              <label style="font-size: 0.75rem; color: #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+                Desde: <input type="date" id="rep-desde" style="background:#0f172a; border:1px solid #334155; color:white; padding:4px; border-radius:4px; width: 130px;">
+              </label>
+              <label style="font-size: 0.75rem; color: #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+                Hasta: <input type="date" id="rep-hasta" style="background:#0f172a; border:1px solid #334155; color:white; padding:4px; border-radius:4px; width: 130px;">
+              </label>
+            </div>
+            
+            <button id="btn-aplicar-fecha-rep" onclick="cargarDatosHistoricosReporte()" style="background: #38bdf8; color: #0f172a; border: none; padding: 6px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; cursor: pointer; display: none;">
+              ↻ Extraer Datos de Fecha
+            </button>
+            <span id="rep-status-fechas" style="font-size: 0.7rem; color: #4ade80; text-align: center; display: none;">✅ Datos históricos cargados</span>
+          </div>
+        </div>
+
+        <!-- 📄 2. MÓDULOS E INDICADORES -->
+        <div>
+          <strong style="color: #fde047; font-size: 0.85rem; display: block; margin-bottom: 8px;">2. Módulos e Indicadores</strong>
+          
+          <!-- 📦 MÓDULO STOCK -->
+          <div style="margin-bottom: 12px; background: #1e293b; padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+            <strong style="color: #38bdf8; font-size: 0.82rem; display: block; margin-bottom: 4px;">📦 MÓDULO STOCK</strong>
+            <div style="display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: #f8fafc; padding-left: 6px;">
+              <label style="cursor: pointer;"><input type="checkbox" id="rep-chk-stock-est" checked onchange="compilarReporteLive()"> 🏛️ Ind. Estratégicos</label>
+              <label style="cursor: pointer;"><input type="checkbox" id="rep-chk-stock-tac" checked onchange="compilarReporteLive()"> 🎯 Ind. Tácticos</label>
+              <label style="cursor: pointer;"><input type="checkbox" id="rep-chk-stock-ope" checked onchange="compilarReporteLive()"> ⚙️ Ind. Operativos</label>
+            </div>
+          </div>
+
+          <!-- 🔄 MÓDULO RECUPERO -->
+          <div style="background: #1e293b; padding: 8px; border-radius: 6px; border: 1px solid #334155;">
+            <strong style="color: #4ade80; font-size: 0.82rem; display: block; margin-bottom: 4px;">🔄 MÓDULO RECUPERO</strong>
+            <div style="display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: #f8fafc; padding-left: 6px;">
+              <label style="cursor: pointer;"><input type="checkbox" id="rep-chk-rec-est" checked onchange="compilarReporteLive()"> 🏛️ Ind. Estratégicos</label>
+              <label style="cursor: pointer;"><input type="checkbox" id="rep-chk-rec-tac" checked onchange="compilarReporteLive()"> 🎯 Ind. Tácticos</label>
+              <label style="cursor: pointer;"><input type="checkbox" id="rep-chk-rec-ope" checked onchange="compilarReporteLive()"> ⚙️ Ind. Operativos</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- 👤 3. RESPONSABLE DE GUARDIA -->
+        <div>
+          <strong style="color: #38bdf8; font-size: 0.85rem; display: block; margin-bottom: 8px;">3. Responsable de Guardia</strong>
+          <input type="text" id="rep-txt-operador" placeholder="Nombre del operador..." style="width: 100%; background: #1e293b; border: 1px solid #334155; color: white; padding: 6px 10px; border-radius: 6px; font-size: 0.82rem;" oninput="compilarReporteLive()">
+        </div>
+
+        <!-- BOTONES DE ACCIÓN -->
+        <div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
+          <button onclick="descargarPDFReporte()" class="btn btn-pdf" style="width: 100%; text-align: center; padding: 10px;">💾 Descargar PDF</button>
+          <button onclick="imprimirReporteDirecto()" class="btn btn-outline" style="width: 100%; text-align: center; padding: 10px;">🖨️ Imprimir A4</button>
+        </div>
+      </div>
+
+      <!-- Panel Derecho: Hoja A4 Live Preview -->
+      <div style="flex: 1; background: #334155; padding: 20px; overflow-y: auto; display: flex; justify-content: center;">
+        <div id="hoja-a4-preview" style="width: 210mm; min-height: 297mm; background: white; color: #0f172a; padding: 20mm; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4;">
+          <!-- Contenido compilado dinámicamente -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- Carga de Módulos Individuales en Orden -->
 <script src="js/stock.js"></script>
 <script src="js/recupero.js"></script>
+<script src="js/recupero_ui.js"></script>
+<script src="js/recupero_actions.js"></script>
 <script src="js/tendencias.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/reportes.js"></script>
@@ -414,16 +516,26 @@
       .single();
 
     if (error || !data) {
-      permisosActuales = { es_superadmin: false, ver_kpi_estrategicos: false, ver_costos_usd: false, acceso_auditoria: false, ver_recupero: false };
+      // Si falla o no tiene rol, bloqueamos TODO incluyendo acceso_reportes
+      permisosActuales = { 
+        es_superadmin: false, 
+        ver_kpi_estrategicos: false, 
+        ver_costos_usd: false, 
+        acceso_auditoria: false, 
+        ver_recupero: false,
+        acceso_reportes: false 
+      };
       document.getElementById('user-badge').textContent = `👤 ${usuario.email} (Sin Permisos)`;
     } else {
       permisosActuales = data;
 
+      // Si sos SuperAdmin, se te habilitan mágicamente todos los permisos
       if (permisosActuales.es_superadmin) {
         permisosActuales.ver_kpi_estrategicos = true;
         permisosActuales.ver_costos_usd = true;
         permisosActuales.acceso_auditoria = true;
         permisosActuales.ver_recupero = true;
+        permisosActuales.acceso_reportes = true; // ¡El SuperAdmin siempre puede ver reportes!
       }
 
       document.getElementById('user-badge').textContent = `👤 ${data.nombre_completo || usuario.email} ${permisosActuales.es_superadmin ? '(SuperAdmin)' : ''}`;
@@ -440,8 +552,10 @@
   function aplicarRestriccionesVisuales() {
     if (!permisosActuales) return;
 
+    // Primero destapamos todo
     document.querySelectorAll('.hidden-by-role').forEach(el => el.classList.remove('hidden-by-role'));
 
+    // Luego vamos ocultando según el permiso en FALSE
     if (!permisosActuales.es_superadmin) {
       document.querySelectorAll('.req-superadmin').forEach(el => el.classList.add('hidden-by-role'));
     }
@@ -455,8 +569,12 @@
     if (!permisosActuales.acceso_auditoria) {
       document.querySelectorAll('.req-auditoria').forEach(el => el.classList.add('hidden-by-role'));
     }
+    
+    // NUEVA REGLA: Si no tiene permiso de reportes, ocultar la clase .req-reportes
+    if (!permisosActuales.acceso_reportes) {
+      document.querySelectorAll('.req-reportes').forEach(el => el.classList.add('hidden-by-role'));
+    }
 
-    // Ocultar la pestaña Recupero si ver_recupero es FALSE
     if (permisosActuales.ver_recupero === false) {
       document.querySelectorAll('.req-recupero').forEach(el => el.classList.add('hidden-by-role'));
       if (document.getElementById('tab-recupero').classList.contains('active')) switchTab('tab-stock');
