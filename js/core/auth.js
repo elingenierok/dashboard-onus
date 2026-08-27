@@ -59,6 +59,7 @@ async function cargarPerfilUsuario(usuario) {
   if (error || !data) {
     permisosActuales = { 
       es_superadmin: false, 
+      puede_cambiar_sucursal: false,
       ver_kpi_estrategicos: false, 
       ver_costos_usd: false, 
       acceso_auditoria: false, 
@@ -70,7 +71,9 @@ async function cargarPerfilUsuario(usuario) {
   } else {
     permisosActuales = data;
 
+    // EL SUPERADMIN TIENE ACCESO TOTAL AUTOMÁTICO
     if (permisosActuales.es_superadmin) {
+      permisosActuales.puede_cambiar_sucursal = true;
       permisosActuales.ver_kpi_estrategicos = true;
       permisosActuales.ver_costos_usd = true;
       permisosActuales.acceso_auditoria = true;
@@ -82,10 +85,15 @@ async function cargarPerfilUsuario(usuario) {
     window.SUCURSAL_USUARIO = permisosActuales.sucursal_asignada || 'OBE';
     window.SUCURSAL_FILTRO_ACTIVA = window.SUCURSAL_USUARIO;
 
+    // CONTROL DEL DESPLEGABLE GLOBAL (SUPERADMIN O PERMISO ESPECIAL)
+    const puedeNavegarSucursales = permisosActuales.es_superadmin || 
+                                   permisosActuales.puede_cambiar_sucursal || 
+                                   permisosActuales.sucursal_asignada === 'TODAS';
+
     const selSuc = document.getElementById('sel-sucursal-global');
     if (selSuc) {
       selSuc.value = window.SUCURSAL_FILTRO_ACTIVA;
-      selSuc.disabled = !permisosActuales.es_superadmin;
+      selSuc.disabled = !puedeNavegarSucursales;
     }
 
     document.getElementById('user-badge').textContent = `👤 ${data.nombre_completo || usuario.email} (${window.SUCURSAL_USUARIO}) ${permisosActuales.es_superadmin ? '[SuperAdmin]' : ''}`;
@@ -112,7 +120,7 @@ function aplicarRestriccionesVisuales() {
   }
   if (!permisosActuales.ver_kpi_estrategicos) {
     document.querySelectorAll('.req-estrategico').forEach(el => el.classList.add('hidden-by-role'));
-    if (document.getElementById('tab-tendencias').classList.contains('active')) switchTab('tab-stock');
+    if (document.getElementById('tab-tendencias')?.classList.contains('active')) switchTab('tab-stock');
   }
   if (!permisosActuales.acceso_auditoria) {
     document.querySelectorAll('.req-auditoria').forEach(el => el.classList.add('hidden-by-role'));
@@ -122,6 +130,6 @@ function aplicarRestriccionesVisuales() {
   }
   if (permisosActuales.ver_recupero === false) {
     document.querySelectorAll('.req-recupero').forEach(el => el.classList.add('hidden-by-role'));
-    if (document.getElementById('tab-recupero').classList.contains('active')) switchTab('tab-stock');
+    if (document.getElementById('tab-recupero')?.classList.contains('active')) switchTab('tab-stock');
   }
 }

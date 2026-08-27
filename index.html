@@ -121,12 +121,15 @@
     
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
       
-      <!-- 🏬 SELECTOR MULTISUCURSAL (NUEVO) -->
-      <select id="sel-sucursal-global" onchange="cambiarSucursalGlobal()" style="background: #1e293b; color: #38bdf8; border: 1px solid #334155; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 0.82rem; cursor: pointer;">
-        <option value="OBE">🏬 Oberá (Matriz)</option>
-        <option value="SPD">🏬 San Pedro</option>
-        <option value="TODAS">🌐 Todas las Sucursales</option>
-      </select>
+      <select id="sel-sucursal-global" onchange="cambiarSucursalGlobal()" ...>
+  <option value="OBE">🏬 Oberá (Matriz)</option>
+  <option value="SPD">🏬 San Pedro</option>
+  <option value="WND">🏬 Wanda</option>
+  <option value="ELDO">🏬 Eldorado</option>
+  <option value="ITU">🏬 Ituzaingó</option>
+
+  <option value="TODAS">🌐 Todas las Sucursales</option>
+</select>
 
       <span id="tagCSV" class="file-tag no">Sincronizando con Servidor...</span>
       
