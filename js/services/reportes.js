@@ -1,12 +1,13 @@
 // ====================================================
 // MOTOR COMPILADOR DE INFORMES MONOCARÁCTER A4
+// MULTISUCURSAL Y ADAPTATIVO
 // ====================================================
 
 const SUPABASE_URL_REP = 'https://ovluxdezwvuonlwnymna.supabase.co';
 const SUPABASE_KEY_REP = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
 const supabaseReportes = supabase.createClient(SUPABASE_URL_REP, SUPABASE_KEY_REP);
 
-// Estado independiente solo para el reporte (evita pisar el dashboard en vivo)
+// Estado independiente solo para el reporte
 window.EstadoReporte = {
   usarHistorico: false,
   rangoStr: 'MESA ACTIVA (HOY)',
@@ -14,13 +15,12 @@ window.EstadoReporte = {
   recupero: {}
 };
 
-// Constantes locales para reportes autónomos
-const REP_DUAL_BAND = ["ONU ZTE F6201B V9.3 WIFI6 AX3000", "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)", "ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)", "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)", "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)", "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)(USADA)", "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)", "ONU ZTE F670L V1.1 DUAL BAND WIFI(USADA)"];
-const REP_CATV = ["ONU HUAWEI ECHOLIFE EG8147X6", "ONU HUAWEI ECHOLIFE EG8147X6(USADO)", "ONU HUAWEI ECHOLIFE EG8147X6 (USADO)", "ONU HUAWEI ECHOLIFE EG8147X6(CATV)", "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)", "ONU HUAWEI ECHOLIFE EG8147X6(CATV)(USADO)", "ONU HUAWEI ECHOLIFE EG8147X6 (CATV) (USADO)", "ONU HUAWEI ECHOLIFE EG8147X6(CATV) (USADO)", "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)(USADO)", "ONU ZTE F6600R DUAL BAND WIFI (CATV)", "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)", "ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)"];
-const REP_SUCURSALES = ['OBE_ALM_PRINCIPAL', 'OBE_ALM_CATRIEL', 'SPD_ALM_PRINCIPAL', 'WND_ALM_PRINCIPAL', 'ITU_ALM_PRINCIPAL', 'ELDO_ALM_PRINCIPAL'];
-
 function normRep(txt) {
   return (txt || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function obtenerSucursalReporte() {
+  return window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 }
 
 function abrirModalReportes() {
@@ -74,13 +74,14 @@ function cambiarRangoReporte() {
 }
 
 // ====================================================
-// CONSULTA DE HISTORIAL A SUPABASE (CORREGIDA)
+// CONSULTA DE HISTORIAL A SUPABASE AISLADA POR SUCURSAL
 // ====================================================
 async function cargarDatosHistoricosReporte() {
   const btn = document.getElementById('btn-aplicar-fecha-rep');
   const statusMsg = document.getElementById('rep-status-fechas');
   const dDesde = document.getElementById('rep-desde').value;
   const dHasta = document.getElementById('rep-hasta').value;
+  const sucActiva = obtenerSucursalReporte();
 
   if (!dDesde || !dHasta) {
     alert("Seleccione fecha Desde y Hasta.");
@@ -91,13 +92,27 @@ async function cargarDatosHistoricosReporte() {
   btn.disabled = true;
 
   try {
-    // 1. Obtener Catálogos y Precios
+    // 1. Obtener Catálogos Dinámicos (Clave para VIP por sucursal)
     const [resCat, resPrec] = await Promise.all([
       supabaseReportes.from('catalogo_equipos').select('*'),
       supabaseReportes.from('precios_catalogos').select('*')
     ]);
     
     const catalogo = resCat.data || [];
+    
+    // Función auxiliar para resolver jerarquía del catálogo
+    const resolverInfoRep = (descNorm) => {
+      const coincidencias = catalogo.filter(item => {
+        const itemNorm = item.modelo_norm || normRep(item.modelo);
+        return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+      });
+      if (!coincidencias.length) return null;
+      let match = coincidencias.find(c => c.sucursal_id === sucActiva);
+      if (!match) match = coincidencias.find(c => c.sucursal_id === 'GLOBAL');
+      if (!match) match = coincidencias.find(c => c.sucursal_id === 'OBE');
+      return match || coincidencias[0];
+    };
+
     const precios = new Map();
     (resPrec.data || []).forEach(p => {
       const val = parseFloat(p.precio_final) || 0;
@@ -105,7 +120,7 @@ async function cargarDatosHistoricosReporte() {
       if (p.descripcion) precios.set(normRep(p.descripcion), val);
     });
 
-    // 2. Extraer Stock Histórico más cercano a la fecha Hasta
+    // 2. Extraer Stock Histórico
     const { data: ultData } = await supabaseReportes
       .from('registro_stock')
       .select('fecha_registro')
@@ -122,28 +137,34 @@ async function cargarDatosHistoricosReporte() {
         .from('registro_stock')
         .select('*')
         .eq('fecha_registro', fechaStockEncontrada);
-      stockH = stData || [];
+      
+      // Filtrar el stock a nivel nacional o por sucursal activa
+      stockH = (stData || []).filter(row => {
+        if (sucActiva === 'TODAS') return true;
+        const alm = row.almacen || '';
+        return alm.includes(sucActiva) || (sucActiva === 'OBE' && alm.includes('OBE'));
+      });
     }
 
-    // 3. LA MAGIA: Extraer Recupero HISTÓRICO + ACTIVO (Para no perder lo de esta semana)
-    const [resHist, resOper] = await Promise.all([
-      supabaseReportes.from('recupero_historico_equipos').select('*'),
-      supabaseReportes.from('recupero_operativo').select('*')
-    ]);
+    // 3. Extraer Recupero HISTÓRICO + ACTIVO
+    let queryHist = supabaseReportes.from('recupero_historico_equipos').select('*');
+    let queryOper = supabaseReportes.from('recupero_operativo').select('*');
 
-    // Unificamos las dos tablas
+    if (sucActiva !== 'TODAS') {
+      queryHist = queryHist.eq('sucursal_id', sucActiva);
+      queryOper = queryOper.eq('sucursal_id', sucActiva);
+    }
+
+    const [resHist, resOper] = await Promise.all([queryHist, queryOper]);
     const recuperoCrudo = [...(resHist.data || []), ...(resOper.data || [])];
 
-    // Filtrado blindado con Javascript
     const recuperoH = recuperoCrudo.filter(row => {
       const fIng = row.fecha_ingreso ? row.fecha_ingreso.substring(0, 10) : '1970-01-01';
       const fFin = row.fin_prueba ? row.fin_prueba.substring(0, 10) : '1970-01-01';
       const cAt = row.created_at ? row.created_at.substring(0, 10) : '1970-01-01';
       
-      // El equipo pertenece al reporte si INGRESÓ en la fecha o si SE PROBÓ en la fecha
       const entraEnRango = (fIng >= dDesde && fIng <= dHasta) || (cAt >= dDesde && cAt <= dHasta);
       const probadoEnRango = (fFin >= dDesde && fFin <= dHasta);
-
       return entraEnRango || probadoEnRango;
     });
 
@@ -154,21 +175,24 @@ async function cargarDatosHistoricosReporte() {
     stockH.forEach(r => {
       const dn = normRep(r.descripcion);
       if (!dn.includes('ONU')) return;
+      
       const cant = parseInt(r.stock_total) || 0;
-      const usd = cant * (precios.get(r.codigo) || precios.get(dn) || 0);
+      const infoCat = resolverInfoRep(dn);
+      const isVIP = infoCat ? (infoCat.es_vip && !infoCat.es_obsoleto) : false;
+      const cat = infoCat ? infoCat.categoria : '';
+
+      const usd = cant * (infoCat && infoCat.precio_usd > 0 ? infoCat.precio_usd : (precios.get(r.codigo) || precios.get(dn) || 0));
       
-      const isDB = REP_DUAL_BAND.includes(dn);
-      const isCATV = REP_CATV.includes(dn);
-      
-      if (REP_SUCURSALES.includes(r.almacen) && (isDB || isCATV)) {
+      if (r.almacen.includes('PRINCIPAL') && isVIP) {
         sTotal += cant; sUSD += usd;
-        if (isDB) sDB += cant;
-        if (isCATV) sCATV += cant;
+        if (cat === 'DUAL_BAND') sDB += cant;
+        if (cat === 'CATV') sCATV += cant;
         if (dn.includes('USAD')) sUsados += cant; else sNuevos += cant;
       }
+      
       if (r.almacen === 'OBE_ALM_DEVOLUCIONES') { sDev += cant; sDevUsd += usd; }
       if (r.almacen === 'OBE_ALM_DESCARTE') { sDesc += cant; sDescUsd += usd; }
-      if (r.almacen === 'OBE_ALM_DESCARTE_VIP' && (isDB||isCATV)) { sDescVip += cant; sDescVipUsd += usd; }
+      if (r.almacen === 'OBE_ALM_DESCARTE_VIP' && isVIP) { sDescVip += cant; sDescVipUsd += usd; }
     });
 
     // --- MATEMÁTICA DE RECUPERO EN EL PERÍODO ---
@@ -179,17 +203,15 @@ async function cargarDatosHistoricosReporte() {
       const cant = parseInt(r.cantidad || 1) || 1;
       const dn = normRep(r.descripcion);
       const cond = normRep(r.condicion || r.estado || '');
-      const isVIP = catalogo.some(c => (c.modelo_norm || normRep(c.modelo)).includes(dn)) || REP_DUAL_BAND.includes(dn) || REP_CATV.includes(dn);
-      const isOK = ['CIRCULACION','OK','BUENO','APROBADO'].some(e => cond.includes(e));
-      const usd = cant * (precios.get(r.codigo) || precios.get(dn) || 0);
-
-      // Solo sumamos "Recibidos" si la fecha de ingreso cae en el rango
-      const fIng = r.fecha_ingreso ? r.fecha_ingreso.substring(0,10) : (r.created_at ? r.created_at.substring(0,10) : '1970-01-01');
-      if (fIng >= dDesde && fIng <= dHasta) {
-        rTotal += cant;
-      }
       
-      // Solo sumamos "Veredictos" si la fecha de prueba cae en el rango
+      const infoCat = resolverInfoRep(dn);
+      const isVIP = infoCat ? (infoCat.es_vip && !infoCat.es_obsoleto) : false;
+      const isOK = ['CIRCULACION','OK','BUENO','APROBADO'].some(e => cond.includes(e));
+      const usd = cant * (infoCat && infoCat.precio_usd > 0 ? infoCat.precio_usd : (precios.get(r.codigo) || precios.get(dn) || 0));
+
+      const fIng = r.fecha_ingreso ? r.fecha_ingreso.substring(0,10) : (r.created_at ? r.created_at.substring(0,10) : '1970-01-01');
+      if (fIng >= dDesde && fIng <= dHasta) rTotal += cant;
+      
       const fFin = r.fin_prueba ? r.fin_prueba.substring(0, 10) : '1970-01-01';
       if (fFin >= dDesde && fFin <= dHasta) {
         if (!isVIP) {
@@ -215,7 +237,6 @@ async function cargarDatosHistoricosReporte() {
     const probadosH = rCirc + rDescVip;
     const rPct = probadosH > 0 ? ((rCirc / probadosH)*100).toFixed(1) : 0;
 
-    // GUARDAR EN ESTADO HISTÓRICO
     window.EstadoReporte.stock = {
       cargado: true,
       totalDualBand: sDB, totalCatv: sCATV, totalOperativo: sTotal, costoTotalUsd: sUSD,
@@ -235,8 +256,6 @@ async function cargarDatosHistoricosReporte() {
     };
 
     window.EstadoReporte.usarHistorico = true;
-    
-    // Formateo de fecha lindo para el encabezado
     const dDesdeStr = dDesde.split('-').reverse().join('/');
     const dHastaStr = dHasta.split('-').reverse().join('/');
     window.EstadoReporte.rangoStr = `PERÍODO: ${dDesdeStr} al ${dHastaStr}`;
@@ -275,13 +294,19 @@ function compilarReporteLive() {
   const estStock = window.EstadoReporte.usarHistorico ? window.EstadoReporte.stock : (window.EstadoStock || {});
   const estRec = window.EstadoReporte.usarHistorico ? window.EstadoReporte.recupero : (window.EstadoRecupero || {});
   const rangoAplicado = window.EstadoReporte.rangoStr;
+  
+  // Detección para el encabezado del documento
+  let tituloSucursal = obtenerSucursalReporte();
+  if (tituloSucursal === 'OBE') tituloSucursal = 'OBERÁ MATRIZ';
+  if (tituloSucursal === 'SPD') tituloSucursal = 'SAN PEDRO';
+  if (tituloSucursal === 'TODAS') tituloSucursal = 'GLOBAL SUCURSALES';
 
   let html = `
     <div style="font-family: 'Consolas', 'Courier New', monospace; font-size: 8pt; color: #000; line-height: 1.2; width: 100%;">
       
       <div style="border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
         <div>
-          <div style="font-size: 11pt; font-weight: bold; letter-spacing: 0.5px;">[ REPORTÉ TÉCNICO CONSOLIDADO - LOGÍSTICA & LAB ISP ]</div>
+          <div style="font-size: 11pt; font-weight: bold; letter-spacing: 0.5px;">[ REPORTE TÉCNICO CONSOLIDADO: ${tituloSucursal} ]</div>
           <div style="font-size: 7.5pt; color: #333;">SISTEMA DE CONTROL OPERATIVO DE SUMINISTROS | ${rangoAplicado}</div>
         </div>
         <div style="text-align: right; font-size: 7.5pt;">
@@ -371,7 +396,7 @@ function compilarReporteLive() {
     }
 
     if (recTac && estRec.cargado) {
-      let limitados = (estRec.itemsVipTesteadosHoy || []).slice(0, 30); // Límite de 30 para no explotar la hoja A4
+      let limitados = (estRec.itemsVipTesteadosHoy || []).slice(0, 30);
       let masEquipos = (estRec.itemsVipTesteadosHoy || []).length > 30 ? `<tr><td colspan="4" style="padding:3px; text-align:center; font-style:italic;">... Y ${(estRec.itemsVipTesteadosHoy.length - 30)} registros adicionales omitidos por formato ...</td></tr>` : '';
 
       let filasHistoricas = limitados.map(i => `
@@ -400,7 +425,6 @@ function compilarReporteLive() {
     }
 
     if (recOpe && estRec.cargado && !window.EstadoReporte.usarHistorico) {
-      // Si es Mesa Activa, mostramos el resumen por modelo
        html += `
         <div style="margin-top: 6px; font-size: 7.5pt; font-weight: bold;">[⚙️ INDICADORES OPERATIVOS - DESGLOSE POR MODELOS]</div>
         <div style="font-size: 7pt; color: #444; margin-top: 2px;">• La vista de modelos se omite en reportes por rangos amplios por cuestiones de espacio.</div>
@@ -423,9 +447,10 @@ function compilarReporteLive() {
 function descargarPDFReporte() {
   const el = document.getElementById('hoja-a4-preview');
   if (!el) return;
+  const suc = obtenerSucursalReporte();
   const opt = {
     margin: 5,
-    filename: `Reporte_Logistica_ISP_${new Date().toISOString().split('T')[0]}.pdf`,
+    filename: `Reporte_Logistica_${suc}_${new Date().toISOString().split('T')[0]}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }

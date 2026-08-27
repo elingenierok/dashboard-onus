@@ -54,40 +54,40 @@ const LISTA_AUDITORIA = [
 ];
 
 function normalizar(str) {
-  return (str || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  return (str || '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
 }
-
-// 2. LISTAS ESTRATÉGICAS DEFINITIVAS (EQUIPOS VIP)
-const GRUPO_DUAL_BAND = [
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000",
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000(USADO)",
-  "ONU ZTE F6201B V9.3 WIFI6 AX3000 (USADO)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS) (USADA)",
-  "ONU ZTE ZXHN F6600P DB/WIFI6 (FXS)(USADA)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI (USADA)",
-  "ONU ZTE F670L V1.1 DUAL BAND WIFI(USADA)"
-].map(normalizar);
-
-const GRUPO_CATV = [
-  "ONU HUAWEI ECHOLIFE EG8147X6",
-  "ONU HUAWEI ECHOLIFE EG8147X6(USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV)(USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV) (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6(CATV) (USADO)",
-  "ONU HUAWEI ECHOLIFE EG8147X6 (CATV)(USADO)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV)(USADA)",
-  "ONU ZTE F6600R DUAL BAND WIFI (CATV) (USADA)"
-].map(normalizar);
 
 let stockData = [];
 let mapaPrecios = new Map();
+let catalogoEquiposMemoria = [];
 let listaPreciosTabla = [];
 let kpiChart = null;
+
+// RESOLUCIÓN JERÁRQUICA DE REGLA DE CATÁLOGO POR SUCURSAL
+function resolverInfoEquipo(descNorm, sucActiva) {
+  const coincidencias = catalogoEquiposMemoria.filter(item => {
+    const itemNorm = item.modelo_norm || normalizar(item.modelo);
+    return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+  });
+
+  if (!coincidencias.length) return null;
+
+  // Prioridad 1: Regla específica de la sucursal activa
+  let match = coincidencias.find(c => c.sucursal_id === sucActiva);
+  // Prioridad 2: Regla GLOBAL
+  if (!match) match = coincidencias.find(c => c.sucursal_id === 'GLOBAL');
+  // Prioridad 3: Regla OBE (Fallback)
+  if (!match) match = coincidencias.find(c => c.sucursal_id === 'OBE');
+  // Prioridad 4: Primera coincidencia encontrada
+  if (!match) match = coincidencias[0];
+
+  return match;
+}
 
 function toggleGrupoStock(claseGrupo) {
   const filas = document.querySelectorAll(`.${claseGrupo}`);
@@ -111,8 +111,10 @@ function toggleGrupoStock(claseGrupo) {
 // CARGA DESDE SUPABASE
 async function cargarStockModulo() {
   const tagCSV = document.getElementById('tagCSV');
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+
   if (tagCSV) {
-    tagCSV.textContent = 'Supabase: ⏳ Consultando...';
+    tagCSV.textContent = `Supabase: ⏳ Consultando... [${sucActiva}]`;
     tagCSV.className = 'file-tag no';
   }
 
@@ -130,12 +132,15 @@ async function cargarStockModulo() {
     const ultimaFecha = ult[0].fecha_registro;
     const marcaTiempo = ult[0].created_at;
 
-    const [resStock, resPrecios] = await Promise.all([
+    const [resStock, resPrecios, resCat] = await Promise.all([
       supabaseClient.from('registro_stock').select('codigo, descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha),
-      supabaseClient.from('precios_catalogos').select('codigo, descripcion, precio_final, moneda')
+      supabaseClient.from('precios_catalogos').select('codigo, descripcion, precio_final, moneda'),
+      supabaseClient.from('catalogo_equipos').select('*')
     ]);
 
     if (resStock.error) throw resStock.error;
+
+    catalogoEquiposMemoria = resCat.data || [];
 
     stockData = (resStock.data || []).map(d => {
       let rawAlm = (d.almacen || '').trim().toUpperCase();
@@ -163,7 +168,7 @@ async function cargarStockModulo() {
     const horaFormat = fechaObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
     if (tagCSV) {
-      tagCSV.textContent = `Supabase: ✅ ${diaFormat} ${horaFormat} hs`;
+      tagCSV.textContent = `Supabase: ✅ ${diaFormat} ${horaFormat} hs [${sucActiva}]`;
       tagCSV.className = 'file-tag ok';
     }
 
@@ -180,6 +185,8 @@ async function cargarStockModulo() {
 
 // PROCESAMIENTO MATEMÁTICO Y ACTUALIZACIÓN DE ESTADO GLOBAL
 function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+
   let stratDB = 0, stratCATV = 0, stratTotal = 0, stratValorUSD = 0;
   let stratNuevos = 0, stratUsados = 0;
 
@@ -203,11 +210,21 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
     const descNorm = normalizar(row.descripcion);
     if (!descNorm.includes('ONU')) return;
 
-    const esVIP_DB = GRUPO_DUAL_BAND.includes(descNorm);
-    const esVIP_CATV = GRUPO_CATV.includes(descNorm);
+    // Clasificación dinámica basada en la tabla catalogo_equipos
+    const infoCat = resolverInfoEquipo(descNorm, sucActiva);
+
+    const esVIP = infoCat ? infoCat.es_vip : false;
+    const catNombre = infoCat ? (infoCat.categoria || '').toUpperCase() : '';
+    const esObsoleto = infoCat ? infoCat.es_obsoleto : false;
+
+    const esVIP_DB = esVIP && catNombre === 'DUAL_BAND';
+    const esVIP_CATV = esVIP && catNombre === 'CATV';
     const esAlmacenPrincipal = SUCURSALES.includes(row.almacen);
 
-    const precioUnitario = mapaPrecios.get(row.codigo) || mapaPrecios.get(descNorm) || COSTO_POR_DEFECTO;
+    const precioUnitario = (infoCat && parseFloat(infoCat.precio_usd) > 0)
+      ? parseFloat(infoCat.precio_usd)
+      : (mapaPrecios.get(row.codigo) || mapaPrecios.get(descNorm) || COSTO_POR_DEFECTO);
+
     const valorFila = row.stock * precioUnitario;
 
     if (esAlmacenPrincipal && (esVIP_DB || esVIP_CATV)) {
@@ -622,10 +639,7 @@ function renderTablaPrecios() {
   document.getElementById('tablaPreciosWrapper').innerHTML = html;
 }
 
-// ====================================================
 // NAVEGACIÓN Y CONTROL DETALLADO MODELO POR MODELO
-// ====================================================
-
 let memoriaControlDetalle = [];
 
 async function cargarModuloControlAuditoria() {
@@ -708,14 +722,3 @@ function filtrarTablaControlAuditoria() {
   html += `</tbody></table>`;
   wrapper.innerHTML = html;
 }
-
-// INICIALIZACIÓN
-document.addEventListener('DOMContentLoaded', () => {
-  const btnReload = document.getElementById('btnReloadSupabase');
-  if (btnReload) {
-    btnReload.addEventListener('click', async () => {
-      await cargarStockModulo();
-    });
-  }
-  cargarStockModulo();
-});

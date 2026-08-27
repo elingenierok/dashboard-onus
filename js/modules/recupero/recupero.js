@@ -71,11 +71,20 @@ async function cargarModuloRecupero() {
     if (resRec.error) throw resRec.error;
     if (resCatalogo.error) throw resCatalogo.error;
 
-    const dataRec = resRec.data || [];
+    const dataRecCrudo = resRec.data || [];
     const catalogo = resCatalogo.data || [];
 
+    // --- FILTRADO MULTISUCURSAL DINÁMICO ---
+    const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+    
+    const dataRec = dataRecCrudo.filter(row => {
+      if (sucActiva === 'TODAS') return true;
+      // Compatibilidad con registros viejos: si no tienen sucursal_id, asume 'OBE'
+      return (row.sucursal_id || 'OBE') === sucActiva;
+    });
+
     if (tag) {
-      tag.textContent = `Supabase: ✅ ${dataRec.length} Registros`;
+      tag.textContent = `Supabase: ✅ ${dataRec.length} Registros [${sucActiva}]`;
       tag.className = 'file-tag ok';
     }
 

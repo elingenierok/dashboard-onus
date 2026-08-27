@@ -39,7 +39,6 @@ function obtenerCategoriaCatalogo(descNorm) {
 
 // CÁLCULO DE REGRESIÓN IGNORANDO DÍAS NULOS (SÁBADOS/DOMINGOS SIN DATOS)
 function calcularRegresionLinealTramo(fechasCalculo, valoresCalculo, todasFechasVisibles) {
-  // 1. Filtrar únicamente los puntos que tienen datos reales (que no son null)
   const puntosValidos = [];
   for (let i = 0; i < fechasCalculo.length; i++) {
     if (valoresCalculo[i] !== null && valoresCalculo[i] !== undefined) {
@@ -52,7 +51,6 @@ function calcularRegresionLinealTramo(fechasCalculo, valoresCalculo, todasFechas
 
   if (puntosValidos.length < 2) return null;
 
-  // 2. Regresión lineal matemática $y = m*x + b$ sobre los puntos válidos
   const fecha0Calculo = new Date(puntosValidos[0].fecha).getTime() / 86400000;
   const xDataCalculo = puntosValidos.map(p => (new Date(p.fecha).getTime() / 86400000) - fecha0Calculo);
   const yDataCalculo = puntosValidos.map(p => p.valor);
@@ -69,16 +67,14 @@ function calcularRegresionLinealTramo(fechasCalculo, valoresCalculo, todasFechas
   const divisor = (n * sumXX - sumX * sumX);
   if (divisor === 0) return null;
 
-  const m = (n * sumXY - sumX * sumY) / divisor; // Pendiente (consumo por día)
+  const m = (n * sumXY - sumX * sumY) / divisor;
   const b = (sumY - m * sumX) / n;
 
-  // 3. Proyectar línea sobre todas las fechas visibles
   const trendDataVisible = todasFechasVisibles.map(f => {
     const xVis = (new Date(f).getTime() / 86400000) - fecha0Calculo;
     return Math.max(0, parseFloat((m * xVis + b).toFixed(2)));
   });
 
-  // 4. Días a cero desde el último dato real medido
   let diasParaCero = null;
   if (m < -0.01) {
     const lastX = xDataCalculo[n - 1];
@@ -91,8 +87,10 @@ function calcularRegresionLinealTramo(fechasCalculo, valoresCalculo, todasFechas
 
 async function cargarModuloTendencias() {
   const tag = document.getElementById('tagTendencias');
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+
   if (tag) {
-    tag.textContent = 'Supabase: ⏳ Descargando historial...';
+    tag.textContent = `Supabase: ⏳ Descargando historial... [${sucActiva}]`;
     tag.className = 'file-tag no';
   }
 
@@ -106,7 +104,7 @@ async function cargarModuloTendencias() {
     catalogoEquiposMemoria = resCat.data || [];
 
     if (tag) {
-      tag.textContent = `Supabase: ✅ ${rawHistoricoData.length} Registros Cargados`;
+      tag.textContent = `Supabase: ✅ ${rawHistoricoData.length} Reg. [${sucActiva}]`;
       tag.className = 'file-tag ok';
     }
 
@@ -182,7 +180,6 @@ function actualizarGraficoTendencias() {
 
   const todasFechas = [...new Set(rawHistoricoData.map(d => d.fecha_registro))].sort();
 
-  // 1. Filtrar fechas a mostrar en pantalla (Zoom)
   let fechasVisibles = [...todasFechas];
   if (zoomVistaVal !== 'ALL') {
     const diasZoom = parseInt(zoomVistaVal, 10);
@@ -192,7 +189,6 @@ function actualizarGraficoTendencias() {
     fechasVisibles = todasFechas.filter(f => f >= strLimite);
   }
 
-  // 2. Fechas para el tramo de cálculo de tendencia
   const fechasCalculo = todasFechas.filter(f => {
     if (fechaDesdeVal && f < fechaDesdeVal) return false;
     if (fechaHastaVal && f > fechaHastaVal) return false;
@@ -201,11 +197,10 @@ function actualizarGraficoTendencias() {
 
   if (fechasVisibles.length === 0) return;
 
-  // 3. MAPEO INICIALIZADO EN `null` (Para no marcar '0' en días vacíos)
   const mapaSuma = {};
   almacenesTildados.forEach(alm => {
     mapaSuma[alm] = {};
-    todasFechas.forEach(f => mapaSuma[alm][f] = null); // <-- Inicializado en null
+    todasFechas.forEach(f => mapaSuma[alm][f] = null);
   });
 
   rawHistoricoData.forEach(row => {
@@ -224,7 +219,7 @@ function actualizarGraficoTendencias() {
 
     if ((esDB && incluirDB) || (esCATV && incluirCATV)) {
       if (mapaSuma[alm][fecha] === null) {
-        mapaSuma[alm][fecha] = 0; // Si hay datos, convierte null en 0 para empezar a sumar
+        mapaSuma[alm][fecha] = 0;
       }
       mapaSuma[alm][fecha] += (parseInt(row.stock_total, 10) || 0);
     }
@@ -246,7 +241,7 @@ function actualizarGraficoTendencias() {
       borderWidth: 3,
       pointRadius: 4,
       pointHoverRadius: 7,
-      spanGaps: true // <-- SALTA LOS DÍAS NULOS UNIENDO LOS PUNTOS VALIDOS
+      spanGaps: true
     });
 
     if (activarProyecciones && fechasCalculo.length >= 2) {
@@ -337,6 +332,4 @@ function actualizarGraficoTendencias() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  cargarModuloTendencias();
-});
+// INICIALIZACIÓN (Desacoplada para control centralizado desde app.js / auth.js)

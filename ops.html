@@ -87,7 +87,7 @@
 </head>
 <body>
 
-<!-- PANTALLA DE LOGIN -->
+<!-- PANTALLA DE LOGIN EN ops.html -->
 <div id="login-container">
   <div class="login-box">
     <h2>🔐 Suite Operativa ISP</h2>
@@ -99,7 +99,7 @@
       <label>Contraseña</label>
       <input type="password" id="txt-pass" placeholder="••••••••">
     </div>
-    <button class="btn-login" onclick="iniciarSesion()">Ingresar al Sistema</button>
+    <button type="button" class="btn-login" onclick="window.iniciarSesion()">Ingresar al Sistema</button>
     <div id="login-error" class="status-msg" style="color:#ef4444;"></div>
   </div>
 </div>
@@ -111,7 +111,7 @@
     <p>Recepción, Pruebas de Laboratorio y Auditoría</p>
     <div class="user-bar">
       <span id="user-badge" style="color:#38bdf8; font-weight:700;">👤 Cargando perfil...</span>
-      <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+      <button class="btn-logout" onclick="window.cerrarSesion()">Cerrar Sesión</button>
     </div>
   </header>
 
@@ -288,7 +288,6 @@
   <div class="lbl-sn" id="lbl_sn">SN: XXXXXXXXXXXX</div>
   <div class="lbl-modelo" id="lbl_modelo">MODELO DE EQUIPO</div>
   
-  <!-- NUEVOS CAMPOS: Técnico y Fallas -->
   <div style="font-size: 8pt; text-align: center; margin: 2px 0;">
     Test: <strong id="lbl_tecnico">---</strong>
   </div>
@@ -302,6 +301,10 @@
   </div>
 </div>
 
-<script src="js/ops.js"></script>
+<!-- INCLUSIÓN CORRECTA DE SCRIPTS -->
+<script src="js/core/auth.js"></script>
+<script src="js/core/app.js"></script>
+<script src="js/modules/ops/ops.js"></script>
+
 </body>
 </html>
