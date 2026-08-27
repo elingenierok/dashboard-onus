@@ -1,5 +1,5 @@
 // ====================================================
-// MÓDULO AUTÓNOMO DE STOCK - DATOS, ESTADO & UI
+// MÓDULO AUTÓNOMO DE STOCK - DATOS, ESTADO & UI (MULTISUCURSAL)
 // ====================================================
 
 const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
@@ -27,7 +27,7 @@ window.EstadoStock = {
   fechaSincronizacion: '--/--/----'
 };
 
-// 1. ALMACENES OFICIALES
+// ALMACENES OFICIALES
 const SUCURSALES = [
   'OBE_ALM_PRINCIPAL', 
   'OBE_ALM_CATRIEL', 
@@ -37,10 +37,6 @@ const SUCURSALES = [
   'ELDO_ALM_PRINCIPAL'
 ];
 const SUCURSALES_CORTAS = ['OBE PRINC', 'OBE CATR', 'SPD PRINC', 'WND PRINC', 'ITU PRINC', 'ELD PRINC'];
-
-const ALMACEN_DEV = 'OBE_ALM_DEVOLUCIONES';
-const ALMACEN_DESC = 'OBE_ALM_DESCARTE';
-const ALMACEN_DESC_VIP = 'OBE_ALM_DESCARTE_VIP';
 
 const LISTA_AUDITORIA = [
   { key: 'OBE_ALM_PRINCIPAL', nombre: 'OBE Principal' },
@@ -62,6 +58,18 @@ function normalizar(str) {
     .toUpperCase();
 }
 
+// EVALUACIÓN DINÁMICA DE SUCURSAL POR ALMACÉN
+function perteneceASucursal(almacenKey, sucActiva) {
+  if (sucActiva === 'TODAS') return true;
+  const raw = (almacenKey || '').trim().toUpperCase();
+  if (sucActiva === 'OBE') return raw.startsWith('OBE_') || raw.includes('OBERA');
+  if (sucActiva === 'SPD') return raw.startsWith('SPD_') || raw.includes('SAN_PEDRO') || raw.includes('SAN PEDRO');
+  if (sucActiva === 'WND') return raw.startsWith('WND_') || raw.startsWith('WND-') || raw.includes('WANDA');
+  if (sucActiva === 'ITU') return raw.startsWith('ITU_') || raw.includes('ITUZAINGO');
+  if (sucActiva === 'ELDO') return raw.startsWith('ELDO_') || raw.includes('ELDORADO');
+  return raw.includes(sucActiva);
+}
+
 let stockData = [];
 let mapaPrecios = new Map();
 let catalogoEquiposMemoria = [];
@@ -77,13 +85,9 @@ function resolverInfoEquipo(descNorm, sucActiva) {
 
   if (!coincidencias.length) return null;
 
-  // Prioridad 1: Regla específica de la sucursal activa
   let match = coincidencias.find(c => c.sucursal_id === sucActiva);
-  // Prioridad 2: Regla GLOBAL
   if (!match) match = coincidencias.find(c => c.sucursal_id === 'GLOBAL');
-  // Prioridad 3: Regla OBE (Fallback)
   if (!match) match = coincidencias.find(c => c.sucursal_id === 'OBE');
-  // Prioridad 4: Primera coincidencia encontrada
   if (!match) match = coincidencias[0];
 
   return match;
@@ -183,7 +187,7 @@ async function cargarStockModulo() {
   }
 }
 
-// PROCESAMIENTO MATEMÁTICO Y ACTUALIZACIÓN DE ESTADO GLOBAL
+// PROCESAMIENTO MATEMÁTICO FILTRADO POR SUCURSAL
 function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
@@ -207,15 +211,16 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
   SUCURSALES.forEach(s => arbolOperativo[s] = { DB: 0, CATV: 0, Otras: 0, itemsDB: {}, itemsCATV: {}, itemsOtras: {} });
 
   stockData.forEach(row => {
+    // FILTRADO CLAVE: Ignorar registros que no pertenecen a la sucursal activa
+    if (!perteneceASucursal(row.almacen, sucActiva)) return;
+
     const descNorm = normalizar(row.descripcion);
     if (!descNorm.includes('ONU')) return;
 
-    // Clasificación dinámica basada en la tabla catalogo_equipos
     const infoCat = resolverInfoEquipo(descNorm, sucActiva);
 
     const esVIP = infoCat ? infoCat.es_vip : false;
     const catNombre = infoCat ? (infoCat.categoria || '').toUpperCase() : '';
-    const esObsoleto = infoCat ? infoCat.es_obsoleto : false;
 
     const esVIP_DB = esVIP && catNombre === 'DUAL_BAND';
     const esVIP_CATV = esVIP && catNombre === 'CATV';
@@ -233,10 +238,10 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
 
       if (esVIP_DB) {
         stratDB += row.stock;
-        arbolEstrategico[row.almacen].DB += row.stock;
+        if (arbolEstrategico[row.almacen]) arbolEstrategico[row.almacen].DB += row.stock;
       } else if (esVIP_CATV) {
         stratCATV += row.stock;
-        arbolEstrategico[row.almacen].CATV += row.stock;
+        if (arbolEstrategico[row.almacen]) arbolEstrategico[row.almacen].CATV += row.stock;
       }
 
       if (descNorm.includes('USAD')) {
@@ -246,7 +251,7 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
       }
     }
 
-    if (esAlmacenPrincipal) {
+    if (esAlmacenPrincipal && arbolOperativo[row.almacen]) {
       if (esVIP_DB) {
         arbolOperativo[row.almacen].DB += row.stock;
         arbolOperativo[row.almacen].itemsDB[row.descripcion] = (arbolOperativo[row.almacen].itemsDB[row.descripcion] || 0) + row.stock;
@@ -258,12 +263,12 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
         arbolOperativo[row.almacen].itemsOtras[row.descripcion] = (arbolOperativo[row.almacen].itemsOtras[row.descripcion] || 0) + row.stock;
       }
 
-      if (row.almacen === 'OBE_ALM_CATRIEL' && (esVIP_DB || esVIP_CATV)) {
+      if (row.almacen.includes('CATRIEL') && (esVIP_DB || esVIP_CATV)) {
         catrielCant += row.stock;
         itemsCatriel[row.descripcion] = (itemsCatriel[row.descripcion] || 0) + row.stock;
       }
     } 
-    else if (row.almacen === ALMACEN_DEV) {
+    else if (row.almacen.includes('DEVOLUCION') || row.almacen.includes('TRIAGE')) {
       devCant += row.stock;
       valorDevoluciones += valorFila;
       itemsDev[row.descripcion] = (itemsDev[row.descripcion] || 0) + row.stock;
@@ -272,17 +277,17 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
         devCatvCant += row.stock;
       }
     } 
-    else if (row.almacen === ALMACEN_DESC) {
-      descCant += row.stock;
-      valorDescarte += valorFila;
-      itemsDesc[row.descripcion] = (itemsDesc[row.descripcion] || 0) + row.stock;
-    }
-    else if (row.almacen === ALMACEN_DESC_VIP) {
+    else if (row.almacen.includes('DESCARTE_VIP')) {
       if (esVIP_DB || esVIP_CATV) {
         descVipCant += row.stock;
         valorDescVip += valorFila;
         itemsDescVip[row.descripcion] = (itemsDescVip[row.descripcion] || 0) + row.stock;
       }
+    }
+    else if (row.almacen.includes('DESCARTE')) {
+      descCant += row.stock;
+      valorDescarte += valorFila;
+      itemsDesc[row.descripcion] = (itemsDesc[row.descripcion] || 0) + row.stock;
     }
   });
 
@@ -378,6 +383,8 @@ function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, ar
 
 // RENDER: TÁCTICO CON TOOLTIPS
 function renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, valorDescarte, descVipCant, valorDescVip, catrielCant, itemsDev, itemsDesc, itemsDescVip, itemsCatriel) {
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+  
   const armarTooltipHTML = (titulo, objItems) => {
     let listHtml = `<strong style="color:#38bdf8; display:block; margin-bottom:6px; border-bottom:1px solid #334155; padding-bottom:4px;">${titulo}</strong>`;
     const entries = Object.entries(objItems);
@@ -393,7 +400,7 @@ function renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, v
 
   document.getElementById('grid-tactico-cards').innerHTML = `
     <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-      <div class="title" style="color:#475569;">📥 OBE_ALM_DEVOLUCIONES (A Probar)</div>
+      <div class="title" style="color:#475569;">📥 DEVOLUCIONES / TRIAGE [${sucActiva}]</div>
       <div class="value">${devCant.toLocaleString('es-AR')} un.</div>
       <div class="subtext" style="color:#64748b;">Capital Parado (ONUs): <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
       <div class="subtext" style="color:#c2410c; margin-top:3px; font-weight:600;">📺 Cantidad de CATV a probar: <strong style="color:#ea580c;">${devCatvCant.toLocaleString('es-AR')} un.</strong></div>
@@ -401,32 +408,34 @@ function renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, v
     </div>
 
     <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-      <div class="title" style="color:#475569;">🗑️ OBE_ALM_DESCARTE (General)</div>
+      <div class="title" style="color:#475569;">🗑️ DESCARTE GENERAL [${sucActiva}]</div>
       <div class="value">${descCant.toLocaleString('es-AR')} un.</div>
       <div class="subtext" style="color:#64748b;">Capital Afectado (ONUs): <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
       ${armarTooltipHTML('🗑️ Desglose Descarte', itemsDesc)}
     </div>
 
     <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #991b1b; color:#0f172a;">
-      <div class="title" style="color:#991b1b;">👑 OBE_ALM_DESCARTE_VIP</div>
+      <div class="title" style="color:#991b1b;">👑 DESCARTE VIP [${sucActiva}]</div>
       <div class="value">${descVipCant.toLocaleString('es-AR')} un.</div>
       <div class="subtext" style="color:#64748b;">Capital VIP Inmovilizado: <strong>$ ${Math.round(valorDescVip).toLocaleString('es-AR')} USD</strong></div>
       ${armarTooltipHTML('👑 Desglose Descarte VIP', itemsDescVip)}
     </div>
 
     <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-      <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO (OBE_CATRIEL)</div>
+      <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO / COMPRAS [${sucActiva}]</div>
       <div class="value">${catrielCant.toLocaleString('es-AR')} un.</div>
       <div class="subtext" style="color:#475569;">ONUs Estratégicas Nuevas</div>
-      ${armarTooltipHTML('🛒 Desglose Stock Nuevo (Catriel)', itemsCatriel)}
+      ${armarTooltipHTML('🛒 Desglose Stock Nuevo', itemsCatriel)}
     </div>
   `;
 }
 
-// RENDER: TABLA AUDITORÍA CONECTADA A SUPABASE
+// RENDER: TABLA AUDITORÍA FILTRADA POR SUCURSAL
 async function renderAuditoriaTabla() {
   const wrapper = document.getElementById('tablaAuditoriaWrapper');
   if (!wrapper) return;
+
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
   try {
     const { data: audData } = await supabaseClient
@@ -437,6 +446,8 @@ async function renderAuditoriaTabla() {
     if (audData) {
       audData.forEach(item => mapAuditoria.set(item.almacen_key, item));
     }
+
+    const listaFiltrada = LISTA_AUDITORIA.filter(item => perteneceASucursal(item.key, sucActiva));
 
     let html = `<table class="tabla-auditoria">
       <thead>
@@ -451,7 +462,7 @@ async function renderAuditoriaTabla() {
       </thead>
       <tbody>`;
 
-    LISTA_AUDITORIA.forEach(item => {
+    listaFiltrada.forEach(item => {
       const stockSistemaCalculado = stockData.reduce((acc, d) => {
         const dNorm = normalizar(d.descripcion);
         return (d.almacen === item.key && dNorm.includes('ONU')) ? acc + d.stock : acc;
@@ -507,37 +518,48 @@ async function renderAuditoriaTabla() {
   }
 }
 
-// RENDER: TABLA OPERATIVA CON SECCIONES DESPLEGABLES
+// RENDER: TABLA OPERATIVA ADAPTADA SEGÚN SUCURSAL SELECCIONADA
 function renderStockOperativo(arbol) {
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+
+  // Determinar qué columnas mostrar
+  const indicesVisibles = [];
+  SUCURSALES.forEach((s, idx) => {
+    if (perteneceASucursal(s, sucActiva)) indicesVisibles.push(idx);
+  });
+
+  const sucursalesFiltradas = indicesVisibles.map(i => SUCURSALES[i]);
+  const sucursalesCortasFiltradas = indicesVisibles.map(i => SUCURSALES_CORTAS[i]);
+
   let totDB = 0, totCATV = 0, totOtras = 0;
-  SUCURSALES.forEach(s => {
-    totDB += arbol[s].DB;
-    totCATV += arbol[s].CATV;
-    totOtras += arbol[s].Otras;
+  sucursalesFiltradas.forEach(s => {
+    totDB += arbol[s]?.DB || 0;
+    totCATV += arbol[s]?.CATV || 0;
+    totOtras += arbol[s]?.Otras || 0;
   });
 
   const catvModels = new Set();
   const dbModels = new Set();
   const otrasModels = new Set();
 
-  SUCURSALES.forEach(s => {
-    Object.keys(arbol[s].itemsCATV || {}).forEach(m => catvModels.add(m));
-    Object.keys(arbol[s].itemsDB || {}).forEach(m => dbModels.add(m));
-    Object.keys(arbol[s].itemsOtras || {}).forEach(m => otrasModels.add(m));
+  sucursalesFiltradas.forEach(s => {
+    Object.keys(arbol[s]?.itemsCATV || {}).forEach(m => catvModels.add(m));
+    Object.keys(arbol[s]?.itemsDB || {}).forEach(m => dbModels.add(m));
+    Object.keys(arbol[s]?.itemsOtras || {}).forEach(m => otrasModels.add(m));
   });
 
   let html = '<table class="arbol" style="width:100%; border-collapse:collapse; text-align:left;">';
   
   html += `<thead>
     <tr>
-      <td class="celda-total" colspan="${SUCURSALES.length + 1}" style="background:#0f172a; color:#f8fafc; font-weight:800; padding:10px; text-align:center;">
-        📦 TOTAL ONUs EN SUCURSALES: ${(totDB + totCATV + totOtras).toLocaleString('es-AR')} (VIP: ${(totDB + totCATV).toLocaleString('es-AR')} | Otras ONUs: ${totOtras.toLocaleString('es-AR')})
+      <td class="celda-total" colspan="${sucursalesFiltradas.length + 1}" style="background:#0f172a; color:#f8fafc; font-weight:800; padding:10px; text-align:center;">
+        📦 TOTAL ONUs [${sucActiva}]: ${(totDB + totCATV + totOtras).toLocaleString('es-AR')} (VIP: ${(totDB + totCATV).toLocaleString('es-AR')} | Otras ONUs: ${totOtras.toLocaleString('es-AR')})
       </td>
     </tr>
     <tr style="background:#1e293b; color:#38bdf8;">
       <th style="padding:10px; border:1px solid #334155;">Modelo / Descripción de ONU</th>`;
   
-  SUCURSALES_CORTAS.forEach(suc => {
+  sucursalesCortasFiltradas.forEach(suc => {
     html += `<th style="padding:10px; border:1px solid #334155; text-align:center; min-width:85px;">${suc}</th>`;
   });
   html += `</tr></thead><tbody>`;
@@ -547,8 +569,8 @@ function renderStockOperativo(arbol) {
       <td style="background:#ffedd5; color:#c2410c; font-weight:800; padding:8px 10px; border:1px solid #fed7aa;">
         <span id="arrow-catv-rows" style="display:inline-block; width:15px;">▶</span> 🟠 CATV VIP (${totCATV.toLocaleString('es-AR')} un.)
       </td>`;
-    SUCURSALES.forEach(s => {
-      const totalCatvSucursal = arbol[s].CATV || 0;
+    sucursalesFiltradas.forEach(s => {
+      const totalCatvSucursal = arbol[s]?.CATV || 0;
       html += `<td style="background:#ffedd5; color:#c2410c; font-weight:800; padding:8px 10px; border:1px solid #fed7aa; text-align:center;">
         ${totalCatvSucursal > 0 ? totalCatvSucursal.toLocaleString('es-AR') : ''}
       </td>`;
@@ -558,8 +580,8 @@ function renderStockOperativo(arbol) {
     Array.from(catvModels).sort().forEach(modelo => {
       html += `<tr class="catv-rows" style="display:none; border-bottom:1px solid #e2e8f0;">
         <td style="padding:8px 10px; font-weight:600; color:#1e293b; padding-left:25px;">${modelo}</td>`;
-      SUCURSALES.forEach(s => {
-        const cant = arbol[s].itemsCATV[modelo] || 0;
+      sucursalesFiltradas.forEach(s => {
+        const cant = arbol[s]?.itemsCATV[modelo] || 0;
         html += `<td style="padding:8px 10px; text-align:center; font-weight:700; color:#ea580c;">${cant > 0 ? cant.toLocaleString('es-AR') : ''}</td>`;
       });
       html += `</tr>`;
@@ -571,8 +593,8 @@ function renderStockOperativo(arbol) {
       <td style="background:#e0f2fe; color:#0369a1; font-weight:800; padding:8px 10px; border:1px solid #bae6fd;">
         <span id="arrow-db-rows" style="display:inline-block; width:15px;">▶</span> 🔵 DUAL BAND VIP (${totDB.toLocaleString('es-AR')} un.)
       </td>`;
-    SUCURSALES.forEach(s => {
-      const totalDbSucursal = arbol[s].DB || 0;
+    sucursalesFiltradas.forEach(s => {
+      const totalDbSucursal = arbol[s]?.DB || 0;
       html += `<td style="background:#e0f2fe; color:#0369a1; font-weight:800; padding:8px 10px; border:1px solid #bae6fd; text-align:center;">
         ${totalDbSucursal > 0 ? totalDbSucursal.toLocaleString('es-AR') : ''}
       </td>`;
@@ -582,8 +604,8 @@ function renderStockOperativo(arbol) {
     Array.from(dbModels).sort().forEach(modelo => {
       html += `<tr class="db-rows" style="display:none; border-bottom:1px solid #e2e8f0;">
         <td style="padding:8px 10px; font-weight:600; color:#1e293b; padding-left:25px;">${modelo}</td>`;
-      SUCURSALES.forEach(s => {
-        const cant = arbol[s].itemsDB[modelo] || 0;
+      sucursalesFiltradas.forEach(s => {
+        const cant = arbol[s]?.itemsDB[modelo] || 0;
         html += `<td style="padding:8px 10px; text-align:center; font-weight:700; color:#0284c7;">${cant > 0 ? cant.toLocaleString('es-AR') : ''}</td>`;
       });
       html += `</tr>`;
@@ -595,8 +617,8 @@ function renderStockOperativo(arbol) {
       <td style="background:#f1f5f9; color:#475569; font-weight:800; padding:8px 10px; border:1px solid #cbd5e1;">
         <span id="arrow-otras-rows" style="display:inline-block; width:15px;">▶</span> ⚙️ OTRAS ONUs / LEGACY (${totOtras.toLocaleString('es-AR')} un.)
       </td>`;
-    SUCURSALES.forEach(s => {
-      const totalOtrasSucursal = arbol[s].Otras || 0;
+    sucursalesFiltradas.forEach(s => {
+      const totalOtrasSucursal = arbol[s]?.Otras || 0;
       html += `<td style="background:#f1f5f9; color:#475569; font-weight:800; padding:8px 10px; border:1px solid #cbd5e1; text-align:center;">
         ${totalOtrasSucursal > 0 ? totalOtrasSucursal.toLocaleString('es-AR') : ''}
       </td>`;
@@ -606,8 +628,8 @@ function renderStockOperativo(arbol) {
     Array.from(otrasModels).sort().forEach(modelo => {
       html += `<tr class="otras-rows" style="display:none; border-bottom:1px solid #e2e8f0;">
         <td style="padding:8px 10px; font-weight:600; color:#334155; padding-left:25px;">${modelo}</td>`;
-      SUCURSALES.forEach(s => {
-        const cant = arbol[s].itemsOtras[modelo] || 0;
+      sucursalesFiltradas.forEach(s => {
+        const cant = arbol[s]?.itemsOtras[modelo] || 0;
         html += `<td style="padding:8px 10px; text-align:center; font-weight:700; color:#64748b;">${cant > 0 ? cant.toLocaleString('es-AR') : ''}</td>`;
       });
       html += `</tr>`;
@@ -667,17 +689,19 @@ async function cargarModuloControlAuditoria() {
 
 function filtrarTablaControlAuditoria() {
   const wrapper = document.getElementById('tablaControlDetalleWrapper');
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
   const filtroAlm = document.getElementById('filtro-control-almacen')?.value || 'TODOS';
   const soloDiferencias = document.getElementById('check-solo-diferencias')?.checked || false;
 
   let filtrados = memoriaControlDetalle.filter(item => {
+    const pasaSuc = perteneceASucursal(item.almacen_key, sucActiva);
     const pasaAlm = (filtroAlm === 'TODOS') || (item.almacen_key === filtroAlm);
     const pasaDif = soloDiferencias ? (item.diferencia !== 0) : true;
-    return pasaAlm && pasaDif;
+    return pasaSuc && pasaAlm && pasaDif;
   });
 
   if (filtrados.length === 0) {
-    wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;">No hay registros de auditoría que coincidan con los filtros seleccionados.</div>';
+    wrapper.innerHTML = `<div style="text-align:center; padding:20px; color:#64748b;">No hay registros de auditoría que coincidan con los filtros seleccionados [${sucActiva}].</div>`;
     return;
   }
 

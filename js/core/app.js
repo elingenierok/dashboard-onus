@@ -1,5 +1,5 @@
 // ====================================================
-// CORE: NAVEGACIÓN, ORQUESTACIÓN DE DATOS Y EVENTOS
+// CORE: NAVEGACIÓN Y EVENTOS DEL SISTEMA
 // ====================================================
 
 function switchTab(tabId) {
@@ -11,6 +11,18 @@ function switchTab(tabId) {
 
   if (targetContent) targetContent.classList.add('active');
   if (targetBtn) targetBtn.classList.add('active');
+
+  setTimeout(() => {
+    if ((tabId === 'tab-tendencias' || tabId === 'tendencias') && typeof cargarModuloTendencias === 'function') {
+      cargarModuloTendencias();
+    }
+    if (tabId === 'tab-stock' && window.kpiChart && typeof window.kpiChart.resize === 'function') {
+      window.kpiChart.resize();
+    }
+    if (tabId === 'tab-recupero' && window.recuperoChart && typeof window.recuperoChart.resize === 'function') {
+      window.recuperoChart.resize();
+    }
+  }, 50);
 }
 
 function cambiarSucursalGlobal() {
@@ -30,22 +42,18 @@ async function arrancarCargaDeDatos() {
     typeof cargarModuloRecupero === 'function' ? cargarModuloRecupero() : Promise.resolve(),
     typeof cargarModuloTendencias === 'function' ? cargarModuloTendencias() : Promise.resolve(),
     typeof cargarModuloAdmin === 'function' ? cargarModuloAdmin() : Promise.resolve(),
-    // ⬇️ RECARGA AUTOMÁTICA DEL DESPLEGABLE EN CADA CAMBIO DE SUCURSAL ⬇️
     typeof cargarCatalogoEquipos === 'function' ? cargarCatalogoEquipos() : Promise.resolve()
   ]);
 
   if (btn) { btn.textContent = '⚡ Actualizar Datos'; btn.disabled = false; }
 }
 
-// ESCUCHA DE EVENTOS GLOBAL
 window.addEventListener('DOMContentLoaded', () => {
-  // 1. Botón de actualización manual
   const btnReload = document.getElementById('btnReloadSupabase');
   if (btnReload) {
     btnReload.addEventListener('click', arrancarCargaDeDatos);
   }
 
-  // 2. Formulario de Login
   const formLogin = document.getElementById('login-form') || document.querySelector('#login-container form');
   if (formLogin) {
     formLogin.addEventListener('submit', (e) => {
@@ -54,7 +62,6 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 3. Botón de Login por ID
   const btnLogin = document.getElementById('btn-login') || document.getElementById('btn-ingresar');
   if (btnLogin) {
     btnLogin.addEventListener('click', (e) => {
@@ -63,7 +70,6 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 4. Verificar sesión
   if (typeof window.revisarSesionActiva === 'function') {
     window.revisarSesionActiva();
   }

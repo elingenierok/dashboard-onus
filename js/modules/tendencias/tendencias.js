@@ -6,7 +6,7 @@ const SUPABASE_URL_TEN = 'https://ovluxdezwvuonlwnymna.supabase.co';
 const SUPABASE_KEY_TEN = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
 const supabaseTendencias = supabase.createClient(SUPABASE_URL_TEN, SUPABASE_KEY_TEN);
 
-const COLORES_SUCURSAL = {
+const COLORES_SUCURSAL_TEN = {
   'OBE_ALM_PRINCIPAL': { nombre: 'OBE Principal', color: '#0284c7' },
   'OBE_ALM_CATRIEL':   { nombre: 'OBE Catriel',   color: '#38bdf8' },
   'SPD_ALM_PRINCIPAL': { nombre: 'San Pedro',     color: '#ea580c' },
@@ -15,11 +15,12 @@ const COLORES_SUCURSAL = {
   'ELDO_ALM_PRINCIPAL':{ nombre: 'Eldorado',      color: '#a855f7' }
 };
 
-let rawHistoricoData = [];
-let catalogoEquiposMemoria = [];
-let tendenciasChart = null;
+// 🔴 CAMBIO CLAVE: Prefijos 'ten_' para que no choquen con variables de stock.js
+let ten_rawHistoricoData = [];
+let ten_catalogoEquiposMemoria = [];
+let ten_tendenciasChart = null;
 
-function normalizar(txt) {
+function ten_normalizar(txt) {
   return (txt || '')
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -28,9 +29,9 @@ function normalizar(txt) {
     .toUpperCase();
 }
 
-function obtenerCategoriaCatalogo(descNorm) {
-  const encontrado = catalogoEquiposMemoria.find(item => {
-    const itemNorm = item.modelo_norm || normalizar(item.modelo);
+function ten_obtenerCategoriaCatalogo(descNorm) {
+  const encontrado = ten_catalogoEquiposMemoria.find(item => {
+    const itemNorm = item.modelo_norm || ten_normalizar(item.modelo);
     return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
   });
 
@@ -100,15 +101,15 @@ async function cargarModuloTendencias() {
       supabaseTendencias.from('catalogo_equipos').select('*')
     ]);
 
-    rawHistoricoData = resHist || [];
-    catalogoEquiposMemoria = resCat.data || [];
+    ten_rawHistoricoData = resHist || [];
+    ten_catalogoEquiposMemoria = resCat.data || [];
 
     if (tag) {
-      tag.textContent = `Supabase: ✅ ${rawHistoricoData.length} Reg. [${sucActiva}]`;
+      tag.textContent = `Supabase: ✅ ${ten_rawHistoricoData.length} Reg. [${sucActiva}]`;
       tag.className = 'file-tag ok';
     }
 
-    inicializarLimitesFechas();
+    ten_inicializarLimitesFechas();
     actualizarGraficoTendencias();
   } catch (err) {
     console.error('Error al consultar Supabase:', err);
@@ -147,10 +148,10 @@ async function descargarHistorialCompleto() {
   return allData;
 }
 
-function inicializarLimitesFechas() {
-  if (!rawHistoricoData.length) return;
+function ten_inicializarLimitesFechas() {
+  if (!ten_rawHistoricoData.length) return;
 
-  const todasFechas = [...new Set(rawHistoricoData.map(d => d.fecha_registro))].sort();
+  const todasFechas = [...new Set(ten_rawHistoricoData.map(d => d.fecha_registro))].sort();
   const inputDesde = document.getElementById('tendencia-desde');
   const inputHasta = document.getElementById('tendencia-hasta');
 
@@ -163,8 +164,9 @@ function inicializarLimitesFechas() {
   }
 }
 
+// Función global (sin prefijo ten_) para que funcione con los onchange del HTML
 function actualizarGraficoTendencias() {
-  if (!rawHistoricoData.length) return;
+  if (!ten_rawHistoricoData.length) return;
 
   const almacenesTildados = Array.from(document.querySelectorAll('#check-almacenes input:checked')).map(cb => cb.value);
   const onusTildadas = Array.from(document.querySelectorAll('#check-onus input:checked')).map(cb => cb.value);
@@ -178,7 +180,7 @@ function actualizarGraficoTendencias() {
   const incluirDB = onusTildadas.includes('DUAL_BAND');
   const incluirCATV = onusTildadas.includes('CATV');
 
-  const todasFechas = [...new Set(rawHistoricoData.map(d => d.fecha_registro))].sort();
+  const todasFechas = [...new Set(ten_rawHistoricoData.map(d => d.fecha_registro))].sort();
 
   let fechasVisibles = [...todasFechas];
   if (zoomVistaVal !== 'ALL') {
@@ -203,7 +205,7 @@ function actualizarGraficoTendencias() {
     todasFechas.forEach(f => mapaSuma[alm][f] = null);
   });
 
-  rawHistoricoData.forEach(row => {
+  ten_rawHistoricoData.forEach(row => {
     let alm = (row.almacen || '').trim().toUpperCase();
     if (alm === 'SPD_PRINCIPAL') alm = 'SPD_ALM_PRINCIPAL';
     if (alm === 'WND_PRINCIPAL' || alm === 'WND-PRINCIPAL') alm = 'WND_ALM_PRINCIPAL';
@@ -211,8 +213,8 @@ function actualizarGraficoTendencias() {
     if (!almacenesTildados.includes(alm)) return;
 
     const fecha = row.fecha_registro;
-    const descNorm = normalizar(row.descripcion);
-    const cat = obtenerCategoriaCatalogo(descNorm);
+    const descNorm = ten_normalizar(row.descripcion);
+    const cat = ten_obtenerCategoriaCatalogo(descNorm);
 
     const esDB = (cat === 'DUAL_BAND');
     const esCATV = (cat === 'CATV');
@@ -229,7 +231,7 @@ function actualizarGraficoTendencias() {
   let htmlEstimaciones = '';
 
   almacenesTildados.forEach(alm => {
-    const meta = COLORES_SUCURSAL[alm] || { nombre: alm, color: '#cbd5e1' };
+    const meta = COLORES_SUCURSAL_TEN[alm] || { nombre: alm, color: '#cbd5e1' };
     const dataPuntosVisibles = fechasVisibles.map(f => mapaSuma[alm][f]);
 
     datasets.push({
@@ -298,38 +300,35 @@ function actualizarGraficoTendencias() {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
-  if (tendenciasChart) {
-    tendenciasChart.data.labels = fechasVisibles;
-    tendenciasChart.data.datasets = datasets;
-    tendenciasChart.update();
-  } else {
-    tendenciasChart = new Chart(ctx, {
-      type: 'line',
-      data: { labels: fechasVisibles, datasets: datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { 
-            position: 'top', 
-            labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' } } 
-          },
-          tooltip: {
-            backgroundColor: '#0f172a',
-            titleColor: '#38bdf8',
-            bodyColor: '#f8fafc',
-            borderColor: '#334155',
-            borderWidth: 1,
-            padding: 10
-          }
-        },
-        scales: {
-          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-          y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
-        }
-      }
-    });
+  // Mantiene tu código original, solo cambiamos update() por destroy() para que el canvas no se comprima
+  if (ten_tendenciasChart) {
+    ten_tendenciasChart.destroy();
   }
+  
+  ten_tendenciasChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: fechasVisibles, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { 
+          position: 'top', 
+          labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' } } 
+        },
+        tooltip: {
+          backgroundColor: '#0f172a',
+          titleColor: '#38bdf8',
+          bodyColor: '#f8fafc',
+          borderColor: '#334155',
+          borderWidth: 1,
+          padding: 10
+        }
+      },
+      scales: {
+        x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
+      }
+    }
+  });
 }
-
-// INICIALIZACIÓN (Desacoplada para control centralizado desde app.js / auth.js)

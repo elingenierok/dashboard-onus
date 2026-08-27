@@ -121,15 +121,14 @@
     
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
       
-      <select id="sel-sucursal-global" onchange="cambiarSucursalGlobal()" ...>
-  <option value="OBE">🏬 Oberá (Matriz)</option>
-  <option value="SPD">🏬 San Pedro</option>
-  <option value="WND">🏬 Wanda</option>
-  <option value="ELDO">🏬 Eldorado</option>
-  <option value="ITU">🏬 Ituzaingó</option>
-
-  <option value="TODAS">🌐 Todas las Sucursales</option>
-</select>
+      <select id="sel-sucursal-global" onchange="cambiarSucursalGlobal()">
+        <option value="OBE">🏬 Oberá (Matriz)</option>
+        <option value="SPD">🏬 San Pedro</option>
+        <option value="WND">🏬 Wanda</option>
+        <option value="ELDO">🏬 Eldorado</option>
+        <option value="ITU">🏬 Ituzaingó</option>
+        <option value="TODAS">🌐 Todas las Sucursales</option>
+      </select>
 
       <span id="tagCSV" class="file-tag no">Sincronizando con Servidor...</span>
       
@@ -447,21 +446,21 @@
     </div>
   </div>
 </div>
+
 <!-- CAPA CORE (Control Maestro & Sesión) -->
 <script src="js/core/auth.js"></script>
 <script src="js/core/app.js"></script>
 
-<!-- SERVICIOS GENERALES -->
-<script src="js/services/reportes.js"></script>
-
 <!-- MÓDULOS DE NEGOCIO -->
 <script src="js/modules/stock/stock.js"></script>
 <script src="js/modules/recupero/recupero.js"></script>
-<script src="js/modules/recupero/recupero_ui.js"></script>
-<script src="js/modules/recupero/recupero_actions.js"></script>
+<script src="js/modules/recupero/recupero_ui.js"></script> <!-- Faltaba este -->
+<script src="js/modules/recupero/recupero_actions.js"></script> <!-- Faltaba este -->
 <script src="js/modules/tendencias/tendencias.js"></script>
-<script src="js/modules/ops/ops.js"></script>
 <script src="js/modules/admin/admin.js"></script>
+
+<!-- SERVICIOS GENERALES -->
+<script src="js/services/reportes.js"></script>
 
 </body>
 </html>
