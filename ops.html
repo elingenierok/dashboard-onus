@@ -8,12 +8,26 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 16px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-  .suite-container { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 16px; }
+  .suite-container { width: 100%; max-width: 580px; display: flex; flex-direction: column; gap: 16px; }
   
   .header { text-align: center; margin-bottom: 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
   .header h1 { font-size: 1.3rem; color: #38bdf8; font-weight: 800; }
   .header p { font-size: 0.8rem; color: #94a3b8; }
   .user-bar { display: flex; align-items: center; justify-content: space-between; width: 100%; background: #1e293b; padding: 8px 14px; border-radius: 8px; border: 1px solid #334155; font-size: 0.8rem; }
+
+  /* 🔍 ESTILOS DEL CONVERTIDOR GLOBAL DE SERIALES */
+  .sn-converter-box { background: #1e293b; border: 1px solid #0284c7; border-left: 4px solid #38bdf8; padding: 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
+  .sn-converter-title { font-size: 0.85rem; font-weight: 800; color: #38bdf8; display: flex; justify-content: space-between; align-items: center; }
+  .sn-input-main { background: #0f172a !important; border: 2px solid #0284c7 !important; color: #f8fafc !important; font-weight: 800; font-family: monospace; font-size: 1.05rem !important; letter-spacing: 1px; text-transform: uppercase; }
+  .sn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  @media (max-width: 480px) { .sn-grid { grid-template-columns: 1fr; } }
+  .sn-output-group { display: flex; flex-direction: column; gap: 3px; background: #0f172a; padding: 6px 8px; border-radius: 6px; border: 1px solid #334155; }
+  .sn-output-label { font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+  .sn-output-row { display: flex; gap: 4px; align-items: center; }
+  .sn-output-val { background: transparent; border: none; color: #4ade80; font-family: monospace; font-size: 0.88rem; font-weight: 700; width: 100%; outline: none; letter-spacing: 0.5px; }
+  .btn-copy { background: #334155; color: #f8fafc; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .btn-copy:hover { background: #0284c7; }
+  .btn-copy.copied { background: #166534; color: #bbf7d0; }
 
   .ops-nav { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; background: #1e293b; padding: 6px; border-radius: 10px; border: 1px solid #334155; }
   .ops-tab { padding: 10px 4px; border: none; background: transparent; color: #94a3b8; font-weight: 700; font-size: 0.78rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; text-align: center; }
@@ -114,6 +128,53 @@
       <button class="btn-logout" onclick="window.cerrarSesion()">Cerrar Sesión</button>
     </div>
   </header>
+
+  <!-- 🔍 CONVERTIDOR UNIVERSAL DE SERIALES (SIEMPRE VISIBLE) -->
+  <div class="sn-converter-box">
+    <div class="sn-converter-title">
+      <span>⚡ Convertidor Universal de Seriales ONU</span>
+      <span id="sn_detected_type" style="font-size: 0.72rem; color: #94a3b8; font-weight: normal;">Esperando ingreso...</span>
+    </div>
+    <input type="text" id="sn_input_global" class="sn-input-main" placeholder="Pegar SN (Ej: ZTEGDDB63200 o 5A544547DDB63200)..." oninput="procesarConversionSNGlobal()">
+    
+    <div class="sn-grid">
+      <!-- Output 1 -->
+      <div class="sn-output-group">
+        <span class="sn-output-label">🏷️ Corto Físico (Etiqueta ASCII)</span>
+        <div class="sn-output-row">
+          <input type="text" id="sn_out_corto_fisico" class="sn-output-val" readonly placeholder="---">
+          <button type="button" class="btn-copy" onclick="copiarOutputSN('sn_out_corto_fisico', this)">📋 Copiar</button>
+        </div>
+      </div>
+
+      <!-- Output 2 -->
+      <div class="sn-output-group">
+        <span class="sn-output-label">🔢 Largo Físico (HEX)</span>
+        <div class="sn-output-row">
+          <input type="text" id="sn_out_largo_fisico" class="sn-output-val" readonly placeholder="---">
+          <button type="button" class="btn-copy" onclick="copiarOutputSN('sn_out_largo_fisico', this)">📋 Copiar</button>
+        </div>
+      </div>
+
+      <!-- Output 3 -->
+      <div class="sn-output-group">
+        <span class="sn-output-label">🌐 Corto OLT (Flasheado HWTC)</span>
+        <div class="sn-output-row">
+          <input type="text" id="sn_out_corto_olt" class="sn-output-val" readonly placeholder="---">
+          <button type="button" class="btn-copy" onclick="copiarOutputSN('sn_out_corto_olt', this)">📋 Copiar</button>
+        </div>
+      </div>
+
+      <!-- Output 4 -->
+      <div class="sn-output-group">
+        <span class="sn-output-label">💻 Largo OLT (HEX Flasheado)</span>
+        <div class="sn-output-row">
+          <input type="text" id="sn_out_largo_olt" class="sn-output-val" readonly placeholder="---">
+          <button type="button" class="btn-copy" onclick="copiarOutputSN('sn_out_largo_olt', this)">📋 Copiar</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <nav class="ops-nav">
     <button class="ops-tab active" onclick="switchOps('form-carga', this)">📥 1. CARGA</button>
@@ -305,6 +366,106 @@
 <script src="js/core/auth.js"></script>
 <script src="js/core/app.js"></script>
 <script src="js/modules/ops/ops.js"></script>
+
+<!-- ⚡ LÓGICA AUTÓNOMA DEL CONVERTIDOR UNIVERSAL DE SERIALES -->
+<script>
+function procesarConversionSNGlobal() {
+  const rawInput = document.getElementById('sn_input_global').value.trim().toUpperCase().replace(/[\s\:\-\.]/g, '');
+  const lblType = document.getElementById('sn_detected_type');
+
+  const outCortoFisico = document.getElementById('sn_out_corto_fisico');
+  const outLargoFisico = document.getElementById('sn_out_largo_fisico');
+  const outCortoOLT = document.getElementById('sn_out_corto_olt');
+  const outLargoOLT = document.getElementById('sn_out_largo_olt');
+
+  if (!rawInput || rawInput.length < 8) {
+    lblType.textContent = "Esperando ingreso...";
+    lblType.style.color = "#94a3b8";
+    outCortoFisico.value = "";
+    outLargoFisico.value = "";
+    outCortoOLT.value = "";
+    outLargoOLT.value = "";
+    return;
+  }
+
+  // Extraer sufijo (siempre los últimos 8 caracteres)
+  const sufijo = rawInput.slice(-8);
+  const prefijo = rawInput.slice(0, -8);
+
+  // Mapeos de marcas
+  const MAP_HEX_TO_ASCII = { '5A544547': 'ZTEG', '48575443': 'HWTC' };
+  const MAP_ASCII_TO_HEX = { 'ZTEG': '5A544547', 'HWTC': '48575443' };
+
+  let vendorASCII = "";
+  let vendorHEX = "";
+  let esZTE = false;
+
+  // Detección automática del formato de entrada
+  if (prefijo === "5A544547" || prefijo === "ZTEG") {
+    vendorASCII = "ZTEG";
+    vendorHEX = "5A544547";
+    esZTE = true;
+    lblType.textContent = "DETECTADO: ZTE (Físico/Nativo)";
+    lblType.style.color = "#ea580c";
+  } else if (prefijo === "48575443" || prefijo === "HWTC") {
+    vendorASCII = "HWTC";
+    vendorHEX = "48575443";
+    esZTE = false;
+    lblType.textContent = "DETECTADO: Huawei / ZTE Flasheado";
+    lblType.style.color = "#38bdf8";
+  } else {
+    // Si no es un Vendor ID conocido, convertir genéricamente si tiene 4 letras o 8 hex
+    if (prefijo.length === 4 && /^[A-Z]+$/.test(prefijo)) {
+      vendorASCII = prefijo;
+      vendorHEX = Array.from(prefijo).map(c => c.charCodeAt(0).toString(16).toUpperCase()).join('');
+    } else if (prefijo.length === 8 && /^[0-9A-F]+$/.test(prefijo)) {
+      vendorHEX = prefijo;
+      let ascii = "";
+      for (let i = 0; i < prefijo.length; i += 2) {
+        ascii += String.fromCharCode(parseInt(prefijo.substr(i, 2), 16));
+      }
+      vendorASCII = ascii;
+    } else {
+      vendorASCII = "ZTEG"; // Fallback por defecto si no especifica
+      vendorHEX = "5A544547";
+      esZTE = true;
+    }
+    lblType.textContent = `DETECTADO: Genérico [${vendorASCII}]`;
+    lblType.style.color = "#a855f7";
+  }
+
+  // Llenado de salidas
+  if (esZTE) {
+    outCortoFisico.value = `ZTEG${sufijo}`;
+    outLargoFisico.value = `5A544547${sufijo}`;
+    outCortoOLT.value = `HWTC${sufijo}`;
+    outLargoOLT.value = `48575443${sufijo}`;
+  } else {
+    // Huawei Nativo o ZTE ya flasheado a Huawei
+    outCortoFisico.value = `${vendorASCII}${sufijo}`;
+    outLargoFisico.value = `${vendorHEX}${sufijo}`;
+    outCortoOLT.value = `HWTC${sufijo}`;
+    outLargoOLT.value = `48575443${sufijo}`;
+  }
+}
+
+function copiarOutputSN(idInput, btn) {
+  const el = document.getElementById(idInput);
+  if (!el || !el.value) return;
+
+  navigator.clipboard.writeText(el.value).then(() => {
+    const txtOrig = btn.textContent;
+    btn.textContent = "✅ ¡Copiado!";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = txtOrig;
+      btn.classList.remove("copied");
+    }, 1200);
+  }).catch(err => {
+    console.error("Error al copiar:", err);
+  });
+}
+</script>
 
 </body>
 </html>
