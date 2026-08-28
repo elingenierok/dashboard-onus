@@ -111,6 +111,12 @@ function procesarDatosRecupero(data, catalogo) {
   let capitalRevalorizado = 0;
   let recuperadosHoy = 0;
 
+  // 🚚 NUEVOS CONTADORES DE ORIGEN / CANAL
+  let origenPersonalRetiro = 0;
+  let origenTecnicoReclamos = 0;
+  let origenSucursal = 0;
+  let origenOtros = 0;
+
   const desgloseOperativo = {};
   const itemsIngresadosHoy = [];
   const itemsVipTesteadosHoy = [];
@@ -121,6 +127,18 @@ function procesarDatosRecupero(data, catalogo) {
     const descNorm = normalizar(desc);
     const condicion = normalizar(row.condicion || row.estado_final || row.estado || row.veredicto || '');
     
+    // 🔍 Clasificación por Origen (revisa 'origen' o 'almacen_origen')
+    const origenRaw = normalizar(row.origen || row.almacen_origen || '');
+    if (origenRaw.includes('RETIRO') || origenRaw.includes('PERSONAL')) {
+      origenPersonalRetiro += cant;
+    } else if (origenRaw.includes('RECLAMO') || origenRaw.includes('TECNICO') || origenRaw.includes('TÉCNICO')) {
+      origenTecnicoReclamos += cant;
+    } else if (origenRaw.includes('SUCURSAL') || origenRaw.includes('MOSTRADOR') || origenRaw.includes('DEVOLUCION')) {
+      origenSucursal += cant;
+    } else {
+      origenOtros += cant;
+    }
+
     const infoCat = obtenerInfoCatalogo(descNorm, catalogo);
     const esEquipoVIP = infoCat.esVIP;
     const precioUnit = infoCat.precioUsd;
@@ -193,7 +211,12 @@ function procesarDatosRecupero(data, catalogo) {
     recuperadosHoy,
     itemsIngresadosHoy,
     itemsVipTesteadosHoy,
-    desgloseOperativo
+    desgloseOperativo,
+    // 🚚 Métrica exportada para la UI
+    origenPersonalRetiro,
+    origenTecnicoReclamos,
+    origenSucursal,
+    origenOtros
   };
 }
 

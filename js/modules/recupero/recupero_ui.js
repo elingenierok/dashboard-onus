@@ -85,7 +85,19 @@ function renderRecuperoTactico(est) {
   const container = document.getElementById('grid-recupero-cards');
   if (!container) return;
 
+  // 📐 FORZAR GRID 2x2 EN EL CONTENEDOR
+  container.style.display = 'grid';
+  container.style.gridTemplateColumns = 'repeat(auto-fit, minmax(420px, 1fr))';
+  container.style.gap = '16px';
+  container.style.width = '100%';
+
   const vipRecibidos = est.totalRecibidos - est.directoDescarteObs;
+
+  // Cálculo de Porcentajes de Origen
+  const totalConOrigen = (est.origenPersonalRetiro + est.origenTecnicoReclamos + est.origenSucursal + est.origenOtros) || 1;
+  const pctRetiro = ((est.origenPersonalRetiro / totalConOrigen) * 100).toFixed(1);
+  const pctReclamos = ((est.origenTecnicoReclamos / totalConOrigen) * 100).toFixed(1);
+  const pctSucursal = ((est.origenSucursal / totalConOrigen) * 100).toFixed(1);
 
   let filasIngresoHoy = est.itemsIngresadosHoy.length === 0
     ? `<tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:8px;">Sin ingresos registrados el día de hoy.</td></tr>`
@@ -110,8 +122,8 @@ function renderRecuperoTactico(est) {
       `).join('');
 
   container.innerHTML = `
-    <!-- BLOQUE 1: DEL TOTAL RECIBIDO -->
-    <div style="flex: 1; min-width: 500px; background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+    <!-- TARJETA 1 (ARRIBA IZQUIERDA): DEL TOTAL RECIBIDO -->
+    <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%;">
       <div style="font-size: 0.82rem; font-weight: 800; color: #f8fafc; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
         <span>📦 Del total recibido</span>
         <button id="btn-detalle-ingresos-hoy" onclick="toggleDetalleRecupero('detalle-ingresos-hoy')" style="background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:0.72rem; cursor:pointer; font-weight:700;">
@@ -123,23 +135,23 @@ function renderRecuperoTactico(est) {
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; flex: 1;">
           <div class="kpi-card-dark" style="background: #1e293b; border-color: #334155; padding: 10px;">
             <div class="title" style="color: #cbd5e1; font-size: 0.72rem;">📥 RECIBIDOS</div>
-            <div class="value" style="color: #f8fafc; font-size: 1.4rem;">${est.totalRecibidos.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
+            <div class="value" style="color: #f8fafc; font-size: 1.3rem;">${est.totalRecibidos.toLocaleString('es-AR')} <span style="font-size:0.75rem;">un.</span></div>
             <div class="subtext" style="color: #94a3b8;">Bruto Ingreso</div>
           </div>
           <div class="kpi-card-dark" style="background: #1e293b; border-color: #eab308; padding: 10px;">
             <div class="title" style="color: #fde047; font-size: 0.72rem;">📼 DESCARTE OBS.</div>
-            <div class="value" style="color: #fde047; font-size: 1.4rem;">${est.directoDescarteObs.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
+            <div class="value" style="color: #fde047; font-size: 1.3rem;">${est.directoDescarteObs.toLocaleString('es-AR')} <span style="font-size:0.75rem;">un.</span></div>
             <div class="subtext" style="color: #cbd5e1;">Sin Prueba</div>
           </div>
         </div>
-        <div style="width: 80px; height: 80px; position: relative; flex-shrink: 0;">
+        <div style="width: 75px; height: 75px; position: relative; flex-shrink: 0;">
           <canvas id="chartRecuperoTotalPie"></canvas>
         </div>
       </div>
 
       <div id="detalle-ingresos-hoy" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #334155;">
         <strong style="font-size:0.75rem; color:#38bdf8; display:block; margin-bottom:6px;">📋 Equipos ingresados en la fecha (${est.itemsIngresadosHoy.length} un.)</strong>
-        <div style="max-height: 360px; overflow-y: auto;">
+        <div style="max-height: 250px; overflow-y: auto;">
           <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
             <thead>
               <tr style="background:#1e293b; color:#94a3b8;">
@@ -152,8 +164,41 @@ function renderRecuperoTactico(est) {
       </div>
     </div>
 
-    <!-- BLOQUE 2: DE LOS EQUIPOS VIP -->
-    <div style="flex: 2; min-width: 420px; background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+    <!-- TARJETA 2 (ARRIBA DERECHA): CANAL DE INGRESO / ORIGEN -->
+    <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%;">
+      <div style="font-size: 0.82rem; font-weight: 800; color: #f8fafc; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
+        <span>🚚 Canal de Ingreso / Origen</span>
+        <span style="font-size: 0.72rem; color: #38bdf8; background: #1e293b; padding: 2px 8px; border-radius: 4px; border: 1px solid #334155; font-weight: 700;">
+          ${est.origenPersonalRetiro + est.origenTecnicoReclamos + est.origenSucursal} un.
+        </span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: center;">
+        <!-- Personal Retiro -->
+        <div class="kpi-card-dark" style="background: #1e293b; border-color: #0284c7; border-top: 3px solid #38bdf8; padding: 10px 6px; text-align: center;">
+          <div style="font-size: 0.68rem; color: #38bdf8; font-weight: 700; text-transform: uppercase;">Personal Retiro</div>
+          <div style="font-size: 1.25rem; font-weight: 800; color: #f8fafc; margin: 2px 0;">${est.origenPersonalRetiro} <span style="font-size:0.7rem; color:#cbd5e1;">un.</span></div>
+          <div style="font-size: 0.68rem; color: #38bdf8; font-weight: bold;">${pctRetiro}%</div>
+        </div>
+
+        <!-- Técnico Reclamos -->
+        <div class="kpi-card-dark" style="background: #1e293b; border-color: #ca8a04; border-top: 3px solid #fde047; padding: 10px 6px; text-align: center;">
+          <div style="font-size: 0.68rem; color: #fde047; font-weight: 700; text-transform: uppercase;">Téc. Reclamos</div>
+          <div style="font-size: 1.25rem; font-weight: 800; color: #f8fafc; margin: 2px 0;">${est.origenTecnicoReclamos} <span style="font-size:0.7rem; color:#cbd5e1;">un.</span></div>
+          <div style="font-size: 0.68rem; color: #fde047; font-weight: bold;">${pctReclamos}%</div>
+        </div>
+
+        <!-- Sucursal / Mostrador -->
+        <div class="kpi-card-dark" style="background: #1e293b; border-color: #9333ea; border-top: 3px solid #c084fc; padding: 10px 6px; text-align: center;">
+          <div style="font-size: 0.68rem; color: #c084fc; font-weight: 700; text-transform: uppercase;">Suc. / Mostrador</div>
+          <div style="font-size: 1.25rem; font-weight: 800; color: #f8fafc; margin: 2px 0;">${est.origenSucursal} <span style="font-size:0.7rem; color:#cbd5e1;">un.</span></div>
+          <div style="font-size: 0.68rem; color: #c084fc; font-weight: bold;">${pctSucursal}%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TARJETA 3 (ABAJO IZQUIERDA): DE LOS EQUIPOS VIP -->
+    <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%;">
       <div style="font-size: 0.82rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
         <span>⭐ De los equipos VIP</span>
         <button id="btn-detalle-vip-hoy" onclick="toggleDetalleRecupero('detalle-vip-hoy')" style="background:#1e293b; color:#4ade80; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:0.72rem; cursor:pointer; font-weight:700;">
@@ -161,37 +206,33 @@ function renderRecuperoTactico(est) {
         </button>
       </div>
       
-      <div style="display: flex; gap: 12px; align-items: center; justify-content: space-between;">
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; flex: 1;">
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #16a34a; padding: 10px;">
-            <div class="title" style="color: #4ade80; font-size: 0.72rem;">♻️ EN CIRCULACIÓN</div>
-            <div class="value" style="color: #4ade80; font-size: 1.4rem;">${est.enCirculacionVIP.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
-            <div class="subtext" style="color: #cbd5e1;">VIP Recuperados</div>
+      <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: 1;">
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #16a34a; padding: 8px 4px; text-align:center;">
+            <div class="title" style="color: #4ade80; font-size: 0.65rem;">CIRCULACIÓN</div>
+            <div class="value" style="color: #4ade80; font-size: 1.1rem;">${est.enCirculacionVIP} <span style="font-size:0.65rem;">un.</span></div>
           </div>
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #dc2626; padding: 10px;">
-            <div class="title" style="color: #f87171; font-size: 0.72rem;">🗑️ FUERA CIRC.</div>
-            <div class="value" style="color: #f87171; font-size: 1.4rem;">${est.fueraCirculacionVIP.toLocaleString('es-AR')} <span style="font-size:0.8rem;">un.</span></div>
-            <div class="subtext" style="color: #cbd5e1;">Descarte VIP</div>
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #dc2626; padding: 8px 4px; text-align:center;">
+            <div class="title" style="color: #f87171; font-size: 0.65rem;">FUERA CIRC.</div>
+            <div class="value" style="color: #f87171; font-size: 1.1rem;">${est.fueraCirculacionVIP} <span style="font-size:0.65rem;">un.</span></div>
           </div>
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #0284c7; padding: 10px;">
-            <div class="title" style="color: #38bdf8; font-size: 0.72rem;">📈 % REAPROV.</div>
-            <div class="value" style="color: #38bdf8; font-size: 1.4rem;">${est.pctReaprovechamiento}%</div>
-            <div class="subtext" style="color: #cbd5e1;">Efectividad VIP</div>
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #0284c7; padding: 8px 4px; text-align:center;">
+            <div class="title" style="color: #38bdf8; font-size: 0.65rem;">% REAPROV.</div>
+            <div class="value" style="color: #38bdf8; font-size: 1.1rem;">${est.pctReaprovechamiento}%</div>
           </div>
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #16a34a; padding: 10px;">
-            <div class="title" style="color: #4ade80; font-size: 0.72rem;">💵 VALOR PROM/TOT</div>
-            <div class="value" style="color: #4ade80; font-size: 1.2rem;">$ ${est.valorPromedioRecuperado} <span style="font-size:0.75rem;">USD/un</span></div>
-            <div class="subtext" style="color: #cbd5e1;">Total: <strong style="color: #f8fafc;">$ ${Math.round(est.capitalTotal).toLocaleString('es-AR')} USD</strong></div>
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #16a34a; padding: 8px 4px; text-align:center;">
+            <div class="title" style="color: #4ade80; font-size: 0.65rem;">CAPITAL TOTAL</div>
+            <div class="value" style="color: #4ade80; font-size: 0.95rem;">$ ${Math.round(est.capitalTotal).toLocaleString('es-AR')}</div>
           </div>
         </div>
-        <div style="width: 80px; height: 80px; position: relative; flex-shrink: 0;">
+        <div style="width: 75px; height: 75px; position: relative; flex-shrink: 0;">
           <canvas id="chartRecuperoVipPie"></canvas>
         </div>
       </div>
 
       <div id="detalle-vip-hoy" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #334155;">
         <strong style="font-size:0.75rem; color:#4ade80; display:block; margin-bottom:6px;">🔬 Equipos VIP probados en la fecha (${est.itemsVipTesteadosHoy.length} un.)</strong>
-        <div style="max-height: 360px; overflow-y: auto;">
+        <div style="max-height: 250px; overflow-y: auto;">
           <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
             <thead>
               <tr style="background:#1e293b; color:#94a3b8;">
@@ -204,14 +245,16 @@ function renderRecuperoTactico(est) {
       </div>
     </div>
 
-    <!-- BLOQUE 3: VELOCÍMETRO META DIARIA -->
-    <div style="flex: 1; min-width: 220px; background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+    <!-- TARJETA 4 (ABAJO DERECHA): VELOCÍMETRO META DIARIA -->
+    <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%;">
       <div style="font-size: 0.82rem; font-weight: 800; color: #4ade80; text-transform: uppercase; letter-spacing: 0.5px; text-align: center;">⚡ Ritmo Diario (Meta 50 un.)</div>
-      <div style="width: 150px; height: 80px; position: relative; margin-top: 6px;">
+      
+      <div style="width: 160px; height: 85px; position: relative; margin-top: 4px;">
         <canvas id="chartRecuperoGauge"></canvas>
       </div>
-      <div style="text-align: center; margin-top: -12px;">
-        <span style="font-size: 1.5rem; font-weight: 900; color: #4ade80;">${est.recuperadosHoy}</span>
+
+      <div style="text-align: center; margin-top: -6px;">
+        <span style="font-size: 1.4rem; font-weight: 900; color: #4ade80;">${est.recuperadosHoy}</span>
         <span style="font-size: 0.85rem; font-weight: 700; color: #cbd5e1;"> / 50 un. hoy</span>
       </div>
     </div>
