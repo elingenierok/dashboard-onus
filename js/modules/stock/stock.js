@@ -381,51 +381,86 @@ function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, ar
   }
 }
 
-// RENDER: TÁCTICO CON TOOLTIPS
+// CONTROL GLOBAL DE DESPLIEGUE DE TARJETAS TÁCTICAS
+window.toggleDesgloseStock = function(id) {
+  const el = document.getElementById(id);
+  const btn = document.getElementById(`btn-${id}`);
+  if (!el) return;
+  const visible = el.style.display === 'block';
+  el.style.display = visible ? 'none' : 'block';
+  if (btn) {
+    btn.textContent = visible ? '🔽 Ver Desglose' : '🔼 Ocultar Desglose';
+  }
+};
+
+// RENDER: TÁCTICO CON DESGLOSE DESPLEGABLE EN TARJETA
 function renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, valorDescarte, descVipCant, valorDescVip, catrielCant, itemsDev, itemsDesc, itemsDescVip, itemsCatriel) {
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
-  
-  const armarTooltipHTML = (titulo, objItems) => {
-    let listHtml = `<strong style="color:#38bdf8; display:block; margin-bottom:6px; border-bottom:1px solid #334155; padding-bottom:4px;">${titulo}</strong>`;
+
+  const armarDesgloseHTML = (idUnico, objItems) => {
     const entries = Object.entries(objItems);
+    let listHtml = '';
+
     if (entries.length === 0) {
-      listHtml += '<span style="color:#94a3b8; font-style:italic;">Sin ítems registrados</span>';
+      listHtml = '<div style="color:#94a3b8; font-style:italic; font-size:0.75rem; padding:6px 0; text-align:center;">Sin ítems registrados</div>';
     } else {
       entries.forEach(([desc, cant]) => {
-        listHtml += `<div style="margin-bottom:3px; color:#cbd5e1;">• ${desc}: <strong style="color:#f8fafc;">${cant.toLocaleString('es-AR')} un.</strong></div>`;
+        listHtml += `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #e2e8f0; font-size:0.75rem;">
+            <span style="font-weight:600; color:#334155; text-align:left; flex:1; padding-right:8px; line-height:1.2;">• ${desc}</span>
+            <strong style="color:#0284c7; background:#e0f2fe; padding:2px 6px; border-radius:4px; font-size:0.75rem; white-space:nowrap;">${cant.toLocaleString('es-AR')} un.</strong>
+          </div>`;
       });
     }
-    return `<div class="kpi-card-tooltip">${listHtml}</div>`;
+
+    return `
+      <div style="margin-top:10px; border-top:1px solid #e2e8f0; padding-top:8px;">
+        <button id="btn-${idUnico}" onclick="toggleDesgloseStock('${idUnico}')" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:5px 10px; border-radius:6px; font-size:0.72rem; font-weight:700; cursor:pointer; width:100%; text-align:center; transition:all 0.2s;">
+          🔽 Ver Desglose
+        </button>
+        <div id="${idUnico}" style="display:none; margin-top:8px; max-height:180px; overflow-y:auto; padding-right:4px; border:1px solid #cbd5e1; background:#ffffff; padding:6px; border-radius:6px;">
+          ${listHtml}
+        </div>
+      </div>
+    `;
   };
 
   document.getElementById('grid-tactico-cards').innerHTML = `
-    <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-      <div class="title" style="color:#475569;">📥 DEVOLUCIONES / TRIAGE [${sucActiva}]</div>
-      <div class="value">${devCant.toLocaleString('es-AR')} un.</div>
-      <div class="subtext" style="color:#64748b;">Capital Parado (ONUs): <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
-      <div class="subtext" style="color:#c2410c; margin-top:3px; font-weight:600;">📺 Cantidad de CATV a probar: <strong style="color:#ea580c;">${devCatvCant.toLocaleString('es-AR')} un.</strong></div>
-      ${armarTooltipHTML('📥 Desglose Devoluciones', itemsDev)}
+    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; display:flex; flex-direction:column; justify-content:space-between;">
+      <div>
+        <div class="title" style="color:#475569;">📥 DEVOLUCIONES / TRIAGE [${sucActiva}]</div>
+        <div class="value">${devCant.toLocaleString('es-AR')} un.</div>
+        <div class="subtext" style="color:#64748b;">Capital Parado (ONUs): <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
+        <div class="subtext" style="color:#c2410c; margin-top:3px; font-weight:600;">📺 Cantidad de CATV a probar: <strong style="color:#ea580c;">${devCatvCant.toLocaleString('es-AR')} un.</strong></div>
+      </div>
+      ${armarDesgloseHTML('desglose-dev', itemsDev)}
     </div>
 
-    <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-      <div class="title" style="color:#475569;">🗑️ DESCARTE GENERAL [${sucActiva}]</div>
-      <div class="value">${descCant.toLocaleString('es-AR')} un.</div>
-      <div class="subtext" style="color:#64748b;">Capital Afectado (ONUs): <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
-      ${armarTooltipHTML('🗑️ Desglose Descarte', itemsDesc)}
+    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; display:flex; flex-direction:column; justify-space-between;">
+      <div>
+        <div class="title" style="color:#475569;">🗑️ DESCARTE GENERAL [${sucActiva}]</div>
+        <div class="value">${descCant.toLocaleString('es-AR')} un.</div>
+        <div class="subtext" style="color:#64748b;">Capital Afectado (ONUs): <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
+      </div>
+      ${armarDesgloseHTML('desglose-desc', itemsDesc)}
     </div>
 
-    <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #991b1b; color:#0f172a;">
-      <div class="title" style="color:#991b1b;">👑 DESCARTE VIP [${sucActiva}]</div>
-      <div class="value">${descVipCant.toLocaleString('es-AR')} un.</div>
-      <div class="subtext" style="color:#64748b;">Capital VIP Inmovilizado: <strong>$ ${Math.round(valorDescVip).toLocaleString('es-AR')} USD</strong></div>
-      ${armarTooltipHTML('👑 Desglose Descarte VIP', itemsDescVip)}
+    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #991b1b; color:#0f172a; display:flex; flex-direction:column; justify-space-between;">
+      <div>
+        <div class="title" style="color:#991b1b;">👑 DESCARTE VIP [${sucActiva}]</div>
+        <div class="value">${descVipCant.toLocaleString('es-AR')} un.</div>
+        <div class="subtext" style="color:#64748b;">Capital VIP Inmovilizado: <strong>$ ${Math.round(valorDescVip).toLocaleString('es-AR')} USD</strong></div>
+      </div>
+      ${armarDesgloseHTML('desglose-desc-vip', itemsDescVip)}
     </div>
 
-    <div class="kpi-card-dark kpi-tooltip-container" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a;">
-      <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO / COMPRAS [${sucActiva}]</div>
-      <div class="value">${catrielCant.toLocaleString('es-AR')} un.</div>
-      <div class="subtext" style="color:#475569;">ONUs Estratégicas Nuevas</div>
-      ${armarTooltipHTML('🛒 Desglose Stock Nuevo', itemsCatriel)}
+    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; display:flex; flex-direction:column; justify-space-between;">
+      <div>
+        <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO / COMPRAS [${sucActiva}]</div>
+        <div class="value">${catrielCant.toLocaleString('es-AR')} un.</div>
+        <div class="subtext" style="color:#475569;">ONUs Estratégicas Nuevas</div>
+      </div>
+      ${armarDesgloseHTML('desglose-catriel', itemsCatriel)}
     </div>
   `;
 }
