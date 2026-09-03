@@ -135,101 +135,133 @@ function switchOps(tabId, btn) {
   document.getElementById(tabId)?.classList.add('active');
 }
 
-// 1. CARGA DE EQUIPOS (CON CONFIRMACIÓN DOBLE & SELLADO MULTISUCURSAL)
+// 1. CARGA DE EQUIPOS (CON CONFIRMACIÓN DOBLE, SELLADO MULTISUCURSAL Y FUSIÓN DE REGISTROS)
 document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  const btnSubmitCarga = document.querySelector('#form-carga .btn-submit');
+  if (btnSubmitCarga) btnSubmitCarga.disabled = true; // Previene doble clic
+
   const msg = document.getElementById('statusCarga');
   const sn = document.getElementById('cg_serial')?.value.trim().toUpperCase();
   const modelo = document.getElementById('cg_modelo')?.value;
+  const origen = document.getElementById('cg_origen')?.value || 'Sucursal / Mostrador';
   const detalleTecnico = document.getElementById('cg_tecnico')?.value.trim();
   const sucActiva = obtenerSucursalOps();
-  const operadorNombre = document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
+  const operadorNombre = window.USUARIO_NOMBRE_MOSTRAR || document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
 
   if (!sn || !modelo) {
     if (msg) {
       msg.textContent = '⚠️ Debe ingresar el Número de Serie y seleccionar un Modelo.';
       msg.style.color = '#fde047';
     }
+    if (btnSubmitCarga) btnSubmitCarga.disabled = false;
     return;
   }
 
   const mensajeConfirmacion = `⚠️ CONFIRMACIÓN DE INGRESO [Sucursal: ${sucActiva}]\n\n` +
                               `¿Seguro que desea guardar este registro?\n\n` +
-                              `• Número de Serie (SN): ${sn}\n` +
-                              `• Modelo de Equipo: ${modelo}`;
+                              `• SN: ${sn}\n` +
+                              `• Modelo: ${modelo}`;
 
   if (!window.confirm(mensajeConfirmacion)) {
     if (msg) {
       msg.textContent = '⏹️ Carga cancelada por el operador.';
       msg.style.color = '#cbd5e1';
     }
+    if (btnSubmitCarga) btnSubmitCarga.disabled = false;
     return;
   }
 
   if (msg) {
-    msg.textContent = `⏳ Verificando duplicados en mesa activa de ${sucActiva}...`;
+    msg.textContent = `⏳ Verificando registros de ${sucActiva}...`;
     msg.style.color = '#38bdf8';
   }
 
-  let checkQuery = supabaseOps
-    .from('recupero_operativo')
-    .select('sn, condicion, fecha_ingreso')
-    .eq('sn', sn);
-
-  if (sucActiva !== 'TODAS') {
-    checkQuery = checkQuery.eq('sucursal_id', sucActiva);
-  }
-
-  const { data: exist } = await checkQuery.limit(1);
-
-  if (exist && exist.length > 0) {
-    const reg = exist[0];
-    if (msg) {
-      msg.textContent = `⚠️ El equipo SN ${sn} ya está en la mesa de ${sucActiva} [Condición: ${reg.condicion}].`;
-      msg.style.color = '#fde047';
+  try {
+    const esVIP = esModeloVIP(modelo);
+    const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
+    
+    let detalleObs = (detalleTecnico ? detalleTecnico + ' | ' : '') + 'Cargado por: ' + operadorNombre;
+    if (!esVIP) {
+      detalleObs += ' [Derivado automáticamente: Tecnología Obsoleta / Descarte]';
     }
-    return;
-  }
 
-  const esVIP = esModeloVIP(modelo);
-  const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
-  
-  let detalleObs = (detalleTecnico ? detalleTecnico + ' | ' : '') + 'Cargado por: ' + operadorNombre;
-  if (!esVIP) {
-    detalleObs += ' [Derivado automáticamente: Tecnología Obsoleta / Descarte]';
-  }
+    // BUSCAMOS SI YA EXISTE UN REGISTRO PREVIO (Para actualizarlo en vez de duplicarlo)
+    let checkQuery = supabaseOps
+      .from('recupero_operativo')
+      .select('id, condicion')
+      .eq('sn', sn);
 
-  const payload = {
-    sn: sn,
-    descripcion: modelo,
-    almacen_origen: document.getElementById('cg_origen')?.value || 'Sucursal / Mostrador',
-    tecnico: operadorNombre,
-    observaciones: detalleObs,
-    condicion: condicionAsignada,
-    sucursal_id: sucActiva
-  };
-
-  const { error } = await supabaseOps.from('recupero_operativo').insert([payload]);
-
-  if (error) {
-    if (msg) {
-      msg.textContent = '❌ Error: ' + error.message;
-      msg.style.color = '#ef4444';
+    if (sucActiva !== 'TODAS') {
+      checkQuery = checkQuery.eq('sucursal_id', sucActiva);
     }
-  } else {
-    if (msg) {
-      if (esVIP) {
-        msg.textContent = `✅ ¡Equipo VIP cargado a la mesa de ${sucActiva}!`;
+
+    const { data: exist, error: errCheck } = await checkQuery.limit(1);
+
+    if (errCheck) throw errCheck;
+
+    if (exist && exist.length > 0) {
+      // 🔄 ACTUALIZACIÓN: El equipo ya estaba cargado. Lo pisamos en vez de duplicar.
+      const idRegistro = exist[0].id;
+      const { error: errUpdate } = await supabaseOps
+        .from('recupero_operativo')
+        .update({
+          descripcion: modelo,
+          almacen_origen: origen,
+          tecnico: operadorNombre,
+          observaciones: detalleObs,
+          condicion: condicionAsignada
+        })
+        .eq('id', idRegistro);
+
+      if (errUpdate) throw errUpdate;
+
+      if (msg) {
+        msg.textContent = `✅ Registro existente actualizado en la mesa de ${sucActiva}.`;
         msg.style.color = '#4ade80';
-      } else {
-        msg.textContent = `📼 ¡Equipo Derivado a DESCARTE en ${sucActiva}!`;
-        msg.style.color = '#fde047';
+      }
+
+    } else {
+      // ➕ INSERCIÓN: Es un equipo 100% nuevo.
+      const payload = {
+        sn: sn,
+        descripcion: modelo,
+        almacen_origen: origen,
+        tecnico: operadorNombre,
+        observaciones: detalleObs,
+        condicion: condicionAsignada,
+        sucursal_id: sucActiva
+      };
+
+      const { error: errInsert } = await supabaseOps.from('recupero_operativo').insert([payload]);
+
+      if (errInsert) throw errInsert;
+
+      if (msg) {
+        if (esVIP) {
+          msg.textContent = `✅ ¡Equipo VIP ingresado a la mesa de ${sucActiva}!`;
+          msg.style.color = '#4ade80';
+        } else {
+          msg.textContent = `📼 ¡Equipo Derivado a DESCARTE en ${sucActiva}!`;
+          msg.style.color = '#fde047';
+        }
       }
     }
+
+    // Limpiar formulario tras éxito
     document.getElementById('cg_serial').value = '';
     document.getElementById('cg_modelo').selectedIndex = 0;
     if (document.getElementById('boxPreviewCarga')) document.getElementById('boxPreviewCarga').style.display = 'none';
     document.getElementById('cg_serial')?.focus();
+
+  } catch (err) {
+    console.error('Error al guardar carga:', err);
+    if (msg) {
+      msg.textContent = '❌ Error de conexión: ' + err.message;
+      msg.style.color = '#ef4444';
+    }
+  } finally {
+    if (btnSubmitCarga) btnSubmitCarga.disabled = false;
   }
 });
 
