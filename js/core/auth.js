@@ -8,16 +8,16 @@ const superbaseAuth = supabase.createClient(GLOBAL_SUPA_URL, GLOBAL_SUPA_KEY);
 
 let permisosActuales = null;
 
-async function revisarSesionActiva() {
+window.revisarSesionActiva = async function() {
   const { data: { session } } = await superbaseAuth.auth.getSession();
   if (session && session.user) {
     cargarPerfilUsuario(session.user);
   } else {
     mostrarPantallaLogin();
   }
-}
+};
 
-async function iniciarSesion() {
+window.iniciarSesion = async function() {
   const email = document.getElementById('txt-email').value.trim();
   const pass = document.getElementById('txt-pass').value.trim();
   const errBox = document.getElementById('login-error');
@@ -37,12 +37,19 @@ async function iniciarSesion() {
     errBox.textContent = '';
     cargarPerfilUsuario(data.user);
   }
-}
+};
 
-async function cerrarSesion() {
-  await superbaseAuth.auth.signOut();
-  window.location.reload();
-}
+window.cerrarSesion = async function() {
+  try {
+    if (typeof superbaseAuth !== 'undefined' && superbaseAuth.auth) {
+      await superbaseAuth.auth.signOut();
+    }
+  } catch (err) {
+    console.error('Error al cerrar sesión:', err);
+  } finally {
+    window.location.reload();
+  }
+};
 
 function mostrarPantallaLogin() {
   document.getElementById('login-container').style.display = 'flex';
@@ -50,11 +57,32 @@ function mostrarPantallaLogin() {
 }
 
 async function cargarPerfilUsuario(usuario) {
-  const { data, error } = await superbaseAuth
+  if (!usuario) return;
+
+  const userEmail = (usuario.email || '').trim().toLowerCase();
+
+  // 1. INTENTO DE BÚSQUEDA POR UUID (ID)
+  let { data, error } = await superbaseAuth
     .from('usuarios_permisos')
     .select('*')
     .eq('id', usuario.id)
-    .single();
+    .maybeSingle();
+
+  // 2. FALLBACK: SI NO ENCONTRÓ POR ID, BUSCA POR EMAIL (CASE INSENSITIVE)
+  if (!data && userEmail) {
+    const { data: dataEmail } = await superbaseAuth
+      .from('usuarios_permisos')
+      .select('*')
+      .ilike('email', userEmail)
+      .maybeSingle();
+
+    if (dataEmail) {
+      data = dataEmail;
+      error = null;
+    }
+  }
+
+  const userBadge = document.getElementById('user-badge');
 
   if (error || !data) {
     permisosActuales = { 
@@ -67,7 +95,16 @@ async function cargarPerfilUsuario(usuario) {
       acceso_reportes: false,
       sucursal_asignada: 'OBE'
     };
-    document.getElementById('user-badge').textContent = `👤 ${usuario.email} (Sin Permisos)`;
+
+    window.SUCURSAL_USUARIO = 'OBE';
+    window.SUCURSAL_FILTRO_ACTIVA = 'OBE';
+    
+    // Si no tiene registro en usuarios_permisos, guarda su email limpio
+    window.USUARIO_NOMBRE_MOSTRAR = usuario.email;
+
+    if (userBadge) {
+      userBadge.textContent = `👤 ${usuario.email} (Sin Permisos)`;
+    }
   } else {
     permisosActuales = data;
 
@@ -85,7 +122,11 @@ async function cargarPerfilUsuario(usuario) {
     window.SUCURSAL_USUARIO = permisosActuales.sucursal_asignada || 'OBE';
     window.SUCURSAL_FILTRO_ACTIVA = window.SUCURSAL_USUARIO;
 
-    // CONTROL DEL DESPLEGABLE GLOBAL (SUPERADMIN O PERMISO ESPECIAL)
+    // 🎯 NOMBRE LIMPIO Y ESTÁNDAR PARA TODO EL SISTEMA
+    const nombreLimpio = data.nombre_completo || data.nombre || data.alias || usuario.email;
+    window.USUARIO_NOMBRE_MOSTRAR = nombreLimpio;
+
+    // CONTROL DEL DESPLEGABLE GLOBAL
     const puedeNavegarSucursales = permisosActuales.es_superadmin || 
                                    permisosActuales.puede_cambiar_sucursal || 
                                    permisosActuales.sucursal_asignada === 'TODAS';
@@ -96,15 +137,21 @@ async function cargarPerfilUsuario(usuario) {
       selSuc.disabled = !puedeNavegarSucursales;
     }
 
-    document.getElementById('user-badge').textContent = `👤 ${data.nombre_completo || usuario.email} (${window.SUCURSAL_USUARIO}) ${permisosActuales.es_superadmin ? '[SuperAdmin]' : ''}`;
+    if (userBadge) {
+      userBadge.textContent = `👤 ${nombreLimpio} (${window.SUCURSAL_USUARIO}) ${permisosActuales.es_superadmin ? '[SuperAdmin]' : ''}`;
+    }
   }
+
+  window.PERMISOS_ACTUALES = permisosActuales;
 
   aplicarRestriccionesVisuales();
 
   document.getElementById('login-container').style.display = 'none';
   document.getElementById('app-container').style.display = 'flex';
 
-  arrancarCargaDeDatos();
+  if (typeof arrancarCargaDeDatos === 'function') {
+    arrancarCargaDeDatos();
+  }
 }
 
 function aplicarRestriccionesVisuales() {
