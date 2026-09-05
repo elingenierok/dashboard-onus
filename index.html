@@ -135,10 +135,12 @@
       <button class="btn btn-pdf req-reportes" onclick="abrirModalReportes()">📄 Generar Reporte / PDF</button>
       <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar Datos</button>
       
-      <!-- INDICADOR DE VERSIÓN -->
-      <span style="background: #0f172a; color: #64748b; border: 1px solid #334155; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: default; user-select: none;" title="Versión del Sistema">
-        V1.09.03
-      </span>
+      <!-- INDICADOR DE VERSIÓN AUTOMÁTICO -->
+<span id="indicador-version" 
+      style="background: #0f172a; color: #64748b; border: 1px solid #334155; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: default; user-select: none;" 
+      title="Versión del Sistema">
+  V1.--.--
+</span>
 
       <button class="btn-logout" onclick="window.cerrarSesion()">Cerrar Sesión</button>
     </div>
@@ -467,6 +469,8 @@
   </div>
 </div>
 
+
+
 <!-- CAPA CORE (Control Maestro & Sesión) -->
 <script src="js/core/auth.js"></script>
 <script src="js/core/app.js"></script>
@@ -480,9 +484,26 @@
 <script src="js/modules/tendencias/tendencias.js"></script>
 <script src="js/modules/referencias/referencias.js"></script>
 <script src="js/modules/admin/admin.js"></script>
-
-<!-- SERVICIOS GENERALES -->
 <script src="js/services/reportes.js"></script>
+
+<!-- SCRIPT DE "VERSIÓN" AUTOMÁTICA -->
+<script>
+  function actualizarIndicadorVersion() {
+    const spanVersion = document.getElementById('indicador-version');
+    if (!spanVersion) return;
+
+    const hoy = new Date();
+    
+    // getMonth() devuelve de 0 a 11, por eso sumamos 1
+    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+    const dia = String(hoy.getDate()).padStart(2, '0');
+
+    spanVersion.textContent = `V1.${mes}.${dia}`;
+  }
+
+  // Ejecutar automáticamente al cargar el DOM
+  document.addEventListener('DOMContentLoaded', actualizarIndicadorVersion);
+</script>
 
 </body>
 </html>
