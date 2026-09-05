@@ -1,5 +1,5 @@
 // ====================================================
-// MÓDULO AUTÓNOMO DE STOCK - DATOS, ESTADO & UI (MULTISUCURSAL)
+// MÓDULO DE STOCK: EQUIPOS Y ONUS (CATEGORÍA A)
 // ====================================================
 
 const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
@@ -8,7 +8,6 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const COSTO_POR_DEFECTO = 0;
 
-// ESTADO GLOBAL EXPUESTO PARA EL GENERADOR DE REPORTES
 window.EstadoStock = {
   cargado: false,
   totalDualBand: 0,
@@ -27,7 +26,6 @@ window.EstadoStock = {
   fechaSincronizacion: '--/--/----'
 };
 
-// ALMACENES OFICIALES
 const SUCURSALES = [
   'OBE_ALM_PRINCIPAL', 
   'OBE_ALM_CATRIEL', 
@@ -49,18 +47,19 @@ const LISTA_AUDITORIA = [
   { key: 'ELDO_ALM_PRINCIPAL', nombre: 'Eldorado Principal' }
 ];
 
-function normalizar(str) {
-  return (str || '')
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
-}
+let stockData = [];
+let mapaPrecios = new Map();
+let catalogoEquiposMemoria = [];
+let catalogoInsumosMemoria = []; 
+let kpiChart = null; 
 
-// EVALUACIÓN DINÁMICA DE SUCURSAL POR ALMACÉN
-function perteneceASucursal(almacenKey, sucActiva) {
-  if (sucActiva === 'TODAS') return true;
+// --- FUNCIONES AUXILIARES GLOBALES ---
+window.normalizar = function(str) {
+  return (str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim().toUpperCase();
+};
+
+window.perteneceASucursal = function(almacenKey, sucActiva) {
+  if (!sucActiva || sucActiva === 'TODAS' || sucActiva === 'ALL') return true;
   const raw = (almacenKey || '').trim().toUpperCase();
   if (sucActiva === 'OBE') return raw.startsWith('OBE_') || raw.includes('OBERA');
   if (sucActiva === 'SPD') return raw.startsWith('SPD_') || raw.includes('SAN_PEDRO') || raw.includes('SAN PEDRO');
@@ -68,30 +67,7 @@ function perteneceASucursal(almacenKey, sucActiva) {
   if (sucActiva === 'ITU') return raw.startsWith('ITU_') || raw.includes('ITUZAINGO');
   if (sucActiva === 'ELDO') return raw.startsWith('ELDO_') || raw.includes('ELDORADO');
   return raw.includes(sucActiva);
-}
-
-let stockData = [];
-let mapaPrecios = new Map();
-let catalogoEquiposMemoria = [];
-let listaPreciosTabla = [];
-let kpiChart = null;
-
-// RESOLUCIÓN JERÁRQUICA DE REGLA DE CATÁLOGO POR SUCURSAL
-function resolverInfoEquipo(descNorm, sucActiva) {
-  const coincidencias = catalogoEquiposMemoria.filter(item => {
-    const itemNorm = item.modelo_norm || normalizar(item.modelo);
-    return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
-  });
-
-  if (!coincidencias.length) return null;
-
-  let match = coincidencias.find(c => c.sucursal_id === sucActiva);
-  if (!match) match = coincidencias.find(c => c.sucursal_id === 'GLOBAL');
-  if (!match) match = coincidencias.find(c => c.sucursal_id === 'OBE');
-  if (!match) match = coincidencias[0];
-
-  return match;
-}
+};
 
 function toggleGrupoStock(claseGrupo) {
   const filas = document.querySelectorAll(`.${claseGrupo}`);
@@ -106,13 +82,41 @@ function toggleGrupoStock(claseGrupo) {
       f.style.display = 'none';
     }
   });
-
-  if (flecha) {
-    flecha.textContent = mostrando ? '▼' : '▶';
-  }
+  if (flecha) flecha.textContent = mostrando ? '▼' : '▶';
 }
 
-// CARGA DESDE SUPABASE
+window.obtenerClasificacionABC = function(descNorm, codUpper = '') {
+  const cat = window.catalogoInsumosMemoria || catalogoInsumosMemoria;
+  if (!cat || !cat.length) return null;
+
+  if (codUpper && codUpper !== '' && codUpper !== '-') {
+    const matchCodigo = cat.find(item => 
+      item.codigo && item.codigo.trim().toUpperCase() === codUpper
+    );
+    if (matchCodigo) return matchCodigo;
+  }
+
+  return cat.find(item => {
+    const patronNorm = window.normalizar(item.descripcion);
+    return descNorm === patronNorm;
+  }) || null;
+};
+
+function resolverInfoEquipo(descNorm, sucActiva) {
+  const coincidencias = catalogoEquiposMemoria.filter(item => {
+    const itemNorm = item.modelo_norm || window.normalizar(item.modelo);
+    return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+  });
+  if (!coincidencias.length) return null;
+
+  let match = coincidencias.find(c => c.sucursal_id === sucActiva);
+  if (!match) match = coincidencias.find(c => c.sucursal_id === 'GLOBAL');
+  if (!match) match = coincidencias.find(c => c.sucursal_id === 'OBE');
+  if (!match) match = coincidencias[0];
+  return match;
+}
+
+// --- CONSULTA A SUPABASE CON PAGINACIÓN COMPLETA Y UMBRALES ---
 async function cargarStockModulo() {
   const tagCSV = document.getElementById('tagCSV');
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
@@ -123,6 +127,7 @@ async function cargarStockModulo() {
   }
 
   try {
+    // 1. Obtener la última fecha de registro
     const { data: ult, error: errUlt } = await supabaseClient
       .from('registro_stock')
       .select('fecha_registro, created_at')
@@ -136,17 +141,51 @@ async function cargarStockModulo() {
     const ultimaFecha = ult[0].fecha_registro;
     const marcaTiempo = ult[0].created_at;
 
-    const [resStock, resPrecios, resCat] = await Promise.all([
-      supabaseClient.from('registro_stock').select('codigo, descripcion, stock_total, almacen').eq('fecha_registro', ultimaFecha),
-      supabaseClient.from('precios_catalogos').select('codigo, descripcion, precio_final, moneda'),
-      supabaseClient.from('catalogo_equipos').select('*')
+    // 2. Consultar catálogos Y la nueva tabla config_stock_almacen en paralelo
+    const [resInsumos, resCat, resConfig] = await Promise.all([
+      supabaseClient.from('catalogo_insumos').select('*').eq('activo', true),
+      supabaseClient.from('catalogo_equipos').select('*'),
+      supabaseClient.from('config_stock_almacen').select('*') // 👈 NUEVA CONSULTA DE UMBRALES
     ]);
 
-    if (resStock.error) throw resStock.error;
-
     catalogoEquiposMemoria = resCat.data || [];
+    catalogoInsumosMemoria = resInsumos.data || [];
+    
+    // Exportar a memoria global para el resto de los módulos
+    window.catalogoInsumosMemoria = catalogoInsumosMemoria;
+    window.configUmbralesMemoria = resConfig.data || []; // 👈 DISPONIBLE EN MEMORIA GLOBAL
 
-    stockData = (resStock.data || []).map(d => {
+    // 3. PAGINACIÓN: Traer TODAS las filas de registro_stock para la última fecha
+    let todosLosRegistrosStock = [];
+    let desde = 0;
+    const tamanoPagina = 1000;
+    let tieneMasPaginas = true;
+
+    while (tieneMasPaginas) {
+      const { data: pagina, error: errPag } = await supabaseClient
+        .from('registro_stock')
+        .select('codigo, descripcion, stock_total, almacen')
+        .eq('fecha_registro', ultimaFecha)
+        .range(desde, desde + tamanoPagina - 1);
+
+      if (errPag) throw errPag;
+
+      if (pagina && pagina.length > 0) {
+        todosLosRegistrosStock = todosLosRegistrosStock.concat(pagina);
+        if (pagina.length < tamanoPagina) {
+          tieneMasPaginas = false;
+        } else {
+          desde += tamanoPagina;
+        }
+      } else {
+        tieneMasPaginas = false;
+      }
+    }
+
+    console.log(`📦 [STOCK SUCCESS] Total filas descargadas de Supabase: ${todosLosRegistrosStock.length}`);
+
+    // 4. Mapear datos a la memoria de la aplicación
+    stockData = todosLosRegistrosStock.map(d => {
       let rawAlm = (d.almacen || '').trim().toUpperCase();
       if (rawAlm === 'SPD_PRINCIPAL' || rawAlm === 'SPD_ALM_PRINCIPAL') rawAlm = 'SPD_ALM_PRINCIPAL';
       if (rawAlm === 'WND-PRINCIPAL' || rawAlm === 'WND_PRINCIPAL' || rawAlm === 'WND_ALM_PRINCIPAL') rawAlm = 'WND_ALM_PRINCIPAL';
@@ -160,11 +199,10 @@ async function cargarStockModulo() {
     });
 
     mapaPrecios.clear();
-    listaPreciosTabla = resPrecios.data || [];
-    listaPreciosTabla.forEach(p => {
+    catalogoInsumosMemoria.forEach(p => {
       const val = parseFloat(p.precio_final) || 0;
       if (p.codigo) mapaPrecios.set(p.codigo.trim().toUpperCase(), val);
-      if (p.descripcion) mapaPrecios.set(normalizar(p.descripcion), val);
+      if (p.descripcion) mapaPrecios.set(window.normalizar(p.descripcion), val);
     });
 
     const fechaObj = new Date(marcaTiempo);
@@ -172,12 +210,17 @@ async function cargarStockModulo() {
     const horaFormat = fechaObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
     if (tagCSV) {
-      tagCSV.textContent = `Supabase: ✅ ${diaFormat} ${horaFormat} hs [${sucActiva}]`;
+      tagCSV.textContent = `Supabase: ✅ ${diaFormat} ${horaFormat} hs [${sucActiva}] (${stockData.length} ítems)`;
       tagCSV.className = 'file-tag ok';
     }
 
+    // 5. Procesar ONUs (Cat A) e Insumos (Cat B)
     procesarYRenderizarStock(`${diaFormat} ${horaFormat} hs`);
-    renderTablaPrecios();
+
+    if (typeof cargarModuloReferencias === 'function') {
+      cargarModuloReferencias();
+    }
+
   } catch (err) {
     console.error('Error al consultar Supabase:', err);
     if (tagCSV) {
@@ -187,7 +230,7 @@ async function cargarStockModulo() {
   }
 }
 
-// PROCESAMIENTO MATEMÁTICO FILTRADO POR SUCURSAL
+// --- PROCESAMIENTO EXCLUSIVO DE EQUIPOS ONUs (CAT. A) ---
 function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
@@ -211,26 +254,27 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
   SUCURSALES.forEach(s => arbolOperativo[s] = { DB: 0, CATV: 0, Otras: 0, itemsDB: {}, itemsCATV: {}, itemsOtras: {} });
 
   stockData.forEach(row => {
-    // FILTRADO CLAVE: Ignorar registros que no pertenecen a la sucursal activa
-    if (!perteneceASucursal(row.almacen, sucActiva)) return;
+    if (!window.perteneceASucursal(row.almacen, sucActiva)) return;
 
-    const descNorm = normalizar(row.descripcion);
-    if (!descNorm.includes('ONU')) return;
+    const descNorm = window.normalizar(row.descripcion);
+    const codUpper = (row.codigo || '').trim().toUpperCase();
+    
+    const itemABC = window.obtenerClasificacionABC(descNorm, codUpper);
+    
+    if (!itemABC || itemABC.categoria_abc !== 'A') return; 
 
     const infoCat = resolverInfoEquipo(descNorm, sucActiva);
+    const esAlmacenPrincipal = SUCURSALES.includes(row.almacen);
+    const precioUnitario = (infoCat && parseFloat(infoCat.precio_usd) > 0)
+      ? parseFloat(infoCat.precio_usd)
+      : (mapaPrecios.get(row.codigo) || mapaPrecios.get(descNorm) || COSTO_POR_DEFECTO);
+    const valorFila = row.stock * precioUnitario;
 
     const esVIP = infoCat ? infoCat.es_vip : false;
     const catNombre = infoCat ? (infoCat.categoria || '').toUpperCase() : '';
 
     const esVIP_DB = esVIP && catNombre === 'DUAL_BAND';
     const esVIP_CATV = esVIP && catNombre === 'CATV';
-    const esAlmacenPrincipal = SUCURSALES.includes(row.almacen);
-
-    const precioUnitario = (infoCat && parseFloat(infoCat.precio_usd) > 0)
-      ? parseFloat(infoCat.precio_usd)
-      : (mapaPrecios.get(row.codigo) || mapaPrecios.get(descNorm) || COSTO_POR_DEFECTO);
-
-    const valorFila = row.stock * precioUnitario;
 
     if (esAlmacenPrincipal && (esVIP_DB || esVIP_CATV)) {
       stratTotal += row.stock;
@@ -272,10 +316,7 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
       devCant += row.stock;
       valorDevoluciones += valorFila;
       itemsDev[row.descripcion] = (itemsDev[row.descripcion] || 0) + row.stock;
-
-      if (esVIP_CATV) {
-        devCatvCant += row.stock;
-      }
+      if (esVIP_CATV) devCatvCant += row.stock;
     } 
     else if (row.almacen.includes('DESCARTE_VIP')) {
       if (esVIP_DB || esVIP_CATV) {
@@ -290,199 +331,97 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
       itemsDesc[row.descripcion] = (itemsDesc[row.descripcion] || 0) + row.stock;
     }
   });
+  
+  window.EstadoStock.cargado = true;
+  window.EstadoStock.totalDualBand = stratDB;
+  window.EstadoStock.totalCatv = stratCATV;
+  window.EstadoStock.totalNuevos = stratNuevos;
+  window.EstadoStock.totalUsados = stratUsados;
+  window.EstadoStock.totalOperativo = stratTotal;
+  window.EstadoStock.costoTotalUsd = stratValorUSD;
+  window.EstadoStock.fechaSincronizacion = fechaSincroStr;
 
-  // ACTUALIZAR OBJETO GLOBAL
-  window.EstadoStock = {
-    cargado: true,
-    totalDualBand: stratDB,
-    totalCatv: stratCATV,
-    totalNuevos: stratNuevos,
-    totalUsados: stratUsados,
-    totalOperativo: stratTotal,
-    costoTotalUsd: stratValorUSD,
-    devolucionesCant: devCant,
-    devolucionesCatvCant: devCatvCant,
-    devolucionesValorUsd: valorDevoluciones,
-    descarteCant: descCant,
-    descarteValorUsd: valorDescarte,
-    descarteVipCant: descVipCant,
-    descarteVipValorUsd: valorDescVip,
-    catrielCant: catrielCant,
-    fechaSincronizacion: fechaSincroStr
-  };
-
-  renderStockEstrategico(stratDB, stratCATV, stratNuevos, stratUsados, stratTotal, stratValorUSD, arbolEstrategico);
+  renderStockEstrategicoOnus(stratDB, stratCATV, stratNuevos, stratUsados, stratTotal, stratValorUSD, arbolEstrategico);
   renderStockOperativo(arbolOperativo);
   renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, valorDescarte, descVipCant, valorDescVip, catrielCant, itemsDev, itemsDesc, itemsDescVip, itemsCatriel);
   renderAuditoriaTabla();
+  
+  // Ejecuta la Categoría B reutilizando el catálogo expuesto en memoria
+  if (typeof window.procesarInsumosB === 'function') {
+    window.procesarInsumosB(
+      stockData, 
+      sucActiva, 
+      mapaPrecios, 
+      window.catalogoInsumosMemoria,
+      window.configUmbralesMemoria // 👈 5to parámetro: los umbrales cargados de Supabase
+    );
+  }
 }
 
-// RENDER: GRÁFICO ESTRATÉGICO
-function renderStockEstrategico(db, catv, nuevos, usados, total, valorGlobal, arbol) {
+// --- RENDER GRÁFICO 1: EQUIPOS ---
+function renderStockEstrategicoOnus(db, catv, nuevos, usados, total, valorGlobal, arbol) {
   const pctDB = total > 0 ? Math.round((db / total) * 100) : 0;
   const pctCATV = total > 0 ? Math.round((catv / total) * 100) : 0;
 
-  document.getElementById('val-db').textContent = db.toLocaleString('es-AR');
-  document.getElementById('pct-db').textContent = `(${pctDB}%)`;
+  if (document.getElementById('val-db')) document.getElementById('val-db').textContent = db.toLocaleString('es-AR');
+  if (document.getElementById('pct-db')) document.getElementById('pct-db').textContent = `(${pctDB}%)`;
+  if (document.getElementById('val-catv')) document.getElementById('val-catv').textContent = catv.toLocaleString('es-AR');
+  if (document.getElementById('pct-catv')) document.getElementById('pct-catv').textContent = `(${pctCATV}%)`;
+  if (document.getElementById('val-total')) document.getElementById('val-total').textContent = `${total.toLocaleString('es-AR')} un.`;
+  if (document.getElementById('val-costo')) document.getElementById('val-costo').textContent = `$ ${Math.round(valorGlobal).toLocaleString('es-AR')} USD`;
 
-  document.getElementById('val-catv').textContent = catv.toLocaleString('es-AR');
-  document.getElementById('pct-catv').textContent = `(${pctCATV}%)`;
+  const canvasA = document.getElementById('kpiStackedChart');
+  if (canvasA) {
+    const ctxA = canvasA.getContext('2d');
+    const chartDataA = {
+      labels: ['Tecnología VIP', 'Condición VIP'],
+      datasets: [
+        { label: 'Dual Band VIP', data: [db, 0], backgroundColor: '#0284c7', borderRadius: 4 },
+        { label: 'CATV VIP', data: [catv, 0], backgroundColor: '#ea580c', borderRadius: 4 },
+        { label: 'Nuevos', data: [0, nuevos], backgroundColor: '#22c55e', borderRadius: 4 },
+        { label: 'Usados / Reacond.', data: [0, usados], backgroundColor: '#eab308', borderRadius: 4 }
+      ]
+    };
 
-  document.getElementById('val-total').textContent = `${total.toLocaleString('es-AR')} un.`;
-  document.getElementById('val-costo').textContent = `$ ${Math.round(valorGlobal).toLocaleString('es-AR')} USD`;
-
-  const chartData = {
-    labels: ['Tecnología VIP', 'Condición VIP'],
-    datasets: [
-      { label: 'Dual Band VIP', data: [db, 0], backgroundColor: '#0284c7', borderRadius: 4 },
-      { label: 'CATV VIP', data: [catv, 0], backgroundColor: '#ea580c', borderRadius: 4 },
-      { label: 'Nuevos', data: [0, nuevos], backgroundColor: '#22c55e', borderRadius: 4 },
-      { label: 'Usados / Reacond.', data: [0, usados], backgroundColor: '#eab308', borderRadius: 4 }
-    ]
-  };
-
-  const canvas = document.getElementById('kpiStackedChart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-
-  if (kpiChart) {
-    kpiChart.arbolRef = arbol;
-    kpiChart.data = chartData;
-    kpiChart.update();
-  } else {
-    kpiChart = new Chart(ctx, {
-      type: 'bar',
-      data: chartData,
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' }, boxWidth: 12, padding: 12 } },
-          tooltip: {
-            backgroundColor: '#0f172a', titleColor: '#38bdf8', bodyColor: '#f8fafc', borderColor: '#334155', borderWidth: 1, padding: 12,
-            filter: (tooltipItem) => tooltipItem.raw > 0,
-            callbacks: {
-              label: (context) => {
-                const val = context.raw || 0;
-                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
-                return ` ${context.dataset.label}: ${val.toLocaleString('es-AR')} un. (${pct}%)`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: { stacked: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-          y: { stacked: true, grid: { display: false }, ticks: { color: '#f8fafc', font: { size: 11, weight: 'bold' } } }
-        }
-      }
-    });
-    kpiChart.arbolRef = arbol;
-  }
-}
-
-// CONTROL GLOBAL DE DESPLIEGUE DE TARJETAS TÁCTICAS
-window.toggleDesgloseStock = function(id) {
-  const el = document.getElementById(id);
-  const btn = document.getElementById(`btn-${id}`);
-  if (!el) return;
-  const visible = el.style.display === 'block';
-  el.style.display = visible ? 'none' : 'block';
-  if (btn) {
-    btn.textContent = visible ? '🔽 Ver Desglose' : '🔼 Ocultar Desglose';
-  }
-};
-
-// RENDER: TÁCTICO CON DESGLOSE DESPLEGABLE EN TARJETA
-function renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, valorDescarte, descVipCant, valorDescVip, catrielCant, itemsDev, itemsDesc, itemsDescVip, itemsCatriel) {
-  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
-
-  const armarDesgloseHTML = (idUnico, objItems) => {
-    const entries = Object.entries(objItems);
-    let listHtml = '';
-
-    if (entries.length === 0) {
-      listHtml = '<div style="color:#94a3b8; font-style:italic; font-size:0.75rem; padding:6px 0; text-align:center;">Sin ítems registrados</div>';
+    if (kpiChart) {
+      kpiChart.arbolRef = arbol;
+      kpiChart.data = chartDataA;
+      kpiChart.update();
     } else {
-      entries.forEach(([desc, cant]) => {
-        listHtml += `
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #e2e8f0; font-size:0.75rem;">
-            <span style="font-weight:600; color:#334155; text-align:left; flex:1; padding-right:8px; line-height:1.2;">• ${desc}</span>
-            <strong style="color:#0284c7; background:#e0f2fe; padding:2px 6px; border-radius:4px; font-size:0.75rem; white-space:nowrap;">${cant.toLocaleString('es-AR')} un.</strong>
-          </div>`;
+      kpiChart = new Chart(ctxA, {
+        type: 'bar',
+        data: chartDataA,
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { color: '#cbd5e1', font: { size: 10, weight: 'bold' }, boxWidth: 10 } },
+            tooltip: { backgroundColor: '#0f172a', titleColor: '#38bdf8', bodyColor: '#f8fafc', borderColor: '#334155', borderWidth: 1 }
+          },
+          scales: {
+            x: { stacked: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 9 } } },
+            y: { stacked: true, grid: { display: false }, ticks: { color: '#f8fafc', font: { size: 10, weight: 'bold' } } }
+          }
+        }
       });
+      kpiChart.arbolRef = arbol;
     }
-
-    return `
-      <div style="margin-top:10px; border-top:1px solid #e2e8f0; padding-top:8px;">
-        <button id="btn-${idUnico}" onclick="toggleDesgloseStock('${idUnico}')" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:5px 10px; border-radius:6px; font-size:0.72rem; font-weight:700; cursor:pointer; width:100%; text-align:center; transition:all 0.2s;">
-          🔽 Ver Desglose
-        </button>
-        <div id="${idUnico}" style="display:none; margin-top:8px; max-height:180px; overflow-y:auto; padding-right:4px; border:1px solid #cbd5e1; background:#ffffff; padding:6px; border-radius:6px;">
-          ${listHtml}
-        </div>
-      </div>
-    `;
-  };
-
-  document.getElementById('grid-tactico-cards').innerHTML = `
-    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; display:flex; flex-direction:column; justify-content:space-between;">
-      <div>
-        <div class="title" style="color:#475569;">📥 DEVOLUCIONES / TRIAGE [${sucActiva}]</div>
-        <div class="value">${devCant.toLocaleString('es-AR')} un.</div>
-        <div class="subtext" style="color:#64748b;">Capital Parado (ONUs): <strong>$ ${Math.round(valorDevoluciones).toLocaleString('es-AR')} USD</strong></div>
-        <div class="subtext" style="color:#c2410c; margin-top:3px; font-weight:600;">📺 Cantidad de CATV a probar: <strong style="color:#ea580c;">${devCatvCant.toLocaleString('es-AR')} un.</strong></div>
-      </div>
-      ${armarDesgloseHTML('desglose-dev', itemsDev)}
-    </div>
-
-    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; display:flex; flex-direction:column; justify-space-between;">
-      <div>
-        <div class="title" style="color:#475569;">🗑️ DESCARTE GENERAL [${sucActiva}]</div>
-        <div class="value">${descCant.toLocaleString('es-AR')} un.</div>
-        <div class="subtext" style="color:#64748b;">Capital Afectado (ONUs): <strong>$ ${Math.round(valorDescarte).toLocaleString('es-AR')} USD</strong></div>
-      </div>
-      ${armarDesgloseHTML('desglose-desc', itemsDesc)}
-    </div>
-
-    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #991b1b; color:#0f172a; display:flex; flex-direction:column; justify-space-between;">
-      <div>
-        <div class="title" style="color:#991b1b;">👑 DESCARTE VIP [${sucActiva}]</div>
-        <div class="value">${descVipCant.toLocaleString('es-AR')} un.</div>
-        <div class="subtext" style="color:#64748b;">Capital VIP Inmovilizado: <strong>$ ${Math.round(valorDescVip).toLocaleString('es-AR')} USD</strong></div>
-      </div>
-      ${armarDesgloseHTML('desglose-desc-vip', itemsDescVip)}
-    </div>
-
-    <div class="kpi-card-dark" style="background:#f8fafc; border:1px solid #cbd5e1; color:#0f172a; display:flex; flex-direction:column; justify-space-between;">
-      <div>
-        <div class="title" style="color:#0284c7;">🛒 STOCK NUEVO / COMPRAS [${sucActiva}]</div>
-        <div class="value">${catrielCant.toLocaleString('es-AR')} un.</div>
-        <div class="subtext" style="color:#475569;">ONUs Estratégicas Nuevas</div>
-      </div>
-      ${armarDesgloseHTML('desglose-catriel', itemsCatriel)}
-    </div>
-  `;
+  }
 }
 
-// RENDER: TABLA AUDITORÍA FILTRADA POR SUCURSAL
+// --- RENDER TABLAS DE OPERATIVO Y AUDITORÍA ---
 async function renderAuditoriaTabla() {
   const wrapper = document.getElementById('tablaAuditoriaWrapper');
   if (!wrapper) return;
-
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
   try {
-    const { data: audData } = await supabaseClient
-      .from('auditoria_control_activo')
-      .select('*');
-
+    const { data: audData } = await supabaseClient.from('auditoria_control_activo').select('*');
     const mapAuditoria = new Map();
-    if (audData) {
-      audData.forEach(item => mapAuditoria.set(item.almacen_key, item));
-    }
+    if (audData) audData.forEach(item => mapAuditoria.set(item.almacen_key, item));
 
-    const listaFiltrada = LISTA_AUDITORIA.filter(item => perteneceASucursal(item.key, sucActiva));
+    const listaFiltrada = LISTA_AUDITORIA.filter(item => window.perteneceASucursal(item.key, sucActiva));
 
     let html = `<table class="tabla-auditoria">
       <thead>
@@ -499,12 +438,13 @@ async function renderAuditoriaTabla() {
 
     listaFiltrada.forEach(item => {
       const stockSistemaCalculado = stockData.reduce((acc, d) => {
-        const dNorm = normalizar(d.descripcion);
-        return (d.almacen === item.key && dNorm.includes('ONU')) ? acc + d.stock : acc;
+        const dNorm = window.normalizar(d.descripcion);
+        const itemABC = window.obtenerClasificacionABC(dNorm, d.codigo);
+        const esCatA = itemABC ? (itemABC.categoria_abc === 'A') : dNorm.includes('ONU');
+        return (d.almacen === item.key && esCatA) ? acc + d.stock : acc;
       }, 0);
 
       const audInfo = mapAuditoria.get(item.key);
-
       let stockSistema = stockSistemaCalculado;
       let stockFisico = stockSistemaCalculado;
       let tagDesviacion = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
@@ -516,21 +456,16 @@ async function renderAuditoriaTabla() {
         stockFisico = audInfo.stock_fisico;
         const dif = audInfo.diferencia;
         pctDesv = `${parseFloat(audInfo.desviacion_pct || 0).toFixed(1)}%`;
-
-        if (dif === 0) {
-          tagDesviacion = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
-        } else if (dif < 0) {
-          tagDesviacion = `<span style="color:#ef4444; font-weight:700; background:#fee2e2; padding:2px 8px; border-radius:4px;">🔴 Faltan ${Math.abs(dif)} un.</span>`;
-        } else {
-          tagDesviacion = `<span style="color:#0284c7; font-weight:700; background:#e0f2fe; padding:2px 8px; border-radius:4px;">🔵 Sobran ${dif} un.</span>`;
-        }
+        if (dif === 0) tagDesviacion = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
+        else if (dif < 0) tagDesviacion = `<span style="color:#ef4444; font-weight:700; background:#fee2e2; padding:2px 8px; border-radius:4px;">🔴 Faltan ${Math.abs(dif)} un.</span>`;
+        else tagDesviacion = `<span style="color:#0284c7; font-weight:700; background:#e0f2fe; padding:2px 8px; border-radius:4px;">🔵 Sobran ${dif} un.</span>`;
 
         const f = new Date(audInfo.fecha_inspeccion);
         fechaInspStr = `<span class="tag-fecha-ok">${f.toLocaleDateString('es-AR')} ${f.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'})}</span>`;
       } else if (audInfo && audInfo.fecha_snapshot) {
         stockSistema = audInfo.stock_sistema;
         stockFisico = 0;
-        tagDesviacion = '<span style="color:#b45309; font-weight:700; background:#fef3c7; padding:2px 8px; border-radius:4px;">⏳ Pendiente de Conteo</span>';
+        tagDesviacion = '<span style="color:#b45309; font-weight:700; background:#fef3c7; padding:2px 8px; border-radius:4px;">⏳ Pendiente</span>';
         pctDesv = '100.0%';
         fechaInspStr = '<span class="tag-fecha-warn">Sin Inspeccionar</span>';
       }
@@ -547,21 +482,15 @@ async function renderAuditoriaTabla() {
 
     html += `</tbody></table>`;
     wrapper.innerHTML = html;
-
   } catch (err) {
     console.error('Error al renderizar auditoría:', err);
   }
 }
 
-// RENDER: TABLA OPERATIVA ADAPTADA SEGÚN SUCURSAL SELECCIONADA
 function renderStockOperativo(arbol) {
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
-
-  // Determinar qué columnas mostrar
   const indicesVisibles = [];
-  SUCURSALES.forEach((s, idx) => {
-    if (perteneceASucursal(s, sucActiva)) indicesVisibles.push(idx);
-  });
+  SUCURSALES.forEach((s, idx) => { if (window.perteneceASucursal(s, sucActiva)) indicesVisibles.push(idx); });
 
   const sucursalesFiltradas = indicesVisibles.map(i => SUCURSALES[i]);
   const sucursalesCortasFiltradas = indicesVisibles.map(i => SUCURSALES_CORTAS[i]);
@@ -584,7 +513,6 @@ function renderStockOperativo(arbol) {
   });
 
   let html = '<table class="arbol" style="width:100%; border-collapse:collapse; text-align:left;">';
-  
   html += `<thead>
     <tr>
       <td class="celda-total" colspan="${sucursalesFiltradas.length + 1}" style="background:#0f172a; color:#f8fafc; font-weight:800; padding:10px; text-align:center;">
@@ -600,7 +528,7 @@ function renderStockOperativo(arbol) {
   html += `</tr></thead><tbody>`;
 
   if (catvModels.size > 0) {
-    html += `<tr onclick="toggleGrupoStock('catv-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
+    html += `<tr onclick="toggleGrupoStock('catv-rows')" style="cursor:pointer;">
       <td style="background:#ffedd5; color:#c2410c; font-weight:800; padding:8px 10px; border:1px solid #fed7aa;">
         <span id="arrow-catv-rows" style="display:inline-block; width:15px;">▶</span> 🟠 CATV VIP (${totCATV.toLocaleString('es-AR')} un.)
       </td>`;
@@ -624,7 +552,7 @@ function renderStockOperativo(arbol) {
   }
 
   if (dbModels.size > 0) {
-    html += `<tr onclick="toggleGrupoStock('db-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
+    html += `<tr onclick="toggleGrupoStock('db-rows')" style="cursor:pointer;">
       <td style="background:#e0f2fe; color:#0369a1; font-weight:800; padding:8px 10px; border:1px solid #bae6fd;">
         <span id="arrow-db-rows" style="display:inline-block; width:15px;">▶</span> 🔵 DUAL BAND VIP (${totDB.toLocaleString('es-AR')} un.)
       </td>`;
@@ -648,7 +576,7 @@ function renderStockOperativo(arbol) {
   }
 
   if (otrasModels.size > 0) {
-    html += `<tr onclick="toggleGrupoStock('otras-rows')" style="cursor:pointer;" title="Hacé clic para desplegar/comprimir">
+    html += `<tr onclick="toggleGrupoStock('otras-rows')" style="cursor:pointer;">
       <td style="background:#f1f5f9; color:#475569; font-weight:800; padding:8px 10px; border:1px solid #cbd5e1;">
         <span id="arrow-otras-rows" style="display:inline-block; width:15px;">▶</span> ⚙️ OTRAS ONUs / LEGACY (${totOtras.toLocaleString('es-AR')} un.)
       </td>`;
@@ -675,109 +603,86 @@ function renderStockOperativo(arbol) {
   document.getElementById('tablaWrapper').innerHTML = html;
 }
 
-// RENDER: CATÁLOGO PRECIOS
-function renderTablaPrecios() {
-  let html = '<table class="arbol" style="text-align: left;">';
-  html += '<tr><th style="background:#0f172a; color:white;">Código</th><th style="background:#0f172a; color:white;">Descripción</th><th style="background:#0f172a; color:white; width: 150px; text-align:center;">Precio Final</th></tr>';
-  
-  if (listaPreciosTabla.length === 0) {
-    html += '<tr><td colspan="3" style="text-align:center; color:#64748b;">No hay precios cargados en Supabase.</td></tr>';
-  } else {
-    listaPreciosTabla.forEach(item => {
-      html += `<tr>
-        <td style="font-weight: 700; color: #0284c7;">${item.codigo || '-'}</td>
-        <td style="font-weight: 600; color: #334155;">${item.descripcion || '-'}</td>
-        <td style="text-align:center; color: #16a34a; font-weight: 700;">$ ${item.precio_final} ${item.moneda || 'USD'}</td>
-      </tr>`;
-    });
-  }
-  
-  html += '</table>';
-  document.getElementById('tablaPreciosWrapper').innerHTML = html;
-}
+function renderStockTactico(devCant, devCatvCant, valDev, descCant, valDesc, descVipCant, valDescVip, catrielCant, itemsDev, itemsDesc, itemsDescVip, itemsCatriel) {
+  const grid = document.getElementById('grid-tactico-cards');
+  if (!grid) return;
 
-// NAVEGACIÓN Y CONTROL DETALLADO MODELO POR MODELO
-let memoriaControlDetalle = [];
-
-async function cargarModuloControlAuditoria() {
-  const wrapper = document.getElementById('tablaControlDetalleWrapper');
-  if (!wrapper) return;
-
-  wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;">⏳ Cargando desglose fino de auditoría desde Supabase...</div>';
-
-  try {
-    const { data, error } = await supabaseClient
-      .from('auditoria_control_detalle')
-      .select('*')
-      .order('almacen_key', { ascending: true });
-
-    if (error) throw error;
-
-    memoriaControlDetalle = data || [];
-    filtrarTablaControlAuditoria();
-
-  } catch (err) {
-    console.error('Error al cargar control de auditoría:', err);
-    wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#ef4444;">❌ Error al cargar datos de control.</div>';
-  }
-}
-
-function filtrarTablaControlAuditoria() {
-  const wrapper = document.getElementById('tablaControlDetalleWrapper');
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
-  const filtroAlm = document.getElementById('filtro-control-almacen')?.value || 'TODOS';
-  const soloDiferencias = document.getElementById('check-solo-diferencias')?.checked || false;
 
-  let filtrados = memoriaControlDetalle.filter(item => {
-    const pasaSuc = perteneceASucursal(item.almacen_key, sucActiva);
-    const pasaAlm = (filtroAlm === 'TODOS') || (item.almacen_key === filtroAlm);
-    const pasaDif = soloDiferencias ? (item.diferencia !== 0) : true;
-    return pasaSuc && pasaAlm && pasaDif;
-  });
+  const renderDesglose = (itemsObj, idTag) => {
+    const keys = Object.keys(itemsObj);
+    if (!keys.length) return `<div id="${idTag}" style="display:none; padding:8px; font-size:0.75rem; color:#94a3b8; text-align:center;">Sin ítems en esta categoría</div>`;
+    
+    let listHtml = keys.sort().map(k => `
+      <div style="display:flex; justify-content:space-between; font-size:0.75rem; padding:3px 0; border-bottom:1px solid #334155; color:#cbd5e1;">
+        <span>${k}</span>
+        <strong style="color:#f8fafc;">${itemsObj[k]} un.</strong>
+      </div>
+    `).join('');
+    
+    return `<div id="${idTag}" style="display:none; margin-top:8px; max-height:130px; overflow-y:auto; background:#0f172a; padding:6px 8px; border-radius:6px; border:1px solid #334155;">${listHtml}</div>`;
+  };
 
-  if (filtrados.length === 0) {
-    wrapper.innerHTML = `<div style="text-align:center; padding:20px; color:#64748b;">No hay registros de auditoría que coincidan con los filtros seleccionados [${sucActiva}].</div>`;
-    return;
-  }
+  grid.innerHTML = `
+    <!-- 1. DEVOLUCIONES / TRIAGE -->
+    <div class="card-tactico" style="background:#1e293b; border:1px solid #334155; padding:14px; border-radius:10px; flex:1; min-width:210px;">
+      <div style="font-size:0.78rem; font-weight:700; color:#94a3b8; text-transform:uppercase; display:flex; align-items:center; gap:6px;">
+        ♜ DEVOLUCIONES / TRIAGE [${sucActiva}]
+      </div>
+      <div style="font-size:1.6rem; font-weight:800; color:#f8fafc; margin:6px 0;">${devCant.toLocaleString('es-AR')} un.</div>
+      <div class="req-costos" style="font-size:0.78rem; color:#94a3b8;">
+        Capital Parado (ONUs): <strong style="color:#cbd5e1;">$ ${Math.round(valDev).toLocaleString('es-AR')} USD</strong>
+      </div>
+      <div style="font-size:0.78rem; color:#ea580c; font-weight:700; margin-top:4px;">
+        📺 Cantidad de CATV a probar: ${devCatvCant.toLocaleString('es-AR')} un.
+      </div>
+      <button type="button" class="btn" style="width:100%; margin-top:10px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-dev'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
+        ▼ Ver Desglose
+      </button>
+      ${renderDesglose(itemsDev, 'desglose-dev')}
+    </div>
 
-  let html = `<table class="tabla-auditoria" style="width:100%;">
-    <thead>
-      <tr>
-        <th style="text-align:left;">Almacén</th>
-        <th style="text-align:left;">Modelo de ONU</th>
-        <th style="text-align:center;">Sistema</th>
-        <th style="text-align:center;">Físico Real</th>
-        <th style="text-align:center;">Diferencia Exacta</th>
-        <th style="text-align:center;">Última Inspección</th>
-      </tr>
-    </thead>
-    <tbody>`;
+    <!-- 2. DESCARTE GENERAL -->
+    <div class="card-tactico" style="background:#1e293b; border:1px solid #334155; padding:14px; border-radius:10px; flex:1; min-width:210px;">
+      <div style="font-size:0.78rem; font-weight:700; color:#94a3b8; text-transform:uppercase; display:flex; align-items:center; gap:6px;">
+        🗑️ DESCARTE GENERAL [${sucActiva}]
+      </div>
+      <div style="font-size:1.6rem; font-weight:800; color:#f8fafc; margin:6px 0;">${descCant.toLocaleString('es-AR')} un.</div>
+      <div class="req-costos" style="font-size:0.78rem; color:#94a3b8;">
+        Capital Afectado (ONUs): <strong style="color:#cbd5e1;">$ ${Math.round(valDesc).toLocaleString('es-AR')} USD</strong>
+      </div>
+      <button type="button" class="btn" style="width:100%; margin-top:22px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-desc'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
+        ▼ Ver Desglose
+      </button>
+      ${renderDesglose(itemsDesc, 'desglose-desc')}
+    </div>
 
-  filtrados.forEach(row => {
-    const almNombre = LISTA_AUDITORIA.find(a => a.key === row.almacen_key)?.nombre || row.almacen_key;
-    const dif = row.diferencia || 0;
+    <!-- 3. DESCARTE VIP -->
+    <div class="card-tactico" style="background:#1e293b; border:1px solid #991b1b; padding:14px; border-radius:10px; flex:1; min-width:210px;">
+      <div style="font-size:0.78rem; font-weight:700; color:#f87171; text-transform:uppercase; display:flex; align-items:center; gap:6px;">
+        👑 DESCARTE VIP [${sucActiva}]
+      </div>
+      <div style="font-size:1.6rem; font-weight:800; color:#f8fafc; margin:6px 0;">${descVipCant.toLocaleString('es-AR')} un.</div>
+      <div class="req-costos" style="font-size:0.78rem; color:#94a3b8;">
+        Capital VIP Inmovilizado: <strong style="color:#cbd5e1;">$ ${Math.round(valDescVip).toLocaleString('es-AR')} USD</strong>
+      </div>
+      <button type="button" class="btn" style="width:100%; margin-top:22px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-descvip'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
+        ▼ Ver Desglose
+      </button>
+      ${renderDesglose(itemsDescVip, 'desglose-descvip')}
+    </div>
 
-    let tagDif = '<span class="tag-sin-desviacion">🟢 Exacto (0)</span>';
-    if (dif < 0) {
-      tagDif = `<span style="color:#ef4444; font-weight:700; background:#fee2e2; padding:2px 8px; border-radius:4px;">🔴 Faltan ${Math.abs(dif)} un.</span>`;
-    } else if (dif > 0) {
-      tagDif = `<span style="color:#0284c7; font-weight:700; background:#e0f2fe; padding:2px 8px; border-radius:4px;">🔵 Sobran ${dif} un.</span>`;
-    }
-
-    const fechaStr = row.fecha_inspeccion 
-      ? new Date(row.fecha_inspeccion).toLocaleDateString('es-AR') + ' ' + new Date(row.fecha_inspeccion).toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'})
-      : '<span style="color:#94a3b8; font-style:italic;">Sin datos</span>';
-
-    html += `<tr>
-      <td style="font-weight:600; color:#334155;">${almNombre}</td>
-      <td style="font-weight:700; color:#0f172a;">${row.modelo}</td>
-      <td style="text-align:center; font-weight:600;">${row.stock_sistema} un.</td>
-      <td style="text-align:center; font-weight:700; color:#0284c7;">${row.stock_fisico} un.</td>
-      <td style="text-align:center;">${tagDif}</td>
-      <td style="text-align:center; font-size:0.78rem;">${fechaStr}</td>
-    </tr>`;
-  });
-
-  html += `</tbody></table>`;
-  wrapper.innerHTML = html;
+    <!-- 4. STOCK NUEVO / COMPRAS -->
+    <div class="card-tactico" style="background:#1e293b; border:1px solid #334155; padding:14px; border-radius:10px; flex:1; min-width:210px;">
+      <div style="font-size:0.78rem; font-weight:700; color:#38bdf8; text-transform:uppercase; display:flex; align-items:center; gap:6px;">
+        🛒 STOCK NUEVO / COMPRAS [${sucActiva}]
+      </div>
+      <div style="font-size:1.6rem; font-weight:800; color:#f8fafc; margin:6px 0;">${catrielCant.toLocaleString('es-AR')} un.</div>
+      <div style="font-size:0.78rem; color:#94a3b8;">ONUs Estratégicas Nuevas</div>
+      <button type="button" class="btn" style="width:100%; margin-top:22px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-catriel'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
+        ▼ Ver Desglose
+      </button>
+      ${renderDesglose(itemsCatriel, 'desglose-catriel')}
+    </div>
+  `;
 }
