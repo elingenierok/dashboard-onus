@@ -135,49 +135,131 @@ function switchOps(tabId, btn) {
   document.getElementById(tabId)?.classList.add('active');
 }
 
-// 1. CARGA DE EQUIPOS (CON CONFIRMACIÓN DOBLE, SELLADO MULTISUCURSAL Y FUSIÓN DE REGISTROS)
+// ====================================================
+// 1. CARGA DE EQUIPOS (VALIDACIÓN RIGUROSA, ANTI-DUPLICADOS Y ANTI DOBLE-CLIC)
+// ====================================================
 document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const btnSubmitCarga = document.querySelector('#form-carga .btn-submit');
-  if (btnSubmitCarga) btnSubmitCarga.disabled = true; // Previene doble clic
+  
+  // 🛡️ 1. BLOQUEO ANTI DOBLE-CLIC INMEDIATO
+  if (btnSubmitCarga) btnSubmitCarga.disabled = true;
 
   const msg = document.getElementById('statusCarga');
-  const sn = document.getElementById('cg_serial')?.value.trim().toUpperCase();
+  const rawSn = document.getElementById('cg_serial')?.value || '';
+  
+  // Clean string: Mayúsculas, sin espacios ni saltos de línea
+  const sn = rawSn.trim().toUpperCase().replace(/\s+/g, '');
   const modelo = document.getElementById('cg_modelo')?.value;
   const origen = document.getElementById('cg_origen')?.value || 'Sucursal / Mostrador';
   const detalleTecnico = document.getElementById('cg_tecnico')?.value.trim();
   const sucActiva = obtenerSucursalOps();
   const operadorNombre = window.USUARIO_NOMBRE_MOSTRAR || document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
 
-  if (!sn || !modelo) {
-    if (msg) {
-      msg.textContent = '⚠️ Debe ingresar el Número de Serie y seleccionar un Modelo.';
-      msg.style.color = '#fde047';
-    }
-    if (btnSubmitCarga) btnSubmitCarga.disabled = false;
-    return;
-  }
-
-  const mensajeConfirmacion = `⚠️ CONFIRMACIÓN DE INGRESO [Sucursal: ${sucActiva}]\n\n` +
-                              `¿Seguro que desea guardar este registro?\n\n` +
-                              `• SN: ${sn}\n` +
-                              `• Modelo: ${modelo}`;
-
-  if (!window.confirm(mensajeConfirmacion)) {
-    if (msg) {
-      msg.textContent = '⏹️ Carga cancelada por el operador.';
-      msg.style.color = '#cbd5e1';
-    }
-    if (btnSubmitCarga) btnSubmitCarga.disabled = false;
-    return;
-  }
-
-  if (msg) {
-    msg.textContent = `⏳ Verificando registros de ${sucActiva}...`;
-    msg.style.color = '#38bdf8';
-  }
-
   try {
+    // 🛡️ 2. VALIDACIÓN DE CAMPOS OBLIGATORIOS
+    if (!sn || !modelo) {
+      if (msg) {
+        msg.textContent = '⚠️ Debe ingresar el Número de Serie y seleccionar un Modelo.';
+        msg.style.color = '#fde047';
+      }
+      return;
+    }
+
+    // 🛡️ 3. VALIDACIÓN SINTÁCTICA (PREFIJOS AUTORIZADOS)
+    const PREFIJOS_PERMITIDOS = ['ZTEGD', 'HWTC', 'FKBA', 'ALCL', 'GPON', 'SN'];
+    const tienePrefijoValido = PREFIJOS_PERMITIDOS.some(p => sn.startsWith(p));
+
+    if (!tienePrefijoValido) {
+      const errTxt = `El serial "${sn}" no tiene un formato válido.\nDebe comenzar con un prefijo autorizador: ${PREFIJOS_PERMITIDOS.join(', ')}`;
+      if (msg) {
+        msg.textContent = `⚠️ Serial inválido. Debe iniciar con: ${PREFIJOS_PERMITIDOS.join(', ')}`;
+        msg.style.color = '#f87171';
+      }
+      alert(`⚠️ ATENCIÓN:\n\n${errTxt}`);
+      return;
+    }
+
+    // 🛡️ 4. VALIDACIÓN DE LONGITUD DE CARACTERES
+    if (sn.length < 10 || sn.length > 18) {
+      const errTxt = `El serial "${sn}" posee ${sn.length} caracteres.\nLa longitud permitida para equipos de fibra es entre 10 y 18 caracteres.`;
+      if (msg) {
+        msg.textContent = `⚠️ Longitud inválida (${sn.length} caracteres). Se requieren entre 10 y 18.`;
+        msg.style.color = '#f87171';
+      }
+      alert(`⚠️ ATENCIÓN:\n\n${errTxt}`);
+      return;
+    }
+
+    // 🛡️ 5. CONFIRMACIÓN DEL OPERADOR
+    const mensajeConfirmacion = `⚠️ CONFIRMACIÓN DE INGRESO [Sucursal: ${sucActiva}]\n\n` +
+                                `¿Seguro que desea guardar este registro?\n\n` +
+                                `• SN: ${sn}\n` +
+                                `• Modelo: ${modelo}`;
+
+    if (!window.confirm(mensajeConfirmacion)) {
+      if (msg) {
+        msg.textContent = '⏹️ Carga cancelada por el operador.';
+        msg.style.color = '#cbd5e1';
+      }
+      return;
+    }
+
+    if (msg) {
+      msg.textContent = `⏳ Verificando duplicados en Supabase (Global)...`;
+      msg.style.color = '#38bdf8';
+    }
+
+    // 🛡️ 6. CONSULTA GLOBAL EN BD (BUSCA EN TODAS LAS SUCURSALES E HISTÓRICO)
+    const [resOperativo, resHistorico] = await Promise.all([
+      supabaseOps.from('recupero_operativo').select('id, sn, sucursal_id, condicion').ilike('sn', sn).limit(1),
+      supabaseOps.from('recupero_historico_equipos').select('id, sn, sucursal_id').ilike('sn', sn).limit(1)
+    ]);
+
+    if (resOperativo.error) throw resOperativo.error;
+    if (resHistorico.error) throw resHistorico.error;
+
+    // Si ya existe en la mesa activa de CUALQUIER sucursal: REBOTAR
+    if (resOperativo.data && resOperativo.data.length > 0) {
+      const reg = resOperativo.data[0];
+      const sucOrigen = reg.sucursal_id || 'Mesa Activa';
+      const cond = reg.condicion || 'REGISTRADO';
+
+      alert(
+        `🚫 EQUIPO DUPLICADO DETECTADO 🚫\n\n` +
+        `El serial "${sn}" YA ESTÁ REGISTRADO en el sistema.\n` +
+        `• Ubicación actual: Sucursal [${sucOrigen}]\n` +
+        `• Estado en mesa: ${cond}\n\n` +
+        `No se guardará esta carga.`
+      );
+
+      if (msg) {
+        msg.textContent = `🚫 Carga rechazada: El serial ${sn} ya existe en la sucursal [${sucOrigen}].`;
+        msg.style.color = '#f87171';
+      }
+      return;
+    }
+
+    // Si ya fue procesado en un Cierre Semanal anterior: REBOTAR
+    if (resHistorico.data && resHistorico.data.length > 0) {
+      const regHist = resHistorico.data[0];
+      const sucOrigen = regHist.sucursal_id || 'Histórico';
+
+      alert(
+        `🚫 EQUIPO DUPLICADO EN HISTÓRICO 🚫\n\n` +
+        `El serial "${sn}" fue procesado anteriormente en un Cierre Semanal.\n` +
+        `• Sucursal de origen: [${sucOrigen}]\n\n` +
+        `No se guardará esta carga.`
+      );
+
+      if (msg) {
+        msg.textContent = `🚫 Carga rechazada: El serial ${sn} ya fue archivado en el histórico [${sucOrigen}].`;
+        msg.style.color = '#f87171';
+      }
+      return;
+    }
+
+    // 🛡️ 7. INSERCIÓN DE REGISTRO NUEVO
     const esVIP = esModeloVIP(modelo);
     const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
     
@@ -186,69 +268,31 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       detalleObs += ' [Derivado automáticamente: Tecnología Obsoleta / Descarte]';
     }
 
-    // BUSCAMOS SI YA EXISTE UN REGISTRO PREVIO (Para actualizarlo en vez de duplicarlo)
-    let checkQuery = supabaseOps
-      .from('recupero_operativo')
-      .select('id, condicion')
-      .eq('sn', sn);
+    const payload = {
+      sn: sn,
+      descripcion: modelo,
+      almacen_origen: origen,
+      tecnico: operadorNombre,
+      observaciones: detalleObs,
+      condicion: condicionAsignada,
+      sucursal_id: sucActiva
+    };
 
-    if (sucActiva !== 'TODAS') {
-      checkQuery = checkQuery.eq('sucursal_id', sucActiva);
-    }
+    const { error: errInsert } = await supabaseOps.from('recupero_operativo').insert([payload]);
 
-    const { data: exist, error: errCheck } = await checkQuery.limit(1);
+    if (errInsert) throw errInsert;
 
-    if (errCheck) throw errCheck;
-
-    if (exist && exist.length > 0) {
-      // 🔄 ACTUALIZACIÓN: El equipo ya estaba cargado. Lo pisamos en vez de duplicar.
-      const idRegistro = exist[0].id;
-      const { error: errUpdate } = await supabaseOps
-        .from('recupero_operativo')
-        .update({
-          descripcion: modelo,
-          almacen_origen: origen,
-          tecnico: operadorNombre,
-          observaciones: detalleObs,
-          condicion: condicionAsignada
-        })
-        .eq('id', idRegistro);
-
-      if (errUpdate) throw errUpdate;
-
-      if (msg) {
-        msg.textContent = `✅ Registro existente actualizado en la mesa de ${sucActiva}.`;
+    if (msg) {
+      if (esVIP) {
+        msg.textContent = `✅ ¡Equipo VIP (${sn}) ingresado a la mesa de ${sucActiva}!`;
         msg.style.color = '#4ade80';
-      }
-
-    } else {
-      // ➕ INSERCIÓN: Es un equipo 100% nuevo.
-      const payload = {
-        sn: sn,
-        descripcion: modelo,
-        almacen_origen: origen,
-        tecnico: operadorNombre,
-        observaciones: detalleObs,
-        condicion: condicionAsignada,
-        sucursal_id: sucActiva
-      };
-
-      const { error: errInsert } = await supabaseOps.from('recupero_operativo').insert([payload]);
-
-      if (errInsert) throw errInsert;
-
-      if (msg) {
-        if (esVIP) {
-          msg.textContent = `✅ ¡Equipo VIP ingresado a la mesa de ${sucActiva}!`;
-          msg.style.color = '#4ade80';
-        } else {
-          msg.textContent = `📼 ¡Equipo Derivado a DESCARTE en ${sucActiva}!`;
-          msg.style.color = '#fde047';
-        }
+      } else {
+        msg.textContent = `📼 ¡Equipo (${sn}) Derivado a DESCARTE en ${sucActiva}!`;
+        msg.style.color = '#fde047';
       }
     }
 
-    // Limpiar formulario tras éxito
+    // Limpieza de campos post-guardado exitoso
     document.getElementById('cg_serial').value = '';
     document.getElementById('cg_modelo').selectedIndex = 0;
     if (document.getElementById('boxPreviewCarga')) document.getElementById('boxPreviewCarga').style.display = 'none';
@@ -261,7 +305,10 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       msg.style.color = '#ef4444';
     }
   } finally {
-    if (btnSubmitCarga) btnSubmitCarga.disabled = false;
+    // Restablecer el botón con un retardo defensivo de 600ms para asegurar la protección contra doble clic
+    setTimeout(() => {
+      if (btnSubmitCarga) btnSubmitCarga.disabled = false;
+    }, 600);
   }
 });
 
