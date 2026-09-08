@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditoría de Stock - Suite ISP</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 16px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+  .suite-container { width: 100%; max-width: 620px; display: flex; flex-direction: column; gap: 16px; }
+  
+  .header { text-align: center; margin-bottom: 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .header h1 { font-size: 1.3rem; color: #38bdf8; font-weight: 800; }
+  .header p { font-size: 0.8rem; color: #94a3b8; }
+  .user-bar { display: flex; align-items: center; justify-content: space-between; width: 100%; background: #1e293b; padding: 8px 14px; border-radius: 8px; border: 1px solid #334155; font-size: 0.8rem; }
+
+  .card-form { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; gap: 16px; }
+  
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 0.82rem; font-weight: 600; color: #cbd5e1; }
+  input, select { background: #0f172a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
+  input:focus, select:focus { outline: none; border-color: #0284c7; }
+
+  .btn-submit { background: #0284c7; color: white; border: none; padding: 12px; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+  .btn-submit:hover { background: #0369a1; }
+  .btn-submit:disabled { background: #334155; cursor: not-allowed; opacity: 0.5; }
+
+  .status-msg { text-align: center; font-size: 0.82rem; font-weight: 600; line-height: 1.3; }
+
+  /* ESTILOS DE PANTALLA DE LOGIN */
+  #login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; width: 100%; max-width: 380px; }
+  .login-box { background: #1e293b; padding: 30px; border-radius: 12px; width: 100%; border: 1px solid #334155; display: flex; flex-direction: column; gap: 16px; }
+  .login-box h2 { text-align: center; color: #38bdf8; font-weight: 800; }
+  .btn-login { background: #0284c7; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+  .btn-logout { background: transparent; color: #f87171; border: 1px solid #f87171; padding: 4px 10px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; }
+
+  /* ESTILOS TABLA DE CONTEO */
+  .table-container { max-height: 380px; overflow-y: auto; border: 1px solid #334155; border-radius: 8px; background: #0f172a; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { background: #1e293b; color: #38bdf8; padding: 10px; text-align: left; position: sticky; top: 0; border-bottom: 1px solid #334155; z-index: 10; }
+  td { padding: 8px 10px; border-bottom: 1px solid #1e293b; color: #e2e8f0; }
+  tr:hover { background: #131f37; }
+  .input-count { width: 90px; text-align: center; font-weight: 800; font-family: monospace; background: #1e293b !important; color: #4ade80 !important; border: 1px solid #0284c7 !important; padding: 6px !important; }
+</style>
+</head>
+<body>
+
+<!-- PANTALLA DE LOGIN -->
+<div id="login-container">
+  <div class="login-box">
+    <h2>📋 Auditoría de Stock ISP</h2>
+    <div class="form-group">
+      <label>Correo Electrónico</label>
+      <input type="email" id="txt-email" placeholder="usuario@empresa.com">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="txt-pass" placeholder="••••••••">
+    </div>
+    <button type="button" class="btn-login" onclick="window.iniciarSesion()">Ingresar al Sistema</button>
+    <div id="login-error" class="status-msg" style="color:#ef4444;"></div>
+  </div>
+</div>
+
+<!-- APLICACIÓN PRINCIPAL -->
+<div id="app-container" class="suite-container" style="display:none;">
+  <header class="header">
+    <h1>📋 Módulo de Auditoría y Conteo Físico</h1>
+    <p>Control ciego de inventario en estantería vs. registros en sistema</p>
+    <div class="user-bar">
+      <span id="user-badge" style="color:#38bdf8; font-weight:700;">👤 Cargando perfil...</span>
+      <button class="btn-logout" onclick="window.cerrarSesion()">Cerrar Sesión</button>
+    </div>
+  </header>
+
+  <div class="card-form">
+    <!-- PASO 1: SNAPSHOT DEL SISTEMA -->
+    <div style="background:#0f172a; border:1px solid #0284c7; padding:14px; border-radius:10px; display:flex; flex-direction:column; gap:10px;">
+      <strong style="color:#38bdf8; font-size:0.9rem;">📸 Paso 1: Congelar Foto del Sistema</strong>
+      <p style="font-size:0.78rem; color:#94a3b8; line-height:1.4;">
+        Inicia el proceso capturando el estado actual del inventario en Supabase para contrastarlo posteriormente con el conteo físico.
+      </p>
+      <button type="button" id="btnSnapshot" class="btn-submit" style="background:#0284c7; font-size:0.88rem; padding:10px;" onclick="iniciarSnapshotSistema()">
+        📸 Iniciar Control y Congelar Stock
+      </button>
+      <div id="statusSnapshot" class="status-msg" style="font-size:0.8rem;"></div>
+    </div>
+
+    <hr style="border:0; border-top:1px solid #334155; margin:4px 0;">
+
+    <strong style="color:#f8fafc; font-size:0.92rem;">📝 Paso 2: Conteo Físico Real en Estantería</strong>
+
+    <!-- PASO 2: DESPLEGABLE AGRUPADO POR SUCURSAL / DEPOSITOS -->
+    <div class="form-group">
+      <label>🏬 Sucursal / Depósito a Auditar</label>
+      <select id="aud_sucursal" onchange="cargarTablaConteoFisico()" required>
+        <option value="" disabled selected>-- Seleccionar Almacén --</option>
+        <optgroup label="📍 OBERÁ">
+          <option value="OBE_ALM_PRINCIPAL">OBE Principal</option>
+          <option value="OBE_ALM_CATRIEL">OBE Catriel (Compras)</option>
+          <option value="OBE_ALM_DEVOLUCIONES">OBE Devoluciones (Triage)</option>
+          <option value="OBE_ALM_DESCARTE">OBE Descarte (Inmovilizado)</option>
+        </optgroup>
+        <optgroup label="📍 SAN PEDRO">
+          <option value="SPD_ALM_PRINCIPAL">San Pedro Principal</option>
+        </optgroup>
+        <optgroup label="📍 WANDA">
+          <option value="WND_ALM_PRINCIPAL">Wanda Principal</option>
+        </optgroup>
+        <optgroup label="📍 ITUZAINGÓ">
+          <option value="ITU_ALM_PRINCIPAL">Ituzaingó Principal</option>
+        </optgroup>
+        <optgroup label="📍 ELDORADO">
+          <option value="ELDO_ALM_PRINCIPAL">Eldorado Principal</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- TABLA RELLENABLE DE MODELOS (CIEGA) -->
+    <div id="contenedorTablaConteo" style="display:none; flex-direction:column; gap:12px;">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Modelo de Equipo</th>
+              <th style="text-align:right; width:130px;">Cantidad Contada</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyConteoModelos"></tbody>
+        </table>
+      </div>
+
+      <button type="button" id="btnGuardarAuditoria" class="btn-submit" style="background:#166534; font-size:0.95rem;" onclick="guardarConteoFisicoReal()">
+        💾 Guardar Conteo Físico Real
+      </button>
+    </div>
+
+    <div id="statusAuditoria" class="status-msg"></div>
+  </div>
+</div>
+
+<!-- INCLUSIÓN DE SCRIPTS CORE Y MÓDULO ESPECIALIZADO -->
+<script src="js/core/auth.js"></script>
+<script src="js/core/app.js"></script>
+<script src="js/modules/auditoria/auditoria.js"></script>
+
+</body>
+</html>

@@ -188,12 +188,7 @@
       <div id="contenedor-graficos-b" style="margin-top: 20px; display: flex; flex-direction: column; gap: 20px;">
         <!-- ⚙️ El motor JS inyectará los gráficos automáticamente aquí -->
       </div>
-
-      <div class="req-auditoria" style="margin-top: 10px;">
-        <strong style="font-size: 0.9rem; color: #0f172a;">📋 Exactitud de Registro (Stock Sistema vs. Stock Físico)</strong>
-        <div id="tablaAuditoriaWrapper" style="overflow-x: auto; margin-top: 8px;"></div>
-      </div>
-    </section>
+      </section>
 
     <section id="stock-operativo" class="card">
       <h2 class="card-title">⚙️ Indicadores Operativos - Distribución por Sucursal</h2>
@@ -316,39 +311,51 @@
   <main id="tab-flota" class="tab-content">
     <section class="card"><h2 class="card-title">🚚 Módulo de Gestión de Flota</h2><div class="placeholder-tactico">Próximamente... (Se creará en js/flota.js)</div></section>
   </main>
-
-  <!-- PESTAÑA: CONTROL DETALLADO DE AUDITORÍA POR MODELO -->
-  <main id="tab-control" class="tab-content req-auditoria">
-    <section class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2 class="card-title" style="margin:0;">🔍 Control de Desviaciones Ítem por Ítem (Por Modelo)</h2>
-        <button class="btn btn-outline" onclick="cargarModuloControlAuditoria()">⚡ Actualizar Tabla</button>
-      </div>
-      
-      <div style="margin-bottom: 16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-        <label style="font-weight:600; font-size:0.85rem; color:#0f172a;">🏬 Filtrar por Almacén:</label>
-        <select id="filtro-control-almacen" style="background:#1e293b; color:white; border:1px solid #334155; padding:6px 12px; border-radius:6px; font-size:0.85rem;" onchange="filtrarTablaControlAuditoria()">
-          <option value="TODOS" selected>Todos los Almacenes</option>
-          <option value="OBE_ALM_PRINCIPAL">OBE Principal</option>
-          <option value="OBE_ALM_CATRIEL">OBE Catriel (Compras)</option>
-          <option value="OBE_ALM_DEVOLUCIONES">OBE Devoluciones (Triage)</option>
-          <option value="OBE_ALM_DESCARTE">OBE Descarte (Inmovilizado)</option>
-          <option value="SPD_ALM_PRINCIPAL">San Pedro Principal</option>
-          <option value="WND_ALM_PRINCIPAL">Wanda Principal</option>
-          <option value="ITU_ALM_PRINCIPAL">Ituzaingó Principal</option>
-          <option value="ELDO_ALM_PRINCIPAL">Eldorado Principal</option>
-        </select>
-        
-        <label style="cursor:pointer; font-size:0.82rem; font-weight:600; color:#0f172a; display:flex; align-items:center; gap:4px;">
-          <input type="checkbox" id="check-solo-diferencias" onchange="filtrarTablaControlAuditoria()"> 
-          Mostrar solo con Diferencias (Faltantes / Sobrantes)
-        </label>
-      </div>
-
-      <div id="tablaControlDetalleWrapper" style="overflow-x: auto;"></div>
-    </section>
-  </main>
   
+<!-- PESTAÑA: VISOR DE AUDITORÍAS Y DESVIACIONES -->
+<main id="tab-control" class="tab-content req-auditoria">
+  
+  <!-- 1. RESUMEN GENERAL DE EXACTITUD -->
+  <section class="card" style="margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h2 class="card-title" style="margin:0;">📈 Resumen de Exactitud por Almacén</h2>
+      <button class="btn btn-outline" onclick="cargarModuloControlAuditoria()">⚡ Actualizar Datos</button>
+    </div>
+    <div id="tablaResumenAuditoriaWrapper" style="overflow-x: auto;">
+      <p style="padding:15px; color:#94a3b8; text-align:center;">Cargando resumen general...</p>
+    </div>
+  </section>
+
+  <!-- 2. CONTROL DETALLADO (ÍTEM POR ÍTEM) -->
+  <section class="card">
+    <h2 class="card-title" style="margin-bottom:16px;">🔍 Control de Desviaciones Ítem por Ítem</h2>
+    
+    <div style="margin-bottom: 16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; background:#0f172a; padding:12px; border-radius:8px; border:1px solid #334155;">
+      <label style="font-weight:600; font-size:0.85rem; color:#cbd5e1;">🏬 Filtrar por Almacén:</label>
+      <select id="filtro-control-almacen" style="background:#1e293b; color:white; border:1px solid #0284c7; padding:6px 12px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="filtrarTablaControlAuditoria()">
+        <option value="TODOS" selected>Todos los Almacenes</option>
+        <option value="OBE_ALM_PRINCIPAL">OBE Principal</option>
+        <option value="OBE_ALM_CATRIEL">OBE Catriel (Compras)</option>
+        <option value="OBE_ALM_DEVOLUCIONES">OBE Devoluciones (Triage)</option>
+        <option value="OBE_ALM_DESCARTE">OBE Descarte (Inmovilizado)</option>
+        <option value="SPD_ALM_PRINCIPAL">San Pedro Principal</option>
+        <option value="WND_ALM_PRINCIPAL">Wanda Principal</option>
+        <option value="ITU_ALM_PRINCIPAL">Ituzaingó Principal</option>
+        <option value="ELDO_ALM_PRINCIPAL">Eldorado Principal</option>
+      </select>
+      
+      <label style="cursor:pointer; font-size:0.85rem; font-weight:600; color:#f8fafc; display:flex; align-items:center; gap:6px; margin-left:10px;">
+        <input type="checkbox" id="check-solo-diferencias" onchange="filtrarTablaControlAuditoria()" style="width:16px; height:16px; cursor:pointer;"> 
+        Mostrar solo con Diferencias (Faltantes / Sobrantes)
+      </label>
+    </div>
+
+    <div id="tablaControlDetalleWrapper" style="overflow-x: auto;">
+      <p style="padding:15px; color:#94a3b8; text-align:center;">Cargando detalles de inspección...</p>
+    </div>
+  </section>
+</main>
+
   <!-- PESTAÑA: REFERENCIAS Y CLASIFICACIÓN ABC -->
   <main id="tab-referencias" class="tab-content req-auditoria">
     <section class="card">
@@ -483,6 +490,7 @@
 <script src="js/modules/recupero/recupero_ui.js"></script>
 <script src="js/modules/recupero/recupero_actions.js"></script>
 <script src="js/modules/tendencias/tendencias.js"></script>
+<script src="js/modules/auditoria/visor.js"></script>
 <script src="js/modules/referencias/referencias.js"></script>
 <script src="js/modules/admin/admin.js"></script>
 <script src="js/services/reportes.js"></script>

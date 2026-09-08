@@ -1,5 +1,5 @@
 // ====================================================
-// MÓDULO AUTÓNOMO DE SUITE OPERATIVA (CARGA, LAB & AUDITORÍA)
+// MÓDULO AUTÓNOMO DE SUITE OPERATIVA (CARGA Y LAB)
 // ====================================================
 
 const SUPABASE_URL_OPS = 'https://ovluxdezwvuonlwnymna.supabase.co';
@@ -12,17 +12,6 @@ let catalogoEquiposMemoria = [];
 let equipoCargadoActual = null;
 let veredictoFinalCalculado = 'CIRCULACIÓN';
 let fechaInicioPruebaTemp = null;
-
-const NOMBRES_ALMACEN_AUDITORIA = {
-  'OBE_ALM_PRINCIPAL': 'OBE Principal',
-  'OBE_ALM_CATRIEL': 'OBE Catriel (Compras)',
-  'OBE_ALM_DEVOLUCIONES': 'OBE Devoluciones (Triage)',
-  'OBE_ALM_DESCARTE': 'OBE Descarte (Inmovilizado)',
-  'SPD_ALM_PRINCIPAL': 'San Pedro Principal',
-  'WND_ALM_PRINCIPAL': 'Wanda Principal',
-  'ITU_ALM_PRINCIPAL': 'Ituzaingó Principal',
-  'ELDO_ALM_PRINCIPAL': 'Eldorado Principal'
-};
 
 function obtenerSucursalOps() {
   return window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
@@ -54,7 +43,7 @@ function resolverInfoEquipoOps(descNorm, sucActiva) {
   return match;
 }
 
-// CARGA DINÁMICA DE MODELOS DESDE SUPABASE (SPD + GLOBAL)
+// CARGA DINÁMICA DE MODELOS DESDE SUPABASE
 async function cargarCatalogoEquipos() {
   const selectModelo = document.getElementById('cg_modelo');
   if (!selectModelo || !supabaseOps) return;
@@ -68,9 +57,8 @@ async function cargarCatalogoEquipos() {
     if (error) throw error;
 
     catalogoEquiposMemoria = data || [];
-    const sucActiva = obtenerSucursalOps(); // Retorna 'SPD' u 'OBE'
+    const sucActiva = obtenerSucursalOps();
 
-    // Mapa para unificar modelos sin duplicados
     const mapaModelos = new Map();
 
     // 1. Cargar base de equipos GLOBAL
@@ -78,7 +66,7 @@ async function cargarCatalogoEquipos() {
       .filter(item => item.sucursal_id === 'GLOBAL')
       .forEach(item => mapaModelos.set(item.modelo, item));
 
-    // 2. Sobrescribir o agregar con las reglas específicas de la sucursal (ej: SPD)
+    // 2. Sobrescribir o agregar con las reglas específicas de la sucursal
     catalogoEquiposMemoria
       .filter(item => item.sucursal_id === sucActiva)
       .forEach(item => mapaModelos.set(item.modelo, item));
@@ -166,14 +154,17 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       return;
     }
 
-    // 🛡️ 3. VALIDACIÓN SINTÁCTICA (PREFIJOS AUTORIZADOS)
+    // 🛡️ 3. VALIDACIÓN SINTÁCTICA (PREFIJOS AUTORIZADOS Y SERIALES LARGOS HEX)
     const PREFIJOS_PERMITIDOS = ['ZTEGD', 'HWTC', 'FKBA', 'ALCL', 'GPON', 'SN'];
-    const tienePrefijoValido = PREFIJOS_PERMITIDOS.some(p => sn.startsWith(p));
+    const esSerialEstandar = PREFIJOS_PERMITIDOS.some(p => sn.startsWith(p));
+    
+    // Evalúa si es un Serial Largo Escaneado (Hexadecimal de 16 caracteres)
+    const esSerialLargoHex = /^[0-9A-F]{16}$/i.test(sn);
 
-    if (!tienePrefijoValido) {
-      const errTxt = `El serial "${sn}" no tiene un formato válido.\nDebe comenzar con un prefijo autorizador: ${PREFIJOS_PERMITIDOS.join(', ')}`;
+    if (!esSerialEstandar && !esSerialLargoHex) {
+      const errTxt = `El serial "${sn}" no tiene un formato válido.\n\nDebe cumplir una de las siguientes opciones:\n• Comenzar con un prefijo autorizador: ${PREFIJOS_PERMITIDOS.join(', ')}\n• Ser un Serial Largo de escáner (16 caracteres Hexadecimales).`;
       if (msg) {
-        msg.textContent = `⚠️ Serial inválido. Debe iniciar con: ${PREFIJOS_PERMITIDOS.join(', ')}`;
+        msg.textContent = `⚠️ Serial inválido. Requiere prefijo conocido o 16 caracteres Hexadecimales.`;
         msg.style.color = '#f87171';
       }
       alert(`⚠️ ATENCIÓN:\n\n${errTxt}`);
@@ -181,10 +172,10 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
     }
 
     // 🛡️ 4. VALIDACIÓN DE LONGITUD DE CARACTERES
-    if (sn.length < 10 || sn.length > 18) {
-      const errTxt = `El serial "${sn}" posee ${sn.length} caracteres.\nLa longitud permitida para equipos de fibra es entre 10 y 18 caracteres.`;
+    if (sn.length < 10 || sn.length > 20) {
+      const errTxt = `El serial "${sn}" posee ${sn.length} caracteres.\nLa longitud permitida para equipos de fibra es entre 10 y 20 caracteres.`;
       if (msg) {
-        msg.textContent = `⚠️ Longitud inválida (${sn.length} caracteres). Se requieren entre 10 y 18.`;
+        msg.textContent = `⚠️ Longitud inválida (${sn.length} caracteres). Se requieren entre 10 y 20.`;
         msg.style.color = '#f87171';
       }
       alert(`⚠️ ATENCIÓN:\n\n${errTxt}`);
@@ -210,7 +201,7 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       msg.style.color = '#38bdf8';
     }
 
-    // 🛡️ 6. CONSULTA GLOBAL EN BD (BUSCA EN TODAS LAS SUCURSALES E HISTÓRICO)
+    // 🛡️ 6. CONSULTA GLOBAL Y PERMISO PARA PISAR / REINGRESAR
     const [resOperativo, resHistorico] = await Promise.all([
       supabaseOps.from('recupero_operativo').select('id, sn, sucursal_id, condicion').ilike('sn', sn).limit(1),
       supabaseOps.from('recupero_historico_equipos').select('id, sn, sucursal_id').ilike('sn', sn).limit(1)
@@ -219,44 +210,57 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
     if (resOperativo.error) throw resOperativo.error;
     if (resHistorico.error) throw resHistorico.error;
 
-    // Si ya existe en la mesa activa de CUALQUIER sucursal: REBOTAR
+    // Si ya existe en la Mesa Activa, se le permite al operador "PISAR" el registro anterior
     if (resOperativo.data && resOperativo.data.length > 0) {
       const reg = resOperativo.data[0];
       const sucOrigen = reg.sucursal_id || 'Mesa Activa';
       const cond = reg.condicion || 'REGISTRADO';
 
-      alert(
-        `🚫 EQUIPO DUPLICADO DETECTADO 🚫\n\n` +
-        `El serial "${sn}" YA ESTÁ REGISTRADO en el sistema.\n` +
-        `• Ubicación actual: Sucursal [${sucOrigen}]\n` +
-        `• Estado en mesa: ${cond}\n\n` +
-        `No se guardará esta carga.`
+      const pisarRegistro = window.confirm(
+        `🔄 REINGRESO / PISAR REGISTRO ANTERIOR 🔄\n\n` +
+        `El serial "${sn}" ya existe en la sucursal [${sucOrigen}] (Estado actual: ${cond}).\n\n` +
+        `¿Deseas PISAR el registro anterior y actualizar la mesa con este nuevo ingreso?`
       );
 
-      if (msg) {
-        msg.textContent = `🚫 Carga rechazada: El serial ${sn} ya existe en la sucursal [${sucOrigen}].`;
-        msg.style.color = '#f87171';
+      if (pisarRegistro) {
+        const { error: errDelete } = await supabaseOps
+          .from('recupero_operativo')
+          .delete()
+          .eq('id', reg.id);
+
+        if (errDelete) throw errDelete;
+
+        if (msg) {
+          msg.textContent = `🔄 Registro anterior removido para ${sn}. Guardando nuevo ingreso...`;
+          msg.style.color = '#38bdf8';
+        }
+      } else {
+        if (msg) {
+          msg.textContent = `⏹️ Carga cancelada: Se conservó el registro anterior de ${sn}.`;
+          msg.style.color = '#cbd5e1';
+        }
+        return;
       }
-      return;
     }
 
-    // Si ya fue procesado en un Cierre Semanal anterior: REBOTAR
+    // Si el equipo pertenecía a un Histórico (Cierre semanal previo), se permite reingresarlo para volver a probar
     if (resHistorico.data && resHistorico.data.length > 0) {
       const regHist = resHistorico.data[0];
       const sucOrigen = regHist.sucursal_id || 'Histórico';
 
-      alert(
-        `🚫 EQUIPO DUPLICADO EN HISTÓRICO 🚫\n\n` +
-        `El serial "${sn}" fue procesado anteriormente en un Cierre Semanal.\n` +
-        `• Sucursal de origen: [${sucOrigen}]\n\n` +
-        `No se guardará esta carga.`
+      const reingresarHist = window.confirm(
+        `ℹ️ REINGRESO DE EQUIPO HISTÓRICO ℹ️\n\n` +
+        `El serial "${sn}" fue procesado anteriormente en un Cierre Semanal [${sucOrigen}].\n\n` +
+        `¿Deseas volver a ingresarlo a la Mesa Activa para una nueva inspección?`
       );
 
-      if (msg) {
-        msg.textContent = `🚫 Carga rechazada: El serial ${sn} ya fue archivado en el histórico [${sucOrigen}].`;
-        msg.style.color = '#f87171';
+      if (!reingresarHist) {
+        if (msg) {
+          msg.textContent = `⏹️ Carga cancelada: Serial ${sn} se mantiene en histórico.`;
+          msg.style.color = '#cbd5e1';
+        }
+        return;
       }
-      return;
     }
 
     // 🛡️ 7. INSERCIÓN DE REGISTRO NUEVO
@@ -292,7 +296,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       }
     }
 
-    // Limpieza de campos post-guardado exitoso
     document.getElementById('cg_serial').value = '';
     document.getElementById('cg_modelo').selectedIndex = 0;
     if (document.getElementById('boxPreviewCarga')) document.getElementById('boxPreviewCarga').style.display = 'none';
@@ -305,16 +308,20 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       msg.style.color = '#ef4444';
     }
   } finally {
-    // Restablecer el botón con un retardo defensivo de 600ms para asegurar la protección contra doble clic
     setTimeout(() => {
       if (btnSubmitCarga) btnSubmitCarga.disabled = false;
     }, 600);
   }
 });
 
+// ====================================================
 // 2. PRUEBAS DE LABORATORIO
+// ====================================================
 async function buscarEquipoParaPrueba() {
-  const sn = document.getElementById('pr_serial')?.value.trim().toUpperCase();
+  const rawSn = document.getElementById('pr_serial')?.value || '';
+  // Clean string: Sanitización estricta idéntica al módulo de carga
+  const sn = rawSn.trim().toUpperCase().replace(/\s+/g, '');
+  
   const infoBox = document.getElementById('infoEquipoEnc');
   const bannerTesteado = document.getElementById('bannerTesteado');
   const blockControles = document.getElementById('blockControlesPrueba');
@@ -335,13 +342,14 @@ async function buscarEquipoParaPrueba() {
   let query = supabaseOps
     .from('recupero_operativo')
     .select('*')
-    .eq('sn', sn);
+    .ilike('sn', sn);
 
   if (sucActiva !== 'TODAS') {
     query = query.eq('sucursal_id', sucActiva);
   }
 
-  const { data, error } = await query.order('id', { ascending: false }).limit(1);
+  // 🛡️ CORRECCIÓN CLAVE: Ordenar por fecha_ingreso (cronológico) en lugar de id (UUID)
+  const { data, error } = await query.order('fecha_ingreso', { ascending: false }).limit(1);
 
   if (error || !data || data.length === 0) {
     if (msg) {
@@ -383,6 +391,7 @@ async function buscarEquipoParaPrueba() {
     const formatearFechaHora = (fechaIso) => {
       if (!fechaIso) return 'Sin registro';
       const f = new Date(fechaIso);
+      if (isNaN(f.getTime())) return 'Sin registro';
       return `${f.toLocaleDateString('es-AR')} ${f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} hs`;
     };
 
@@ -462,69 +471,88 @@ function evaluarVeredictoPrueba() {
 
 document.getElementById('form-prueba')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  const btnGuardarPrueba = document.getElementById('btnGuardarPrueba');
+  
+  // 🛡️ 1. BLOQUEO ANTI DOBLE-CLIC
+  if (btnGuardarPrueba) btnGuardarPrueba.disabled = true;
+
   const msg = document.getElementById('statusPrueba');
-  const operadorNombre = document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
+  const operadorNombre = window.USUARIO_NOMBRE_MOSTRAR || document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
 
   if (!equipoCargadoActual) {
     if (msg) {
       msg.textContent = '⚠️ Primero debes buscar un número de serie válido.';
       msg.style.color = '#fde047';
     }
+    if (btnGuardarPrueba) btnGuardarPrueba.disabled = false;
     return;
   }
 
+  // 🛡️ 2. RECALCULAR VEREDICTO JUSTO ANTES DE GUARDAR
+  evaluarVeredictoPrueba();
+
   if (msg) {
-    msg.textContent = '⏳ Guardando resultado de prueba...';
+    msg.textContent = '⏳ Guardando resultado de prueba en Supabase...';
     msg.style.color = '#38bdf8';
   }
 
-  const fechaFinPrueba = new Date();
-  const fechaIngresoEquipo = (equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at) 
-    ? new Date(equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at) 
-    : fechaFinPrueba;
+  try {
+    const fechaFinPrueba = new Date();
+    const rawIngreso = equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at;
+    const fechaIngresoEquipo = (rawIngreso && !isNaN(new Date(rawIngreso).getTime()))
+      ? new Date(rawIngreso)
+      : fechaFinPrueba;
 
-  const tiempoPruebaSeg = fechaInicioPruebaTemp ? Math.round((fechaFinPrueba - fechaInicioPruebaTemp) / 1000) : null;
-  const tiempoEsperaHs = parseFloat(((fechaFinPrueba - fechaIngresoEquipo) / (1000 * 60 * 60)).toFixed(2));
+    const tiempoPruebaSeg = fechaInicioPruebaTemp ? Math.max(0, Math.round((fechaFinPrueba - fechaInicioPruebaTemp) / 1000)) : 0;
+    const tiempoEsperaHs = parseFloat(Math.max(0, (fechaFinPrueba - fechaIngresoEquipo) / (1000 * 60 * 60)).toFixed(2));
 
-  const potenciaIngresada = parseFloat(document.getElementById('test_dbm')?.value);
-  const motivoFalla = veredictoFinalCalculado === 'DESCARTE' ? (document.getElementById('pr_motivo')?.value || 'Sin especificar') : 'Ninguno';
+    const potenciaIngresada = parseFloat(document.getElementById('test_dbm')?.value);
+    const motivoFalla = veredictoFinalCalculado === 'DESCARTE' ? (document.getElementById('pr_motivo')?.value || 'Sin especificar') : 'Ninguno';
 
-  const payloadUpdate = {
-    condicion: veredictoFinalCalculado,
-    tecnico: operadorNombre,
-    inicio_prueba: fechaInicioPruebaTemp ? fechaInicioPruebaTemp.toISOString() : null,
-    fin_prueba: fechaFinPrueba.toISOString(),
-    tiempo_prueba_seg: tiempoPruebaSeg,
-    tiempo_espera_hs: tiempoEsperaHs,
-    observaciones: (equipoCargadoActual.observaciones || '') + ' | Lab: ' + operadorNombre + ' [Pot: ' + (isNaN(potenciaIngresada) ? 'N/D' : potenciaIngresada + 'dBm') + '] [Falla: ' + motivoFalla + ']'
-  };
+    const payloadUpdate = {
+      condicion: veredictoFinalCalculado,
+      tecnico: operadorNombre,
+      inicio_prueba: fechaInicioPruebaTemp ? fechaInicioPruebaTemp.toISOString() : null,
+      fin_prueba: fechaFinPrueba.toISOString(),
+      tiempo_prueba_seg: tiempoPruebaSeg,
+      tiempo_espera_hs: tiempoEsperaHs,
+      observaciones: (equipoCargadoActual.observaciones || '') + ' | Lab: ' + operadorNombre + ' [Pot: ' + (isNaN(potenciaIngresada) ? 'N/D' : potenciaIngresada + 'dBm') + '] [Falla: ' + motivoFalla + ']'
+    };
 
-  const { error } = await supabaseOps
-    .from('recupero_operativo')
-    .update(payloadUpdate)
-    .eq('id', equipoCargadoActual.id);
+    const { error } = await supabaseOps
+      .from('recupero_operativo')
+      .update(payloadUpdate)
+      .eq('id', equipoCargadoActual.id);
 
-  if (error) {
+    if (error) throw error;
+
     if (msg) {
-      msg.textContent = '❌ Error al actualizar: ' + error.message;
-      msg.style.color = '#ef4444';
-    }
-  } else {
-    if (msg) {
-      msg.textContent = '✅ ¡Resultado de laboratorio guardado!';
+      msg.textContent = '✅ ¡Resultado de laboratorio guardado con éxito!';
       msg.style.color = '#4ade80';
     }
     if (document.getElementById('btnImprimir')) document.getElementById('btnImprimir').style.display = 'block';
+
+  } catch (err) {
+    console.error('Error al guardar prueba:', err);
+    if (msg) {
+      msg.textContent = '❌ Error al actualizar: ' + err.message;
+      msg.style.color = '#ef4444';
+    }
+  } finally {
+    setTimeout(() => {
+      if (btnGuardarPrueba) btnGuardarPrueba.disabled = false;
+    }, 600);
   }
 });
 
 function imprimirEtiquetaPrueba() {
   if (!equipoCargadoActual) return;
 
-  const sn = equipoCargadoActual.sn || document.getElementById('pr_serial')?.value.trim().toUpperCase();
+  const rawSn = equipoCargadoActual.sn || document.getElementById('pr_serial')?.value || '';
+  const sn = rawSn.trim().toUpperCase().replace(/\s+/g, '');
   const modelo = equipoCargadoActual.descripcion || 'GENERICO';
   const dbm = document.getElementById('test_dbm')?.value || 'N/D';
-  const operadorNombre = document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
+  const operadorNombre = window.USUARIO_NOMBRE_MOSTRAR || document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
   
   let veredicto = 'CIRCULACIÓN';
   const estadoPrevio = (equipoCargadoActual.condicion || '').toUpperCase();
@@ -584,312 +612,11 @@ function imprimirEtiquetaPrueba() {
   window.print();
 }
 
-// 3. AUDITORÍA CIEGA ÍTEM POR ÍTEM
-async function iniciarSnapshotSistema() {
-  const btn = document.getElementById('btnSnapshot');
-  const status = document.getElementById('statusSnapshot');
-  const operadorNombre = document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
-  
-  if (btn) btn.disabled = true;
-  if (status) {
-    status.textContent = '⏳ Consultando registro_stock...';
-    status.style.color = '#38bdf8';
-  }
-
-  try {
-    const { data: ult, error: errUlt } = await supabaseOps
-      .from('registro_stock')
-      .select('fecha_registro')
-      .order('fecha_registro', { ascending: false })
-      .limit(1);
-
-    if (errUlt) throw errUlt;
-    if (!ult || !ult.length) throw new Error('No hay datos en registro_stock');
-
-    const ultimaFecha = ult[0].fecha_registro;
-
-    const { data: stockData, error: errStock } = await supabaseOps
-      .from('registro_stock')
-      .select('almacen, stock_total, descripcion')
-      .eq('fecha_registro', ultimaFecha);
-
-    if (errStock) throw errStock;
-
-    const sumaPorAlmacen = {};
-    const sumaPorModelo = {};
-
-    Object.keys(NOMBRES_ALMACEN_AUDITORIA).forEach(k => {
-      sumaPorAlmacen[k] = 0;
-      sumaPorModelo[k] = {};
-    });
-
-    (stockData || []).forEach(row => {
-      let rawAlm = (row.almacen || '').trim().toUpperCase();
-      if (rawAlm === 'SPD_PRINCIPAL') rawAlm = 'SPD_ALM_PRINCIPAL';
-      if (rawAlm === 'WND-PRINCIPAL' || rawAlm === 'WND_PRINCIPAL') rawAlm = 'WND_ALM_PRINCIPAL';
-
-      const descNorm = normalizarTexto(row.descripcion);
-      if (descNorm.includes('ONU') && sumaPorAlmacen.hasOwnProperty(rawAlm)) {
-        const cant = parseInt(row.stock_total, 10) || 0;
-        const modeloRaw = (row.descripcion || 'DESCONOCIDO').trim();
-
-        sumaPorAlmacen[rawAlm] += cant;
-        sumaPorModelo[rawAlm][modeloRaw] = (sumaPorModelo[rawAlm][modeloRaw] || 0) + cant;
-      }
-    });
-
-    const ahoraIso = new Date().toISOString();
-
-    const listaPayloadsActivo = Object.keys(NOMBRES_ALMACEN_AUDITORIA).map(key => {
-      const stockSis = sumaPorAlmacen[key] || 0;
-      return {
-        almacen_key: key,
-        almacen_nombre: NOMBRES_ALMACEN_AUDITORIA[key],
-        stock_sistema: stockSis,
-        stock_fisico: 0,
-        diferencia: -stockSis,
-        desviacion_pct: stockSis > 0 ? 100.00 : 0.00,
-        fecha_snapshot: ahoraIso,
-        auditor_nombre: operadorNombre
-      };
-    });
-
-    const { error: errUpsertActivo } = await supabaseOps
-      .from('auditoria_control_activo')
-      .upsert(listaPayloadsActivo, { onConflict: 'almacen_key' });
-
-    if (errUpsertActivo) throw errUpsertActivo;
-
-    const listaPayloadsDetalle = [];
-    Object.keys(sumaPorModelo).forEach(key => {
-      Object.keys(sumaPorModelo[key]).forEach(mod => {
-        const cant = sumaPorModelo[key][mod];
-        listaPayloadsDetalle.push({
-          almacen_key: key,
-          modelo: mod,
-          stock_sistema: cant,
-          stock_fisico: 0,
-          diferencia: -cant,
-          fecha_snapshot: ahoraIso,
-          auditor_nombre: operadorNombre
-        });
-      });
-    });
-
-    if (listaPayloadsDetalle.length > 0) {
-      const { error: errUpsertDetalle } = await supabaseOps
-        .from('auditoria_control_detalle')
-        .upsert(listaPayloadsDetalle, { onConflict: 'almacen_key,modelo' });
-
-      if (errUpsertDetalle) throw errUpsertDetalle;
-    }
-
-    if (status) {
-      status.textContent = `✅ ¡Control iniciado! Foto congelada (${ultimaFecha}).`;
-      status.style.color = '#4ade80';
-    }
-
-    const selectSuc = document.getElementById('aud_sucursal');
-    if (selectSuc && selectSuc.value) {
-      cargarTablaConteoFisico();
-    }
-
-  } catch (err) {
-    console.error('Error al iniciar snapshot:', err);
-    if (status) {
-      status.textContent = '❌ Error: ' + (err.message || 'Fallo de conexión');
-      status.style.color = '#ef4444';
-    }
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function cargarTablaConteoFisico() {
-  const selectSuc = document.getElementById('aud_sucursal');
-  const contenedorTabla = document.getElementById('contenedorTablaConteo');
-  const tbody = document.getElementById('tbodyConteoModelos');
-  const status = document.getElementById('statusAuditoria');
-
-  if (!selectSuc) return;
-
-  const keyAlmacen = selectSuc.value;
-  if (!keyAlmacen) return;
-
-  if (status) {
-    status.textContent = '⏳ Cargando lista de equipos para auditar...';
-    status.style.color = '#38bdf8';
-  }
-
-  try {
-    const sucActiva = obtenerSucursalOps();
-    const listaCatalogoOrdenada = [...catalogoEquiposMemoria].sort((a, b) => {
-      const infoA = resolverInfoEquipoOps(normalizarTexto(a.modelo), sucActiva);
-      const infoB = resolverInfoEquipoOps(normalizarTexto(b.modelo), sucActiva);
-      const vipA = infoA ? infoA.es_vip : Boolean(a.es_vip);
-      const vipB = infoB ? infoB.es_vip : Boolean(b.es_vip);
-      return (vipB === vipA) ? 0 : vipB ? 1 : -1;
-    });
-
-    if (tbody) tbody.innerHTML = '';
-
-    if (listaCatalogoOrdenada.length === 0) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="2" style="padding:10px; text-align:center; color:#94a3b8;">Sin equipos en catálogo.</td></tr>`;
-    } else {
-      const modelosAgregados = new Set();
-      listaCatalogoOrdenada.forEach(item => {
-        const info = resolverInfoEquipoOps(normalizarTexto(item.modelo), sucActiva);
-        const modNombre = info ? info.modelo : item.modelo;
-
-        if (!modelosAgregados.has(modNombre)) {
-          modelosAgregados.add(modNombre);
-          const tr = document.createElement('tr');
-          tr.style.borderBottom = '1px solid #334155';
-
-          const esVip = info ? (info.es_vip && !info.es_obsoleto) : Boolean(item.es_vip);
-          const tagClasif = esVip 
-            ? '<span style="color:#38bdf8; font-weight:bold;">🔵 VIP</span>' 
-            : '<span style="color:#94a3b8;">⚙️ Obsoleto</span>';
-
-          tr.innerHTML = `
-            <td style="padding:6px 8px; color:#f8fafc; font-weight:600;">
-              ${modNombre} ${tagClasif}
-            </td>
-            <td style="padding:6px 8px; text-align:right;">
-              <input type="number" min="0" class="input-conteo-modelo" data-modelo="${modNombre}" style="width:75px; text-align:right; padding:4px; font-weight:bold; color:#4ade80;" placeholder="0">
-            </td>
-          `;
-          if (tbody) tbody.appendChild(tr);
-        }
-      });
-    }
-
-    if (contenedorTabla) contenedorTabla.style.display = 'flex';
-    if (status) status.textContent = '';
-
-  } catch (err) {
-    console.error('Error al cargar tabla de conteo:', err);
-    if (status) {
-      status.textContent = '❌ Error al preparar la tabla de conteo.';
-      status.style.color = '#ef4444';
-    }
-  }
-}
-
-async function guardarConteoFisicoReal() {
-  const selectSuc = document.getElementById('aud_sucursal');
-  const btnGuardar = document.getElementById('btnGuardarAuditoria');
-  const status = document.getElementById('statusAuditoria');
-  const operadorNombre = document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
-
-  if (!selectSuc) return;
-
-  const keyAlmacen = selectSuc.value;
-  const nombreAlmacen = NOMBRES_ALMACEN_AUDITORIA[keyAlmacen] || keyAlmacen;
-
-  if (!keyAlmacen) {
-    if (status) {
-      status.textContent = '⚠️ Seleccioná un almacén válido.';
-      status.style.color = '#fde047';
-    }
-    return;
-  }
-
-  if (btnGuardar) btnGuardar.disabled = true;
-  if (status) {
-    status.textContent = '⏳ Guardando auditoría en Supabase...';
-    status.style.color = '#38bdf8';
-  }
-
-  try {
-    const ahoraIso = new Date().toISOString();
-
-    const { data: detallesPrevios } = await supabaseOps
-      .from('auditoria_control_detalle')
-      .select('modelo, stock_sistema')
-      .eq('almacen_key', keyAlmacen);
-
-    const mapStockSistemaModelo = {};
-    (detallesPrevios || []).forEach(d => {
-      mapStockSistemaModelo[d.modelo] = d.stock_sistema || 0;
-    });
-
-    let totalFisicoGeneral = 0;
-    let sumaAbsolutaDesviaciones = 0;
-    const listaUpsertDetalle = [];
-
-    document.querySelectorAll('.input-conteo-modelo').forEach(input => {
-      const modelo = input.getAttribute('data-modelo');
-      const cantFisica = parseInt(input.value, 10) || 0;
-      totalFisicoGeneral += cantFisica;
-
-      const stockSis = mapStockSistemaModelo[modelo] || 0;
-      const dif = cantFisica - stockSis;
-
-      sumaAbsolutaDesviaciones += Math.abs(dif);
-
-      listaUpsertDetalle.push({
-        almacen_key: keyAlmacen,
-        modelo: modelo,
-        stock_sistema: stockSis,
-        stock_fisico: cantFisica,
-        diferencia: dif,
-        fecha_inspeccion: ahoraIso,
-        auditor_nombre: operadorNombre
-      });
-    });
-
-    if (listaUpsertDetalle.length > 0) {
-      const { error: errDet } = await supabaseOps
-        .from('auditoria_control_detalle')
-        .upsert(listaUpsertDetalle, { onConflict: 'almacen_key,modelo' });
-
-      if (errDet) throw errDet;
-    }
-
-    const { data: audActiva } = await supabaseOps
-      .from('auditoria_control_activo')
-      .select('stock_sistema')
-      .eq('almacen_key', keyAlmacen)
-      .maybeSingle();
-
-    const stockSistemaTotal = audActiva ? (audActiva.stock_sistema || 0) : 0;
-    const desvPctTotal = stockSistemaTotal > 0 ? parseFloat(((sumaAbsolutaDesviaciones / stockSistemaTotal) * 100).toFixed(2)) : 0.00;
-
-    const payloadActivo = {
-      almacen_nombre: nombreAlmacen,
-      stock_fisico: totalFisicoGeneral,
-      diferencia: sumaAbsolutaDesviaciones,
-      desviacion_pct: desvPctTotal,
-      fecha_inspeccion: ahoraIso,
-      auditor_nombre: operadorNombre
-    };
-
-    const { error: errAct } = await supabaseOps
-      .from('auditoria_control_activo')
-      .update(payloadActivo)
-      .eq('almacen_key', keyAlmacen);
-
-    if (errAct) throw errAct;
-
-    if (status) {
-      status.textContent = `✅ ¡Conteo físico registrado correctamente para ${nombreAlmacen}!`;
-      status.style.color = '#4ade80';
-    }
-
-  } catch (err) {
-    console.error('Error al guardar auditoría:', err);
-    if (status) {
-      status.textContent = '❌ Error al guardar la auditoría: ' + (err.message || 'Error de conexión');
-      status.style.color = '#ef4444';
-    }
-  } finally {
-    if (btnGuardar) btnGuardar.disabled = false;
-  }
-}
-
+// ====================================================
 // INICIALIZACIÓN DE EVENTOS EN DOM
+// ====================================================
 document.addEventListener('DOMContentLoaded', () => {
+  // Preview de imagen en Formulario Carga
   document.getElementById('cg_modelo')?.addEventListener('change', (e) => {
     const modelo = e.target.value;
     const urlImg = obtenerUrlImagenModelo(modelo);
@@ -904,10 +631,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Búsqueda por ENTER en Laboratorio
   document.getElementById('pr_serial')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       buscarEquipoParaPrueba();
+    }
+  });
+
+  // Revaluación dinámica en tiempo real durante la prueba
+  ['test_1', 'test_2', 'test_dbm', 'pr_motivo'].forEach(id => {
+    const elem = document.getElementById(id);
+    if (elem) {
+      elem.addEventListener('change', evaluarVeredictoPrueba);
+      elem.addEventListener('input', evaluarVeredictoPrueba);
     }
   });
 

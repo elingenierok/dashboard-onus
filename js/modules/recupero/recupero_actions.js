@@ -144,48 +144,77 @@ async function ejecutarCierreSemanal() {
     console.error("❌ Error en el cierre semanal:", err);
     alert("Ocurrió un error al intentar realizar el cierre semanal.");
   }
+}
 
-  // ====================================================
+// ====================================================
+// FUNCIÓN AUXILIAR: CASCADA DE EVALUACIÓN DE FORMATO
+// ====================================================
+function evaluarFormatoSerial(sn) {
+  // PREGUNTA 1: ¿Está vacío?
+  if (!sn) {
+    return { valido: false, mensaje: 'Debes ingresar un número de Serie (SN).' };
+  }
+
+  // PREGUNTA 2: ¿Tiene longitud aceptable?
+  if (sn.length < 10 || sn.length > 20) {
+    return { 
+      valido: false, 
+      mensaje: `Longitud inválida (${sn.length} caracteres). Se esperan entre 10 y 20 caracteres.` 
+    };
+  }
+
+  // PREGUNTA 3: ¿Es un Serial Estándar (con prefijo de marca)?
+  const PREFIJOS = ['ZTEGD', 'HWTC', 'FKBA', 'ALCL', 'GPON', 'SN'];
+  const esSerialEstandar = PREFIJOS.some(prefijo => sn.startsWith(prefijo));
+
+  // PREGUNTA 4: ¿Es un Serial Largo Escaneado (Hexadecimal de 16 caracteres)?
+  // Detecta patrones como 48575443... (HWTC) o 5A54454744... (ZTEGD)
+  const esSerialLargoHex = /^[0-9A-F]{16}$/.test(sn);
+
+  // DECISIÓN FINAL DE FORMATO:
+  // Si Pasa la Pregunta 3 O Pasa la Pregunta 4 -> ¡ES VÁLIDO!
+  if (esSerialEstandar || esSerialLargoHex) {
+    return { valido: true };
+  }
+
+  // Si no cumplió ninguna de las dos formas validas:
+  return {
+    valido: false,
+    mensaje: `El serial "${sn}" no tiene un formato válido.\n\n` +
+             `Debe cumplir una de estas opciones:\n` +
+             `• Iniciar con prefijo: ${PREFIJOS.join(', ')}\n` +
+             `• Ser un Serial Largo de escáner (16 caracteres hexadecimales).`
+  };
+}
+
+
+// ====================================================
 // INGRESO DE EQUIPO CON VALIDACIÓN RIGUROSA Y ANTI-DUPLICADOS
 // ====================================================
 async function registrarIngresoEquipo(event) {
   if (event) event.preventDefault();
 
-  // 1. CONTROL ANTI DOBLE-CLIC
-  const btnGuardar = document.getElementById('btn-guardar-recupero'); // Reemplazar por la ID de tu botón
+  const btnGuardar = document.getElementById('btn-guardar-recupero');
   if (!btnGuardar || btnGuardar.disabled) return;
 
   btnGuardar.disabled = true;
   const textoOriginal = btnGuardar.innerHTML;
-  btnGuardar.innerHTML = '⏳ Verificando Serial...';
+  btnGuardar.innerHTML = '⏳ Verificando...';
 
   try {
-    const inputSN = document.getElementById('txt-sn-equipo'); // Reemplazar por la ID de tu input
+    const inputSN = document.getElementById('txt-sn-equipo');
     const rawSN = inputSN ? inputSN.value : '';
-    
-    // Clean string: Sin espacios invisibles y en Mayúsculas
     const snLimpio = rawSN.trim().toUpperCase().replace(/\s+/g, '');
 
-    // 2. VALIDACIÓN SINTÁCTICA (Formato y Prefijos)
-    if (!snLimpio) {
-      throw new Error('Debes ingresar un número de Serie (SN).');
+    // 1. PASAR POR LA CASCADA DE FILTROS DE FORMATO
+    const chequeoFormato = evaluarFormatoSerial(snLimpio);
+    if (!chequeoFormato.valido) {
+      throw new Error(chequeoFormato.mensaje);
     }
 
-    const PREFIJOS = ['ZTEGD', 'HWTC', 'FKBA', 'ALCL', 'GPON', 'SN'];
-    const tienePrefijoValido = PREFIJOS.some(p => snLimpio.startsWith(p));
+    // 2. CONSULTAR DUPLICADOS EN BASE DE DATOS (Mesa Activa e Histórico)
+    btnGuardar.innerHTML = '🔍 Buscando duplicados...';
 
-    if (!tienePrefijoValido) {
-      throw new Error(
-        `El Serial "${snLimpio}" no es válido.\n` +
-        `Debe iniciar con alguno de estos prefijos: ${PREFIJOS.join(', ')}`
-      );
-    }
-
-    if (snLimpio.length < 10 || snLimpio.length > 18) {
-      throw new Error(`Longitud inválida (${snLimpio.length} caracteres). Se esperan entre 10 y 18.`);
-    }
-
-    // 3. CONSULTA DE DUPLICADOS EN BD (Mesa Activa e Histórico)
     const [resActivos, resHistorico] = await Promise.all([
       supabaseRecupero.from('recupero_operativo').select('id, sn, sucursal_id').ilike('sn', snLimpio).limit(1),
       supabaseRecupero.from('recupero_historico_equipos').select('id, sn, sucursal_id').ilike('sn', snLimpio).limit(1)
@@ -196,15 +225,15 @@ async function registrarIngresoEquipo(event) {
 
     if (resActivos.data && resActivos.data.length > 0) {
       const reg = resActivos.data[0];
-      throw new Error(`🚫 EL SERIAL YA EXISTE en la mesa activa de la sucursal [${reg.sucursal_id || 'DESCONOCIDA'}].`);
+      throw new Error(`🚫 EL SERIAL YA EXISTE en la mesa activa [Sucursal ${reg.sucursal_id || 'DESCONOCIDA'}].`);
     }
 
     if (resHistorico.data && resHistorico.data.length > 0) {
       const regHist = resHistorico.data[0];
-      throw new Error(`🚫 EL SERIAL YA FUE PROCESADO previamente en un Cierre Semanal [Sucursal ${regHist.sucursal_id || 'DESCONOCIDA'}].`);
+      throw new Error(`🚫 EL SERIAL YA FUE PROCESADO en un Cierre Semanal [Sucursal ${regHist.sucursal_id || 'DESCONOCIDA'}].`);
     }
 
-    // 4. INSERCIÓN DE DATOS (Solo si no hay duplicados)
+    // 3. INSERCIÓN DE DATOS
     btnGuardar.innerHTML = '💾 Guardando...';
 
     const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
@@ -216,7 +245,6 @@ async function registrarIngresoEquipo(event) {
         sucursal_id: sucActiva,
         fecha_ingreso: new Date().toISOString(),
         condicion: 'PENDIENTE'
-        // ... agregar los demás campos de tu formulario
       }]);
 
     if (errInsert) throw errInsert;
@@ -227,14 +255,11 @@ async function registrarIngresoEquipo(event) {
     if (typeof cargarModuloRecupero === 'function') cargarModuloRecupero();
 
   } catch (err) {
-    alert(`⚠️ NO SE PUDO GUARDAR:\n\n${err.message}`);
+    alert(`⚠️ ATENCIÓN:\n\n${err.message}`);
   } finally {
-    // Restaurar el botón con retraso defensivo de 600ms
     setTimeout(() => {
       btnGuardar.disabled = false;
       btnGuardar.innerHTML = textoOriginal;
     }, 600);
   }
-}
-
 }

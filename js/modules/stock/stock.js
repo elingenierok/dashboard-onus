@@ -344,7 +344,7 @@ function procesarYRenderizarStock(fechaSincroStr = '--/--/----') {
   renderStockEstrategicoOnus(stratDB, stratCATV, stratNuevos, stratUsados, stratTotal, stratValorUSD, arbolEstrategico);
   renderStockOperativo(arbolOperativo);
   renderStockTactico(devCant, devCatvCant, valorDevoluciones, descCant, valorDescarte, descVipCant, valorDescVip, catrielCant, itemsDev, itemsDesc, itemsDescVip, itemsCatriel);
-  renderAuditoriaTabla();
+ 
   
   // Ejecuta la Categoría B reutilizando el catálogo expuesto en memoria
   if (typeof window.procesarInsumosB === 'function') {
@@ -417,7 +417,10 @@ async function renderAuditoriaTabla() {
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
   try {
-    const { data: audData } = await supabaseClient.from('auditoria_control_activo').select('*');
+    const { data: audData } = await supabaseClient
+  .from('auditoria_control_activo')
+  .select('*')
+  .order('id', { ascending: true });
     const mapAuditoria = new Map();
     if (audData) audData.forEach(item => mapAuditoria.set(item.almacen_key, item));
 
