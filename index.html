@@ -197,36 +197,77 @@
   </main>
 
   <!-- PESTAÑA: RECUPERO DE EQUIPOS -->
-  <main id="tab-recupero" class="tab-content req-recupero">
-    <section id="recupero-estrategico" class="panel-estrategico req-estrategico">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
-        <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Eficiencia de Recupero)</h2>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <button class="btn btn-outline req-superadmin" style="background:#ef4444; color:white; border:none;" onclick="ejecutarCierreSemanal()">
-            🔒 Cerrar Semana y Generar Informe
-          </button>
-          <span id="tagRecupero" class="file-tag ok">Cargando datos...</span>
+<main id="tab-recupero" class="tab-content req-recupero">
+  
+  <!-- 1. INDICADORES ESTRATÉGICOS -->
+  <section id="recupero-estrategico" class="panel-estrategico req-estrategico">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+      <h2 style="font-size: 1.1rem; color: #f8fafc;">🏛️ Indicadores Estratégicos (Eficiencia de Recupero)</h2>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button class="btn btn-outline req-superadmin" style="background:#ef4444; color:white; border:none;" onclick="ejecutarCierreSemanal()">
+          🔒 Cerrar Semana y Generar Informe
+        </button>
+        <span id="tagRecupero" class="file-tag ok">Cargando datos...</span>
+      </div>
+    </div>
+    <div class="summary-bar">
+      <div style="font-size: 0.88rem; color: #cbd5e1;">🟢 En Circulación: <strong id="rec-val-circ" style="color: #4ade80; font-size: 1.05rem;">0 un.</strong> <span id="rec-pct-circ" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
+      <div style="font-size: 0.88rem; color: #cbd5e1;">🔴 Fuera de Circulación: <strong id="rec-val-desc" style="color: #f87171; font-size: 1.05rem;">0 un.</strong> <span id="rec-pct-desc" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
+      <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Recibidos: <strong id="rec-val-total-un" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
+      <div class="req-costos" style="font-size: 0.88rem; color: #cbd5e1;">💵 Capital Revalorizado: <strong id="rec-val-dinero" style="color: #38bdf8; font-size: 1.05rem;">$0 USD</strong></div>
+    </div>
+    <div style="position: relative; height: 160px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
+      <canvas id="recuperoChart"></canvas>
+    </div>
+  </section>
+
+  <!-- 2. INDICADORES TÁCTICOS (INCLUYE RENDIMIENTO DIARIO Y GRÁFICO DESPLEGABLE) -->
+  <section id="recupero-tactico" class="card">
+    <h2 class="card-title">🎯 Indicadores Tácticos (Flujo de Ingreso y Eficiencia)</h2>
+    <div id="grid-recupero-cards" class="grid-tactico"></div>
+
+    <!-- ENCABEZADO Y BOTONES DE CONTROL DE DESPLIEGUE -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; border-top: 1px solid #cbd5e1; padding-top: 16px; flex-wrap: wrap; gap: 10px;">
+      <h2 class="card-title" style="margin:0; color: #0284c7;">
+        📅 Rendimiento Semanal (Laboratorio por Día)
+      </h2>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" style="background: #0f172a; color: #f8fafc; border: 1px solid #334155;" onclick="window.toggleTablaRecuperoDiario()">📊 Mostrar/Ocultar Tabla</button>
+        <button class="btn" style="background: #0f172a; color: #f8fafc; border: 1px solid #334155;" onclick="window.toggleGraficoRecuperoDiario()">📉 Mostrar/Ocultar Gráfico</button>
+      </div>
+    </div>
+
+    <!-- TABLA DE RENDIMIENTO DIARIO (DESPLEGABLE - Oculta por defecto o visible según elija) -->
+    <div id="tablaRecuperoDiarioWrapper" style="overflow-x: auto; margin-top: 12px; display: none;"></div>
+
+    <!-- PANEL DEL GRÁFICO DIARIO (DESPLEGABLE) -->
+    <div id="panel-grafico-diario" style="display: none; margin-top: 16px; background: #0f172a; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; font-size: 0.85rem; color: #f8fafc;">
+        <label style="cursor:pointer;"><input type="checkbox" id="chk-graf-rec-vip" checked onchange="actualizarGraficoRecuperoDiario()"> ✅ Recupero VIP</label>
+        <label style="cursor:pointer;"><input type="checkbox" id="chk-graf-desc-vip" checked onchange="actualizarGraficoRecuperoDiario()"> ❌ Descarte VIP</label>
+        <label style="cursor:pointer;"><input type="checkbox" id="chk-graf-desc-obs" checked onchange="actualizarGraficoRecuperoDiario()"> 🗑️ Descarte Obsoleto</label>
+        
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+          <span style="color:#38bdf8; font-weight:bold;">📅 Mes:</span>
+          <select id="sel-mes-grafico" style="background:#1e293b; color:white; border:1px solid #334155; padding:6px 8px; border-radius:6px; outline:none;" onchange="actualizarGraficoRecuperoDiario()">
+            <option value="ALL">Todo lo Activo en Mesa</option>
+          </select>
         </div>
       </div>
-      <div class="summary-bar">
-        <div style="font-size: 0.88rem; color: #cbd5e1;">🟢 En Circulación: <strong id="rec-val-circ" style="color: #4ade80; font-size: 1.05rem;">0 un.</strong> <span id="rec-pct-circ" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
-        <div style="font-size: 0.88rem; color: #cbd5e1;">🔴 Fuera de Circulación: <strong id="rec-val-desc" style="color: #f87171; font-size: 1.05rem;">0 un.</strong> <span id="rec-pct-desc" style="font-size: 0.75rem; color: #94a3b8;">(0%)</span></div>
-        <div style="font-size: 0.88rem; color: #cbd5e1;">📦 Total Recibidos: <strong id="rec-val-total-un" style="color: #f8fafc; font-size: 1.05rem;">0 un.</strong></div>
-        <div class="req-costos" style="font-size: 0.88rem; color: #cbd5e1;">💵 Capital Revalorizado: <strong id="rec-val-dinero" style="color: #38bdf8; font-size: 1.05rem;">$0 USD</strong></div>
+      
+      <div style="position: relative; height: 320px; width: 100%;">
+        <canvas id="chartRecuperoDiario"></canvas>
       </div>
-      <div style="position: relative; height: 160px; width: 100%; background: #1e293b; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155;">
-        <canvas id="recuperoChart"></canvas>
-      </div>
-    </section>
-    <section id="recupero-tactico" class="card">
-      <h2 class="card-title">🎯 Indicadores Tácticos (Flujo de Ingreso y Eficiencia)</h2>
-      <div id="grid-recupero-cards" class="grid-tactico"></div>
-    </section>
-    <section id="recupero-operativo" class="card">
-      <h2 class="card-title">⚙️ Indicadores Operativos - Desglose por Modelo y Origen</h2>
-      <div id="tablaRecuperoOperativoWrapper" style="overflow-x: auto;"></div>
-    </section>
-  </main>
+    </div>
+  </section>
+
+  <!-- 3. INDICADORES OPERATIVOS (DESGLOSE POR MODELO Y ORIGEN) -->
+  <section id="recupero-operativo" class="card">
+    <h2 class="card-title">⚙️ Indicadores Operativos - Desglose por Modelo y Origen</h2>
+    <div id="tablaRecuperoOperativoWrapper" style="overflow-x: auto;"></div>
+  </section>
+
+</main>
 
   <!-- PESTAÑA: TENDENCIAS Y EVOLUCIÓN HISTÓRICA -->
   <main id="tab-tendencias" class="tab-content req-estrategico">

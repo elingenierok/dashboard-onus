@@ -81,12 +81,12 @@ async function cargarModuloRecupero() {
   try {
     const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
-    // 1. Traemos SIEMPRE los últimos 5000 registros, ordenados por FECHA REAL (No por ID aleatorio)
+    // 1. Traemos los últimos 5000 registros, ordenados por FECHA REAL
     const [resRec, resCatalogo] = await Promise.all([
       supabaseRecupero
         .from('recupero_operativo')
         .select('*')
-        .order('fecha_ingreso', { ascending: false }) // 👈 ACÁ ESTÁ LA MAGIA
+        .order('fecha_ingreso', { ascending: false })
         .limit(5000),
       supabaseRecupero
         .from('catalogo_equipos')
@@ -99,7 +99,7 @@ async function cargarModuloRecupero() {
     const dataRecCrudo = resRec.data || [];
     const catalogo = resCatalogo.data || [];
 
-    // 2. Filtrado estricto en JS (Si un equipo viejo no tiene sucursal, asume 'OBE')
+    // 2. Filtrado estricto en JS
     const dataRec = dataRecCrudo.filter(row => {
       if (sucActiva === 'TODAS') return true;
       return (row.sucursal_id || 'OBE') === sucActiva;
@@ -110,9 +110,17 @@ async function cargarModuloRecupero() {
       tag.className = 'file-tag ok';
     }
 
+    // 3. Procesar Cabeceras y Tabla Vieja
     procesarDatosRecupero(dataRec, catalogo);
 
-    // Disparar renderizado en el módulo de UI si está disponible
+    // 4. NUEVO: DIBUJAR LA TABLA DE RENDIMIENTO DIARIO
+    if (typeof renderTablaRecuperoDiario === 'function') {
+      renderTablaRecuperoDiario(dataRec, catalogo);
+    } else {
+      console.warn("⚠️ La función renderTablaRecuperoDiario no está definida. Revisá si pegaste el código en recupero_ui.js");
+    }
+
+    // 5. Disparar renderizado adicional de UI
     if (typeof window.renderizarModuloRecuperoUI === 'function') {
       try {
         window.renderizarModuloRecuperoUI();

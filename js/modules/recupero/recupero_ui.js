@@ -349,3 +349,271 @@ function renderRecuperoOperativo(desglose) {
   html += `</tbody></table>`;
   container.innerHTML = html;
 }
+
+// ====================================================
+// VARIABLES GLOBALES PARA EL GRÁFICO DIARIO
+// ====================================================
+let chartRecDiario = null;
+let datosRecDiarioGlobal = [];
+let catalogoRecDiarioGlobal = [];
+
+// ====================================================
+// FUNCIÓN: RENDERIZAR TABLA DE RENDIMIENTO DIARIO
+// ====================================================
+function renderTablaRecuperoDiario(datosOperativos, catalogo) {
+  const wrapper = document.getElementById('tablaRecuperoDiarioWrapper');
+  if (!wrapper) return;
+
+  // Guardamos en memoria para que el gráfico los pueda usar sin volver a consultar BD
+  datosRecDiarioGlobal = datosOperativos || [];
+  catalogoRecDiarioGlobal = catalogo || [];
+
+  if (datosRecDiarioGlobal.length === 0) {
+    wrapper.innerHTML = '<p style="padding:15px; color:#94a3b8; text-align:center;">📭 No hay equipos en la mesa activa esta semana.</p>';
+    popularSelectorMesesGrafico(); // Vacía el selector
+    if (document.getElementById('panel-grafico-diario')?.style.display === 'block') {
+      actualizarGraficoRecuperoDiario();
+    }
+    return;
+  }
+
+  const resumenDiario = {};
+  datosRecDiarioGlobal.forEach(row => {
+    const fechaCruda = row.fin_prueba || row.fecha_ingreso; 
+    if (!fechaCruda) return;
+
+    const fechaObj = new Date(fechaCruda);
+    const fechaClave = fechaCruda.split('T')[0];
+    
+    if (!resumenDiario[fechaClave]) {
+      const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const nombreDia = diasSemana[fechaObj.getDay()];
+      const diaMes = String(fechaObj.getDate()).padStart(2, '0');
+      const mes = String(fechaObj.getMonth() + 1).padStart(2, '0');
+      resumenDiario[fechaClave] = { 
+        label: `${nombreDia} ${diaMes}/${mes}`, 
+        recVip: 0, descVip: 0, descObs: 0, pendientes: 0,
+        sucursales: new Set()
+      };
+    }
+
+    resumenDiario[fechaClave].sucursales.add(row.sucursal_id || 'OBE');
+
+    const descNorm = window.normalizar ? window.normalizar(row.descripcion || row.modelo || '') : (row.descripcion || '').toUpperCase();
+    const cond = window.normalizar ? window.normalizar(row.condicion || row.estado || '') : (row.condicion || '').toUpperCase();
+    const cant = parseInt(row.cantidad || 1, 10) || 1;
+    const esPendiente = ['PENDIENTE', 'REGISTRADO'].some(e => cond.includes(e)) || cond === '';
+
+    let esEquipoVIP = false;
+    if (typeof window.obtenerInfoCatalogo === 'function') {
+      esEquipoVIP = window.obtenerInfoCatalogo(descNorm, catalogoRecDiarioGlobal).esVIP;
+    }
+
+    const esAprobado = ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO'].some(e => cond.includes(e));
+
+    if (esPendiente) {
+      resumenDiario[fechaClave].pendientes += cant;
+    } else {
+      if (!esEquipoVIP) resumenDiario[fechaClave].descObs += cant;
+      else if (esAprobado) resumenDiario[fechaClave].recVip += cant;
+      else resumenDiario[fechaClave].descVip += cant;
+    }
+  });
+
+  const fechasOrdenadas = Object.keys(resumenDiario).sort();
+  let html = `<table style="width:100%; border-collapse:collapse; background:#0f172a; border-radius:8px; overflow:hidden; font-size:0.85rem; text-align:center;">
+    <thead>
+      <tr style="background:#1e293b; color:#38bdf8; border-bottom:2px solid #334155;">
+        <th style="padding:12px; text-align:left;">Día de la Semana</th>
+        <th style="padding:12px;">✅ Recupero VIP</th>
+        <th style="padding:12px;">❌ Descarte VIP</th>
+        <th style="padding:12px;">🗑️ Descarte Obsoleto</th>
+        <th style="padding:12px; color:#94a3b8;">⏳ Ingresados (Ptes)</th>
+        <th style="padding:12px; text-align:right;">Total Probados</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+  let totRecVip = 0, totDescVip = 0, totDescObs = 0, totPend = 0, totOperados = 0;
+
+  fechasOrdenadas.forEach(fecha => {
+    const d = resumenDiario[fecha];
+    const operados = d.recVip + d.descVip + d.descObs;
+    totRecVip += d.recVip; totDescVip += d.descVip; totDescObs += d.descObs; totPend += d.pendientes; totOperados += operados;
+
+    let badgeSuc = d.sucursales.size > 1 
+      ? `<div style="font-size:0.7rem; color:#94a3b8; margin-top:4px;">🌐 Multi-Sucursal</div>`
+      : `<div style="font-size:0.7rem; color:#64748b; margin-top:4px;">🏬 ${Array.from(d.sucursales)[0]}</div>`;
+
+    html += `<tr style="border-bottom:1px solid #1e293b; transition: background 0.2s;" onmouseover="this.style.background='#131f37'" onmouseout="this.style.background='transparent'">
+      <td style="padding:10px; font-weight:700; color:#f8fafc; text-align:left;">📅 ${d.label} ${badgeSuc}</td>
+      <td style="padding:10px; font-weight:800; color:#4ade80;">${d.recVip} un.</td>
+      <td style="padding:10px; font-weight:800; color:#f87171;">${d.descVip} un.</td>
+      <td style="padding:10px; font-weight:600; color:#94a3b8;">${d.descObs} un.</td>
+      <td style="padding:10px; font-weight:600; color:#cbd5e1;">${d.pendientes} un.</td>
+      <td style="padding:10px; font-weight:800; color:#38bdf8; text-align:right;">${operados} un.</td>
+    </tr>`;
+  });
+
+  html += `<tr style="background:#0284c7; color:white; font-weight:800; font-size:0.95rem;">
+    <td style="padding:12px; text-align:left;">📊 TOTAL VISIBLE</td>
+    <td style="padding:12px;">${totRecVip}</td><td style="padding:12px;">${totDescVip}</td>
+    <td style="padding:12px;">${totDescObs}</td><td style="padding:12px;">${totPend}</td>
+    <td style="padding:12px; text-align:right;">${totOperados} un.</td>
+  </tr></tbody></table>`;
+  
+  wrapper.innerHTML = html;
+
+  // Actualizar controles del gráfico
+  popularSelectorMesesGrafico();
+  if (document.getElementById('panel-grafico-diario')?.style.display === 'block') {
+    actualizarGraficoRecuperoDiario();
+  }
+}
+
+// ====================================================
+// FUNCIONES DEL GRÁFICO (BOTÓN, FILTROS Y DIBUJO)
+// ====================================================
+function toggleGraficoRecuperoDiario() {
+  const panel = document.getElementById('panel-grafico-diario');
+  if (panel.style.display === 'none') {
+    panel.style.display = 'block';
+    actualizarGraficoRecuperoDiario();
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function popularSelectorMesesGrafico() {
+  const sel = document.getElementById('sel-mes-grafico');
+  if (!sel) return;
+
+  const meses = new Set();
+  datosRecDiarioGlobal.forEach(row => {
+    const fecha = row.fin_prueba || row.fecha_ingreso;
+    if (fecha) {
+      meses.add(fecha.substring(0, 7)); // Extrae "YYYY-MM"
+    }
+  });
+  
+  const currentVal = sel.value;
+  let html = `<option value="ALL">Todo lo Activo en Mesa</option>`;
+  Array.from(meses).sort().reverse().forEach(m => {
+    html += `<option value="${m}">${m}</option>`;
+  });
+  sel.innerHTML = html;
+
+  if (meses.has(currentVal)) sel.value = currentVal;
+}
+
+function actualizarGraficoRecuperoDiario() {
+  const ctx = document.getElementById('chartRecuperoDiario');
+  if (!ctx) return;
+
+  const showRecVip = document.getElementById('chk-graf-rec-vip')?.checked;
+  const showDescVip = document.getElementById('chk-graf-desc-vip')?.checked;
+  const showDescObs = document.getElementById('chk-graf-desc-obs')?.checked;
+  const mesFiltro = document.getElementById('sel-mes-grafico')?.value || 'ALL';
+
+  const resumen = {};
+  datosRecDiarioGlobal.forEach(row => {
+    const fechaCruda = row.fin_prueba || row.fecha_ingreso;
+    if (!fechaCruda) return;
+    
+    // Filtrar por Mes
+    const mesKey = fechaCruda.substring(0, 7);
+    if (mesFiltro !== 'ALL' && mesKey !== mesFiltro) return;
+
+    const fechaClave = fechaCruda.split('T')[0];
+    if (!resumen[fechaClave]) {
+      // Para las etiquetas del gráfico X
+      const [y, m, d] = fechaClave.split('-');
+      resumen[fechaClave] = { label: `${d}/${m}`, recVip: 0, descVip: 0, descObs: 0 };
+    }
+
+    const descNorm = window.normalizar ? window.normalizar(row.descripcion || row.modelo || '') : (row.descripcion || '').toUpperCase();
+    const cond = window.normalizar ? window.normalizar(row.condicion || row.estado || '') : (row.condicion || '').toUpperCase();
+    const cant = parseInt(row.cantidad || 1, 10) || 1;
+    
+    const esPendiente = ['PENDIENTE', 'REGISTRADO'].some(e => cond.includes(e)) || cond === '';
+    if (esPendiente) return; // En el gráfico solo analizamos equipos PROBADOS
+
+    let esEquipoVIP = false;
+    if (typeof window.obtenerInfoCatalogo === 'function') {
+      esEquipoVIP = window.obtenerInfoCatalogo(descNorm, catalogoRecDiarioGlobal).esVIP;
+    }
+
+    const esAprobado = ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO'].some(e => cond.includes(e));
+
+    if (!esEquipoVIP) resumen[fechaClave].descObs += cant;
+    else if (esAprobado) resumen[fechaClave].recVip += cant;
+    else resumen[fechaClave].descVip += cant;
+  });
+
+  const fechasOrdenadas = Object.keys(resumen).sort();
+  const labels = fechasOrdenadas.map(f => resumen[f].label);
+  
+  const datasets = [];
+  if (showRecVip) {
+    datasets.push({ label: '✅ VIP Recuperado', data: fechasOrdenadas.map(f => resumen[f].recVip), borderColor: '#4ade80', backgroundColor: 'rgba(74, 222, 128, 0.15)', borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4 });
+  }
+  if (showDescVip) {
+    datasets.push({ label: '❌ VIP Descarte', data: fechasOrdenadas.map(f => resumen[f].descVip), borderColor: '#f87171', backgroundColor: 'rgba(248, 113, 113, 0.15)', borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4 });
+  }
+  if (showDescObs) {
+    datasets.push({ label: '🗑️ Obsoleto Descarte', data: fechasOrdenadas.map(f => resumen[f].descObs), borderColor: '#94a3b8', backgroundColor: 'rgba(148, 163, 184, 0.15)', borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4 });
+  }
+
+  // Destruir gráfico anterior si existe para evitar superposiciones
+  if (chartRecDiario) chartRecDiario.destroy();
+
+  chartRecDiario = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#cbd5e1', stepSize: 1 }, grid: { color: '#334155' } },
+        x: { ticks: { color: '#cbd5e1' }, grid: { color: '#334155' } }
+      },
+      plugins: {
+        legend: { labels: { color: '#f8fafc', font: { size: 12 } } },
+        tooltip: {
+          backgroundColor: '#0f172a', titleColor: '#38bdf8', bodyColor: '#f8fafc', borderColor: '#334155', borderWidth: 1
+        }
+      },
+      interaction: { mode: 'index', intersect: false }
+    }
+  });
+
+// ====================================================
+// EXPOSICIÓN GLOBAL DE FUNCIONES DE TOGGLE
+// ====================================================
+
+window.toggleTablaRecuperoDiario = function() {
+  const wrapper = document.getElementById('tablaRecuperoDiarioWrapper');
+  if (!wrapper) return;
+
+  if (wrapper.style.display === 'none' || wrapper.style.display === '') {
+    wrapper.style.display = 'block';
+  } else {
+    wrapper.style.display = 'none';
+  }
+};
+
+window.toggleGraficoRecuperoDiario = function() {
+  const panel = document.getElementById('panel-grafico-diario');
+  if (!panel) return;
+
+  if (panel.style.display === 'none' || panel.style.display === '') {
+    panel.style.display = 'block';
+    if (typeof window.actualizarGraficoRecuperoDiario === 'function') {
+      window.actualizarGraficoRecuperoDiario();
+    }
+  } else {
+    panel.style.display = 'none';
+  }
+};
+
+}
