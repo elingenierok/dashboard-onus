@@ -85,11 +85,12 @@ function renderRecuperoTactico(est) {
   const container = document.getElementById('grid-recupero-cards');
   if (!container) return;
 
-  // 📐 FORZAR GRID 2x2 EN EL CONTENEDOR
+  // 📐 FORZAR MATRIZ RÍGIDA DE 2x2
   container.style.display = 'grid';
-  container.style.gridTemplateColumns = 'repeat(auto-fit, minmax(420px, 1fr))';
+  container.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
   container.style.gap = '16px';
   container.style.width = '100%';
+  container.style.alignItems = 'start'; // Evita que el despliegue de una tarjeta estire de más a la de al lado
 
   const vipRecibidos = est.totalRecibidos - est.directoDescarteObs;
 
@@ -99,25 +100,61 @@ function renderRecuperoTactico(est) {
   const pctReclamos = ((est.origenTecnicoReclamos / totalConOrigen) * 100).toFixed(1);
   const pctSucursal = ((est.origenSucursal / totalConOrigen) * 100).toFixed(1);
 
-  let filasIngresoHoy = est.itemsIngresadosHoy.length === 0
-    ? `<tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:8px;">Sin ingresos registrados el día de hoy.</td></tr>`
-    : est.itemsIngresadosHoy.map(item => `
+  // Arrays de seguridad (en caso de que est no traiga alguno explícito)
+  const itemsIngresadosHoy = est.itemsIngresadosHoy || [];
+  const itemsOrigenHoy = est.itemsOrigenHoy || itemsIngresadosHoy;
+  const itemsVipTesteadosHoy = est.itemsVipTesteadosHoy || [];
+  const itemsTesteadosHoy = est.itemsTesteadosHoy || itemsVipTesteadosHoy;
+
+  // 1. FILAS DÍA: DEL TOTAL RECIBIDO
+  let filasIngresoHoy = itemsIngresadosHoy.length === 0
+    ? `<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:8px;">Sin ingresos registrados el día de hoy.</td></tr>`
+    : itemsIngresadosHoy.map(item => `
         <tr style="border-bottom: 1px solid #334155;">
-          <td style="padding:6px; color:#cbd5e1;">${item.hora} hs</td>
+          <td style="padding:6px; color:#cbd5e1;">${item.hora || '--:--'} hs</td>
           <td style="padding:6px;"><code style="background:#0f172a; padding:2px 6px; border-radius:4px; font-weight:800; color:#38bdf8; font-family:monospace;">${item.sn}</code></td>
           <td style="padding:6px; color:#f8fafc; font-weight:600;">${item.modelo}</td>
           <td style="padding:6px; text-align:center;">${item.esVIP ? '<span style="color:#0284c7; font-weight:700;">🔵 VIP</span>' : '<span style="color:#fde047; font-weight:700;">⚙️ Obsoleto</span>'}</td>
+          <td style="padding:6px; color:#38bdf8; font-weight:600;">${item.tecnico || 'Sin Asignar'}</td>
         </tr>
       `).join('');
 
-  let filasVipHoy = est.itemsVipTesteadosHoy.length === 0
-    ? `<tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:8px;">Sin pruebas VIP completadas hoy.</td></tr>`
-    : est.itemsVipTesteadosHoy.map(item => `
+  // 2. FILAS DÍA: CANAL DE INGRESO / ORIGEN
+  let filasOrigenHoy = itemsOrigenHoy.length === 0
+    ? `<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:8px;">Sin ingresos por origen el día de hoy.</td></tr>`
+    : itemsOrigenHoy.map(item => `
         <tr style="border-bottom: 1px solid #334155;">
-          <td style="padding:6px; color:#cbd5e1;">${item.hora} hs</td>
+          <td style="padding:6px; color:#cbd5e1;">${item.hora || '--:--'} hs</td>
+          <td style="padding:6px;"><code style="background:#0f172a; padding:2px 6px; border-radius:4px; font-weight:800; color:#38bdf8; font-family:monospace;">${item.sn}</code></td>
+          <td style="padding:6px; color:#f8fafc; font-weight:600;">${item.modelo}</td>
+          <td style="padding:6px; color:#c084fc; font-weight:700;">${item.origen || item.almacen_origen || 'General'}</td>
+          <td style="padding:6px; color:#38bdf8; font-weight:600;">${item.tecnico || 'Sin Asignar'}</td>
+        </tr>
+      `).join('');
+
+  // 3. FILAS DÍA: PRUEBAS VIP
+  let filasVipHoy = itemsVipTesteadosHoy.length === 0
+    ? `<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:8px;">Sin pruebas VIP completadas hoy.</td></tr>`
+    : itemsVipTesteadosHoy.map(item => `
+        <tr style="border-bottom: 1px solid #334155;">
+          <td style="padding:6px; color:#cbd5e1;">${item.hora || '--:--'} hs</td>
           <td style="padding:6px;"><code style="background:#0f172a; padding:2px 6px; border-radius:4px; font-weight:800; color:#38bdf8; font-family:monospace;">${item.sn}</code></td>
           <td style="padding:6px; color:#f8fafc; font-weight:600;">${item.modelo}</td>
           <td style="padding:6px; text-align:center;">${item.esAprobado ? '<span style="color:#4ade80; font-weight:800;">🟢 CIRCULACIÓN</span>' : '<span style="color:#f87171; font-weight:800;">🚨 DESCARTE VIP</span>'}</td>
+          <td style="padding:6px; color:#38bdf8; font-weight:600;">${item.tecnico || 'Sin Asignar'}</td>
+        </tr>
+      `).join('');
+
+  // 4. FILAS DÍA: TOTAL PRUEBAS RITMO DIARIO
+  let filasRitmoHoy = itemsTesteadosHoy.length === 0
+    ? `<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding:8px;">Sin pruebas de laboratorio registradas hoy.</td></tr>`
+    : itemsTesteadosHoy.map(item => `
+        <tr style="border-bottom: 1px solid #334155;">
+          <td style="padding:6px; color:#cbd5e1;">${item.hora || '--:--'} hs</td>
+          <td style="padding:6px;"><code style="background:#0f172a; padding:2px 6px; border-radius:4px; font-weight:800; color:#38bdf8; font-family:monospace;">${item.sn}</code></td>
+          <td style="padding:6px; color:#f8fafc; font-weight:600;">${item.modelo}</td>
+          <td style="padding:6px; text-align:center;">${item.condicion || (item.esAprobado ? '🟢 OK' : '🔴 DESCARTE')}</td>
+          <td style="padding:6px; color:#38bdf8; font-weight:600;">${item.tecnico || 'Sin Asignar'}</td>
         </tr>
       `).join('');
 
@@ -127,7 +164,7 @@ function renderRecuperoTactico(est) {
       <div style="font-size: 0.82rem; font-weight: 800; color: #f8fafc; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
         <span>📦 Del total recibido</span>
         <button id="btn-detalle-ingresos-hoy" onclick="toggleDetalleRecupero('detalle-ingresos-hoy')" style="background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:0.72rem; cursor:pointer; font-weight:700;">
-          🔽 Ver del día (${est.itemsIngresadosHoy.length})
+          🔽 Ver del día (${itemsIngresadosHoy.length})
         </button>
       </div>
       
@@ -150,12 +187,12 @@ function renderRecuperoTactico(est) {
       </div>
 
       <div id="detalle-ingresos-hoy" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #334155;">
-        <strong style="font-size:0.75rem; color:#38bdf8; display:block; margin-bottom:6px;">📋 Equipos ingresados en la fecha (${est.itemsIngresadosHoy.length} un.)</strong>
+        <strong style="font-size:0.75rem; color:#38bdf8; display:block; margin-bottom:6px;">📋 Equipos ingresados en la fecha (${itemsIngresadosHoy.length} un.)</strong>
         <div style="max-height: 250px; overflow-y: auto;">
           <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
             <thead>
               <tr style="background:#1e293b; color:#94a3b8;">
-                <th style="padding:4px;">Hora</th><th style="padding:4px;">Nº Serie (SN)</th><th style="padding:4px;">Modelo</th><th style="padding:4px; text-align:center;">Tipo</th>
+                <th style="padding:4px;">Hora</th><th style="padding:4px;">Nº Serie (SN)</th><th style="padding:4px;">Modelo</th><th style="padding:4px; text-align:center;">Tipo</th><th style="padding:4px;">Técnico</th>
               </tr>
             </thead>
             <tbody>${filasIngresoHoy}</tbody>
@@ -168,9 +205,9 @@ function renderRecuperoTactico(est) {
     <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%;">
       <div style="font-size: 0.82rem; font-weight: 800; color: #f8fafc; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
         <span>🚚 Canal de Ingreso / Origen</span>
-        <span style="font-size: 0.72rem; color: #38bdf8; background: #1e293b; padding: 2px 8px; border-radius: 4px; border: 1px solid #334155; font-weight: 700;">
-          ${est.origenPersonalRetiro + est.origenTecnicoReclamos + est.origenSucursal} un.
-        </span>
+        <button id="btn-detalle-origen-hoy" onclick="toggleDetalleRecupero('detalle-origen-hoy')" style="background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:0.72rem; cursor:pointer; font-weight:700;">
+          🔽 Ver del día (${itemsOrigenHoy.length})
+        </button>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: center;">
@@ -195,6 +232,20 @@ function renderRecuperoTactico(est) {
           <div style="font-size: 0.68rem; color: #c084fc; font-weight: bold;">${pctSucursal}%</div>
         </div>
       </div>
+
+      <div id="detalle-origen-hoy" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #334155;">
+        <strong style="font-size:0.75rem; color:#38bdf8; display:block; margin-bottom:6px;">🚚 Clasificación por origen registrado hoy (${itemsOrigenHoy.length} un.)</strong>
+        <div style="max-height: 250px; overflow-y: auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
+            <thead>
+              <tr style="background:#1e293b; color:#94a3b8;">
+                <th style="padding:4px;">Hora</th><th style="padding:4px;">Nº Serie (SN)</th><th style="padding:4px;">Modelo</th><th style="padding:4px;">Origen</th><th style="padding:4px;">Técnico</th>
+              </tr>
+            </thead>
+            <tbody>${filasOrigenHoy}</tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- TARJETA 3 (ABAJO IZQUIERDA): DE LOS EQUIPOS VIP -->
@@ -202,7 +253,7 @@ function renderRecuperoTactico(est) {
       <div style="font-size: 0.82rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
         <span>⭐ De los equipos VIP</span>
         <button id="btn-detalle-vip-hoy" onclick="toggleDetalleRecupero('detalle-vip-hoy')" style="background:#1e293b; color:#4ade80; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:0.72rem; cursor:pointer; font-weight:700;">
-          🔽 Ver del día (${est.itemsVipTesteadosHoy.length})
+          🔽 Ver del día (${itemsVipTesteadosHoy.length})
         </button>
       </div>
       
@@ -231,12 +282,12 @@ function renderRecuperoTactico(est) {
       </div>
 
       <div id="detalle-vip-hoy" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #334155;">
-        <strong style="font-size:0.75rem; color:#4ade80; display:block; margin-bottom:6px;">🔬 Equipos VIP probados en la fecha (${est.itemsVipTesteadosHoy.length} un.)</strong>
+        <strong style="font-size:0.75rem; color:#4ade80; display:block; margin-bottom:6px;">🔬 Equipos VIP probados en la fecha (${itemsVipTesteadosHoy.length} un.)</strong>
         <div style="max-height: 250px; overflow-y: auto;">
           <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
             <thead>
               <tr style="background:#1e293b; color:#94a3b8;">
-                <th style="padding:4px;">Hora Test</th><th style="padding:4px;">Nº Serie (SN)</th><th style="padding:4px;">Modelo</th><th style="padding:4px; text-align:center;">Veredicto Final</th>
+                <th style="padding:4px;">Hora Test</th><th style="padding:4px;">Nº Serie (SN)</th><th style="padding:4px;">Modelo</th><th style="padding:4px; text-align:center;">Veredicto Final</th><th style="padding:4px;">Técnico</th>
               </tr>
             </thead>
             <tbody>${filasVipHoy}</tbody>
@@ -246,16 +297,36 @@ function renderRecuperoTactico(est) {
     </div>
 
     <!-- TARJETA 4 (ABAJO DERECHA): VELOCÍMETRO META DIARIA -->
-    <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%;">
-      <div style="font-size: 0.82rem; font-weight: 800; color: #4ade80; text-transform: uppercase; letter-spacing: 0.5px; text-align: center;">⚡ Ritmo Diario (Meta 50 un.)</div>
+    <div style="background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%;">
+      <div style="font-size: 0.82rem; font-weight: 800; color: #4ade80; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
+        <span>⚡ Ritmo Diario (Meta 50 un.)</span>
+        <button id="btn-detalle-ritmo-hoy" onclick="toggleDetalleRecupero('detalle-ritmo-hoy')" style="background:#1e293b; color:#4ade80; border:1px solid #334155; padding:4px 8px; border-radius:6px; font-size:0.72rem; cursor:pointer; font-weight:700;">
+          🔽 Ver del día (${itemsTesteadosHoy.length})
+        </button>
+      </div>
       
-      <div style="width: 160px; height: 85px; position: relative; margin-top: 4px;">
-        <canvas id="chartRecuperoGauge"></canvas>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 6px 0;">
+        <div style="width: 160px; height: 85px; position: relative;">
+          <canvas id="chartRecuperoGauge"></canvas>
+        </div>
+        <div style="text-align: center; margin-top: -6px;">
+          <span style="font-size: 1.4rem; font-weight: 900; color: #4ade80;">${est.recuperadosHoy}</span>
+          <span style="font-size: 0.85rem; font-weight: 700; color: #cbd5e1;"> / 50 un. hoy</span>
+        </div>
       </div>
 
-      <div style="text-align: center; margin-top: -6px;">
-        <span style="font-size: 1.4rem; font-weight: 900; color: #4ade80;">${est.recuperadosHoy}</span>
-        <span style="font-size: 0.85rem; font-weight: 700; color: #cbd5e1;"> / 50 un. hoy</span>
+      <div id="detalle-ritmo-hoy" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #334155;">
+        <strong style="font-size:0.75rem; color:#4ade80; display:block; margin-bottom:6px;">📊 Listado de pruebas completadas hoy (${itemsTesteadosHoy.length} un.)</strong>
+        <div style="max-height: 250px; overflow-y: auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
+            <thead>
+              <tr style="background:#1e293b; color:#94a3b8;">
+                <th style="padding:4px;">Hora</th><th style="padding:4px;">Nº Serie (SN)</th><th style="padding:4px;">Modelo</th><th style="padding:4px; text-align:center;">Estado</th><th style="padding:4px;">Técnico</th>
+              </tr>
+            </thead>
+            <tbody>${filasRitmoHoy}</tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;

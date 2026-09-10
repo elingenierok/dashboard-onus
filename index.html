@@ -10,36 +10,152 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f8fafc; padding: 20px; color: #0f172a; }
-  .container { max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-  .header { background: #0f172a; color: white; padding: 18px 28px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
-  .header h1 { font-size: 1.25rem; font-weight: 700; display:flex; align-items:center; gap: 12px;}
   
-  /* Tabs */
-  .nav-tabs { display: flex; gap: 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; overflow-x: auto; }
-  .tab-btn { padding: 10px 24px; font-size: 0.9rem; font-weight: 700; border: none; background: #e2e8f0; color: #475569; border-radius: 8px 8px 0 0; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-  .tab-btn.active { background: #0284c7; color: white; }
+  body { 
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    background: #0f172a; 
+    padding: 0 20px 20px 20px; 
+    color: #f8fafc; 
+  }
+  
+  .container { max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ====================================================
+     MARCO FIJO UNIFICADO (HEADER + PESTAÑAS JUNTOS)
+     ==================================================== */
+  .sticky-top-panel {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #0f172a; /* Fondo azul noche de la app */
+    padding-top: 15px;
+    padding-bottom: 5px;
+    box-shadow: 0 12px 20px -5px rgba(15, 23, 42, 0.95);
+  }
+
+  .header { 
+    background: #1e293b; 
+    color: #f8fafc; 
+    padding: 16px 24px; 
+    border-radius: 12px; 
+    border: 1px solid #334155;
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    flex-wrap: wrap; 
+    gap: 12px;
+  }
+
+  /* TÍTULO PRINCIPAL EN BLANCO DESTACADO */
+  .header h1 { 
+    font-size: 1.25rem; 
+    font-weight: 800; 
+    display: flex; 
+    align-items: center; 
+    gap: 10px;
+    color: #ffffff !important;
+    letter-spacing: -0.2px;
+  }
+
+  /* BADGE DE USUARIO EN AZUL CIAN DE ALTO CONTRASTE */
+  #user-badge {
+    background: #0f172a !important;
+    color: #38bdf8 !important;
+    border: 1px solid #0284c7 !important;
+    padding: 5px 12px !important;
+    border-radius: 20px !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+
+  /* SELECTOR GLOBAL DE SUCURSAL EN DARK MODE */
+  #sel-sucursal-global {
+    background: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #0284c7;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+  }
+
+  /* INDICADOR DE VERSIÓN */
+  #indicador-version {
+    background: #0f172a; 
+    color: #64748b; 
+    border: 1px solid #334155; 
+    padding: 6px 10px; 
+    border-radius: 6px; 
+    font-size: 0.75rem; 
+    font-weight: bold; 
+    cursor: default; 
+    user-select: none;
+  }
+
+  /* NAV TABS (SEGUNDO NIVEL DENTRO DEL MARCO FIJO) */
+  .nav-tabs { 
+    display: flex; 
+    gap: 8px; 
+    border-bottom: 2px solid #334155; 
+    padding: 12px 0 0 0; 
+    overflow-x: auto; 
+    background: #0f172a;
+  }
+
+  .tab-btn { 
+    padding: 10px 20px; 
+    font-size: 0.85rem; 
+    font-weight: 700; 
+    border: 1px solid #334155; 
+    border-bottom: none;
+    background: #1e293b; 
+    color: #94a3b8; 
+    border-radius: 8px 8px 0 0; 
+    cursor: pointer; 
+    transition: all 0.2s ease; 
+    white-space: nowrap; 
+  }
+
+  .tab-btn:hover {
+    background: #334155;
+    color: #f8fafc;
+  }
+
+  .tab-btn.active { 
+    background: #0284c7; 
+    color: #ffffff; 
+    border-color: #38bdf8;
+    box-shadow: 0 -2px 10px rgba(2, 132, 199, 0.4);
+  }
+
   .tab-content { display: none; flex-direction: column; gap: 20px; }
   .tab-content.active { display: flex; }
   
-  /* Componentes */
-  .card { background: white; border-radius: 12px; border: 1px solid #cbd5e1; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  /* Componentes y Tarjetas */
+  .card { background: white; border-radius: 12px; border: 1px solid #cbd5e1; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: #0f172a; }
   .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: #0f172a; }
-  .panel-estrategico { background: #0f172a; color: white; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-  .summary-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #1e293b; padding: 12px 18px; border-radius: 8px; border: 1px solid #334155; }
+  .panel-estrategico { background: #1e293b; color: white; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; border: 1px solid #334155; }
+  .summary-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #0f172a; padding: 12px 18px; border-radius: 8px; border: 1px solid #334155; }
   .grid-tactico { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
   .kpi-card-dark { background: #1e293b; border: 1px solid #334155; padding: 16px; border-radius: 10px; }
   .kpi-card-dark .title { font-size: 0.8rem; text-transform: uppercase; color: #94a3b8; font-weight: 600; }
   .kpi-card-dark .value { font-size: 1.8rem; font-weight: 800; margin: 4px 0; }
   .kpi-card-dark .subtext { font-size: 0.75rem; color: #cbd5e1; }
   .placeholder-tactico { background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 30px; text-align: center; color: #64748b; font-size: 0.85rem; font-weight: 600; }
+  
+  /* Botones Generales */
   .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.82rem; }
-  .btn-outline { background: white; border: 1px solid #cbd5e1; color: #334155; }
+  .btn-outline { background: #0f172a; border: 1px solid #334155; color: #f8fafc; }
+  .btn-outline:hover { background: #334155; }
   .btn-pdf { background: #0284c7; color: white; border: none; font-weight: 700; margin-right: 8px; }
   .btn-pdf:hover { background: #0369a1; }
+  
   .file-tag { font-size: 0.75rem; padding: 6px 12px; border-radius: 6px; font-weight: 700; letter-spacing: 0.5px;}
-  .file-tag.ok { background: #dcfce7; color: #166534; border: 1px solid #22c55e;}
-  .file-tag.no { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444;}
+  .file-tag.ok { background: #064e3b; color: #6ee7b7; border: 1px solid #059669;}
+  .file-tag.no { background: #7f1d1d; color: #fca5a5; border: 1px solid #dc2626;}
   
   /* Tablas */
   table.arbol, table.tabla-auditoria { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -67,7 +183,7 @@
 
   /* LOGIN Y PERMISOS */
   #login-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
-  .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); width: 100%; max-width: 380px; border: 1px solid #cbd5e1; }
+  .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); width: 100%; max-width: 380px; border: 1px solid #cbd5e1; color: #0f172a; }
   .login-box h2 { text-align: center; color: #0f172a; margin-bottom: 24px; font-weight: 800; }
   .form-group { margin-bottom: 16px; }
   .form-group label { display: block; margin-bottom: 6px; font-size: 0.85rem; font-weight: 600; color: #475569; }
@@ -112,50 +228,48 @@
 <!-- CONTENEDOR PRINCIPAL DEL PROGRAMA -->
 <div id="app-container" class="container" style="display: none;">
   
-  <!-- HEADER MODIFICADO CON SELECTOR MULTISUCURSAL -->
-  <header class="header">
-    <h1>
-      Suministros y Logística - KPI del área
-      <span id="user-badge" style="background:#1e293b; padding:4px 10px; border-radius:20px; font-size:0.75rem; border:1px solid #334155; color:#cbd5e1; margin-left: 8px;"></span>
-    </h1>
+  <!-- MARCO FIJO SUPERIOR (HEADER + PESTAÑAS UNIFICADAS) -->
+  <div class="sticky-top-panel">
     
-    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+    <header class="header">
+      <h1>
+        Suministros y Logística - KPI del área
+        <span id="user-badge"></span>
+      </h1>
       
-      <select id="sel-sucursal-global" onchange="cambiarSucursalGlobal()">
-        <option value="OBE">🏬 Oberá (Matriz)</option>
-        <option value="SPD">🏬 San Pedro</option>
-        <option value="WND">🏬 Wanda</option>
-        <option value="ELDO">🏬 Eldorado</option>
-        <option value="ITU">🏬 Ituzaingó</option>
-        <option value="TODAS">🌐 Todas las Sucursales</option>
-      </select>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <select id="sel-sucursal-global" onchange="cambiarSucursalGlobal()">
+          <option value="OBE">🏬 Oberá (Matriz)</option>
+          <option value="SPD">🏬 San Pedro</option>
+          <option value="WND">🏬 Wanda</option>
+          <option value="ELDO">🏬 Eldorado</option>
+          <option value="ITU">🏬 Ituzaingó</option>
+          <option value="TODAS">🌐 Todas las Sucursales</option>
+        </select>
 
-      <span id="tagCSV" class="file-tag no">Sincronizando con Servidor...</span>
-      
-      <button class="btn btn-pdf req-reportes" onclick="abrirModalReportes()">📄 Generar Reporte / PDF</button>
-      <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar Datos</button>
-      
-      <!-- INDICADOR DE VERSIÓN AUTOMÁTICO -->
-<span id="indicador-version" 
-      style="background: #0f172a; color: #64748b; border: 1px solid #334155; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; cursor: default; user-select: none;" 
-      title="Versión del Sistema">
-  V1.--.--
-</span>
+        <span id="tagCSV" class="file-tag no">Sincronizando con Servidor...</span>
+        
+        <button class="btn btn-pdf req-reportes" onclick="abrirModalReportes()">📄 Generar Reporte / PDF</button>
+        <button id="btnReloadSupabase" class="btn btn-outline">⚡ Actualizar Datos</button>
+        
+        <span id="indicador-version" title="Versión del Sistema">V1.--.--</span>
 
-      <button class="btn-logout" onclick="window.cerrarSesion()">Cerrar Sesión</button>
-    </div>
-  </header>
+        <button class="btn-logout" onclick="window.cerrarSesion()">Cerrar Sesión</button>
+      </div>
+    </header>
 
-  <!-- Pestañas Principales -->
-  <nav class="nav-tabs">
-    <button class="tab-btn active" id="btn-tab-stock" onclick="switchTab('tab-stock')">📦 STOCK</button>
-    <button class="tab-btn req-recupero" id="btn-tab-recupero" onclick="switchTab('tab-recupero')">🔄 RECUPERO</button>
-    <button class="tab-btn" id="btn-tab-tendencias" onclick="switchTab('tab-tendencias')">📈 TENDENCIAS</button>
-    <button class="tab-btn" id="btn-tab-flota" onclick="switchTab('tab-flota')">🚚 FLOTA</button>
-    <button class="tab-btn req-auditoria" id="btn-tab-control" onclick="switchTab('tab-control'); cargarModuloControlAuditoria();">🔍 CONTROL DE AUDITORÍA</button>
-    <button class="tab-btn req-auditoria" id="btn-tab-referencias" onclick="switchTab('tab-referencias'); cargarModuloReferencias();">⚙️ REFERENCIAS</button>
-    <button class="tab-btn req-superadmin" id="btn-tab-admin" onclick="switchTab('tab-admin')">👑 GESTIÓN USUARIOS</button>
-  </nav>
+    <!-- Pestañas Principales -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" id="btn-tab-stock" onclick="switchTab('tab-stock')">📦 STOCK</button>
+      <button class="tab-btn req-recupero" id="btn-tab-recupero" onclick="switchTab('tab-recupero')">🔄 RECUPERO</button>
+      <button class="tab-btn" id="btn-tab-tendencias" onclick="switchTab('tab-tendencias')">📈 TENDENCIAS</button>
+      <button class="tab-btn" id="btn-tab-flota" onclick="switchTab('tab-flota')">🚚 FLOTA</button>
+      <button class="tab-btn req-auditoria" id="btn-tab-control" onclick="switchTab('tab-control'); cargarModuloControlAuditoria();">🔍 CONTROL DE AUDITORÍA</button>
+      <button class="tab-btn req-auditoria" id="btn-tab-referencias" onclick="switchTab('tab-referencias'); cargarModuloReferencias();">⚙️ REFERENCIAS</button>
+      <button class="tab-btn req-superadmin" id="btn-tab-admin" onclick="switchTab('tab-admin')">👑 GESTIÓN USUARIOS</button>
+    </nav>
+
+  </div> <!-- FIN DEL MARCO FIJO SUPERIOR -->
 
   <!-- PESTAÑA: STOCK -->
   <main id="tab-stock" class="tab-content active">
