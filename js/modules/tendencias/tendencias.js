@@ -15,10 +15,13 @@ const COLORES_SUCURSAL_TEN = {
   'ELDO_ALM_PRINCIPAL':{ nombre: 'Eldorado',      color: '#a855f7' }
 };
 
-// 🔴 CAMBIO CLAVE: Prefijos 'ten_' para que no choquen con variables de stock.js
+// Prefijos 'ten_' para aislar variables del módulo
 let ten_rawHistoricoData = [];
 let ten_catalogoEquiposMemoria = [];
 let ten_tendenciasChart = null;
+
+// NUEVAS VARIABLES GLOBALES PARA EL MÓDULO DE INSUMOS
+let ten_insumosChart = null;
 
 function ten_normalizar(txt) {
   return (txt || '')
@@ -38,7 +41,28 @@ function ten_obtenerCategoriaCatalogo(descNorm) {
   return encontrado && encontrado.categoria ? encontrado.categoria.toUpperCase() : 'OBSOLETO';
 }
 
-// CÁLCULO DE REGRESIÓN IGNORANDO DÍAS NULOS (SÁBADOS/DOMINGOS SIN DATOS)
+// MANEJO DE DESPLEGABLES EN INTERFAZ
+function toggleSeccionTendencias(seccionId) {
+  const elem = document.getElementById(seccionId);
+  const icon = document.getElementById(`icon-${seccionId}`);
+  if (!elem) return;
+
+  if (elem.style.display === 'none' || elem.style.display === '') {
+    elem.style.display = 'block';
+    if (icon) icon.textContent = '▼';
+
+    // Disparar renderizado del gráfico de insumos al abrir por primera vez esa sección
+    if (seccionId === 'sec-tendencias-insumos') {
+      actualizarGraficoInsumos();
+    }
+  } else {
+    elem.style.display = 'none';
+    if (icon) icon.textContent = '►';
+  }
+}
+window.toggleSeccionTendencias = toggleSeccionTendencias;
+
+// CÁLCULO DE REGRESIÓN IGNORANDO DÍAS NULOS
 function calcularRegresionLinealTramo(fechasCalculo, valoresCalculo, todasFechasVisibles) {
   const puntosValidos = [];
   for (let i = 0; i < fechasCalculo.length; i++) {
@@ -111,8 +135,12 @@ async function cargarModuloTendencias() {
 
     ten_inicializarLimitesFechas();
     actualizarGraficoTendencias();
+
+    // NUEVO: Cargar autocompletado de insumos y subalmacenes
+    await cargarListaInsumosUnicos();
+
   } catch (err) {
-    console.error('Error al consultar Supabase:', err);
+    console.error('Error al consultar Supabase en Tendencias:', err);
     if (tag) {
       tag.textContent = 'Supabase: ❌ Error de lectura';
       tag.className = 'file-tag no';
@@ -162,9 +190,17 @@ function ten_inicializarLimitesFechas() {
   if (inputHasta && !inputHasta.value) {
     inputHasta.value = todasFechas[todasFechas.length - 1];
   }
+
+  // Inicializar también las fechas por defecto del módulo de insumos
+  const insDesde = document.getElementById('insumo-fecha-desde');
+  const insHasta = document.getElementById('insumo-fecha-hasta');
+  if (insDesde && !insDesde.value) insDesde.value = todasFechas[Math.max(0, todasFechas.length - 30)];
+  if (insHasta && !insHasta.value) insHasta.value = todasFechas[todasFechas.length - 1];
 }
 
-// Función global (sin prefijo ten_) para que funcione con los onchange del HTML
+// ====================================================
+// FUNCIÓN 1: GRÁFICO TENDENCIAS ONUs (MANTENIDO INTACTO)
+// ====================================================
 function actualizarGraficoTendencias() {
   if (!ten_rawHistoricoData.length) return;
 
@@ -205,6 +241,7 @@ function actualizarGraficoTendencias() {
     todasFechas.forEach(f => mapaSuma[alm][f] = null);
   });
 
+  // 1. Acumulación primaria de datos
   ten_rawHistoricoData.forEach(row => {
     let alm = (row.almacen || '').trim().toUpperCase();
     if (alm === 'SPD_PRINCIPAL') alm = 'SPD_ALM_PRINCIPAL';
@@ -225,6 +262,18 @@ function actualizarGraficoTendencias() {
       }
       mapaSuma[alm][fecha] += (parseInt(row.stock_total, 10) || 0);
     }
+  });
+
+  // 2. CORRECCIÓN DE PICOS A CERO (Forward Fill / Arrastre de Stock)
+  almacenesTildados.forEach(alm => {
+    let ultimoValorValido = null;
+    todasFechas.forEach(f => {
+      if (mapaSuma[alm][f] !== null) {
+        ultimoValorValido = mapaSuma[alm][f];
+      } else if (ultimoValorValido !== null) {
+        mapaSuma[alm][f] = ultimoValorValido;
+      }
+    });
   });
 
   const datasets = [];
@@ -300,7 +349,6 @@ function actualizarGraficoTendencias() {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
-  // Mantiene tu código original, solo cambiamos update() por destroy() para que el canvas no se comprima
   if (ten_tendenciasChart) {
     ten_tendenciasChart.destroy();
   }
@@ -332,3 +380,226 @@ function actualizarGraficoTendencias() {
     }
   });
 }
+window.actualizarGraficoTendencias = actualizarGraficoTendencias;
+
+
+// ====================================================
+// FUNCIÓN 2: ANÁLISIS DE CONSUMO E HISTÓRICO DE INSUMOS
+// ====================================================
+
+// A. Llenar el Datalist con los insumos existentes
+async function cargarListaInsumosUnicos() {
+  const listContainer = document.getElementById('list-insumos-items');
+  if (!listContainer) return;
+
+  try {
+    const { data, error } = await supabaseTendencias
+      .from('stock_historico')
+      .select('descripcion')
+      .not('descripcion', 'ilike', '%ONU%')
+      .limit(3000);
+
+    if (error) throw error;
+
+    const mapaUnicos = new Set();
+    (data || []).forEach(r => {
+      const desc = (r.descripcion || '').trim();
+      if (desc) mapaUnicos.add(desc);
+    });
+
+    const itemsOrdenados = Array.from(mapaUnicos).sort();
+
+    let html = '';
+    itemsOrdenados.forEach(desc => {
+      html += `<option value="${desc}">`;
+    });
+
+    listContainer.innerHTML = html;
+    
+    // Popular subalmacenes iniciales
+    await popularAlmacenesEspecificos();
+  } catch (err) {
+    console.error("Error al cargar lista de insumos:", err);
+  }
+}
+
+// B. Llenar el selector 2.b con los vehículos/almacenes reales disponibles
+async function popularAlmacenesEspecificos() {
+  const selEspecifico = document.getElementById('sel-insumo-almacen-especifico');
+  if (!selEspecifico) return;
+
+  const sucFiltro = document.getElementById('sel-insumo-sucursal')?.value || 'TODAS';
+  const tipoFiltro = document.getElementById('sel-insumo-tipo-alm')?.value || 'TODOS';
+
+  try {
+    let query = supabaseTendencias
+      .from('stock_historico')
+      .select('almacen, sucursal_id, tipo_almacen')
+      .limit(2000);
+
+    if (sucFiltro !== 'TODAS') query = query.eq('sucursal_id', sucFiltro);
+    if (tipoFiltro !== 'TODOS') query = query.eq('tipo_almacen', tipoFiltro);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const almacenesUnicos = new Set();
+    (data || []).forEach(r => {
+      if (r.almacen) almacenesUnicos.add(r.almacen.trim());
+    });
+
+    const listaOrdenada = Array.from(almacenesUnicos).sort();
+
+    let html = `<option value="TODOS">🌐 Todos los del Tipo Seleccionado (${listaOrdenada.length})</option>`;
+    listaOrdenada.forEach(alm => {
+      html += `<option value="${alm}">${alm}</option>`;
+    });
+
+    selEspecifico.innerHTML = html;
+  } catch (err) {
+    console.error("Error al popular almacenes específicos:", err);
+  }
+}
+
+// Evento al cambiar Tipo de Almacén o Sucursal
+function alCambiarFiltroTipoOAgrupar() {
+  popularAlmacenesEspecificos();
+}
+window.alCambiarFiltroTipoOAgrupar = alCambiarFiltroTipoOAgrupar;
+
+// C. Consulta y renderizado de Gráfico + Tarjetas KPI
+async function actualizarGraficoInsumos() {
+  const selInsumo = document.getElementById('txt-insumo-item')?.value?.trim();
+  const sucFiltro = document.getElementById('sel-insumo-sucursal')?.value || 'TODAS';
+  const tipoAlmFiltro = document.getElementById('sel-insumo-tipo-alm')?.value || 'TODOS';
+  const almEspecifico = document.getElementById('sel-insumo-almacen-especifico')?.value || 'TODOS';
+  const fechaDesde = document.getElementById('insumo-fecha-desde')?.value || '';
+  const fechaHasta = document.getElementById('insumo-fecha-hasta')?.value || '';
+
+  const kpiStock = document.getElementById('kpi-insumo-stock-actual');
+  const kpiConsumo = document.getElementById('kpi-insumo-consumo-total');
+  const kpiPromedio = document.getElementById('kpi-insumo-promedio-diario');
+  const kpiAutonomia = document.getElementById('kpi-insumo-autonomia');
+
+  if (!selInsumo) {
+    if (kpiStock) kpiStock.textContent = '0 un.';
+    if (kpiConsumo) kpiConsumo.textContent = '0 un.';
+    if (kpiPromedio) kpiPromedio.textContent = '0 un./día';
+    if (kpiAutonomia) kpiAutonomia.textContent = '-- días';
+    return;
+  }
+
+  try {
+    let query = supabaseTendencias
+      .from('stock_historico')
+      .select('fecha_registro, stock_total, sucursal_id, tipo_almacen, almacen')
+      .ilike('descripcion', `%${selInsumo}%`)
+      .order('fecha_registro', { ascending: true });
+
+    if (sucFiltro !== 'TODAS') query = query.eq('sucursal_id', sucFiltro);
+    if (tipoAlmFiltro !== 'TODOS') query = query.eq('tipo_almacen', tipoAlmFiltro);
+    if (almEspecifico !== 'TODOS') query = query.eq('almacen', almEspecifico);
+    if (fechaDesde) query = query.gte('fecha_registro', fechaDesde);
+    if (fechaHasta) query = query.lte('fecha_registro', fechaHasta);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const registros = data || [];
+
+    // Agrupar suma total por fecha
+    const sumaPorFecha = {};
+    registros.forEach(r => {
+      const f = r.fecha_registro;
+      if (!sumaPorFecha[f]) sumaPorFecha[f] = 0;
+      sumaPorFecha[f] += (parseInt(r.stock_total, 10) || 0);
+    });
+
+    const fechasOrdenadas = Object.keys(sumaPorFecha).sort();
+    let serieStock = fechasOrdenadas.map(f => sumaPorFecha[f]);
+
+    if (fechasOrdenadas.length === 0) {
+      if (kpiStock) kpiStock.textContent = '0 un.';
+      if (kpiConsumo) kpiConsumo.textContent = '0 un.';
+      if (kpiPromedio) kpiPromedio.textContent = '0 un./día';
+      if (kpiAutonomia) kpiAutonomia.textContent = 'Sin datos';
+      if (ten_insumosChart) ten_insumosChart.destroy();
+      return;
+    }
+
+    // Cálculo de Consumo Neto (Salidas acumuladas)
+    let consumoAcumulado = 0;
+    for (let i = 1; i < serieStock.length; i++) {
+      const diff = serieStock[i - 1] - serieStock[i];
+      if (diff > 0) { 
+        consumoAcumulado += diff;
+      }
+    }
+
+    const stockActual = serieStock[serieStock.length - 1];
+    const cantDias = Math.max(1, fechasOrdenadas.length);
+    const promedioDiario = parseFloat((consumoAcumulado / cantDias).toFixed(1));
+
+    let autonomiaDias = '--';
+    if (promedioDiario > 0) {
+      autonomiaDias = Math.round(stockActual / promedioDiario) + ' días';
+    } else {
+      autonomiaDias = '∞ Sin Consumo';
+    }
+
+    // Actualizar Tarjetas KPI
+    if (kpiStock) kpiStock.textContent = `${stockActual.toLocaleString('es-AR')} un.`;
+    if (kpiConsumo) kpiConsumo.textContent = `${consumoAcumulado.toLocaleString('es-AR')} un.`;
+    if (kpiPromedio) kpiPromedio.textContent = `${promedioDiario} un./día`;
+    if (kpiAutonomia) kpiAutonomia.textContent = autonomiaDias;
+
+    // Renderizar Gráfico de Insumos
+    const canvas = document.getElementById('chartInsumosLine');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (ten_insumosChart) {
+      ten_insumosChart.destroy();
+    }
+
+    const labelGrafico = almEspecifico !== 'TODOS' 
+      ? `${selInsumo} en [${almEspecifico}]` 
+      : `${selInsumo} (${tipoAlmFiltro})`;
+
+    ten_insumosChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: fechasOrdenadas,
+        datasets: [{
+          label: `Evolución: ${labelGrafico}`,
+          data: serieStock,
+          borderColor: '#4ade80',
+          backgroundColor: 'rgba(74, 222, 128, 0.1)',
+          fill: true,
+          borderWidth: 3,
+          tension: 0.2,
+          pointRadius: 4,
+          pointHoverRadius: 7
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#f8fafc', font: { size: 12, weight: 'bold' } } },
+          tooltip: {
+            backgroundColor: '#0f172a', titleColor: '#38bdf8', bodyColor: '#f8fafc', borderColor: '#334155', borderWidth: 1, padding: 10
+          }
+        },
+        scales: {
+          x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+          y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
+        }
+      }
+    });
+
+  } catch (err) {
+    console.error("Error al calcular gráfico de insumos:", err);
+  }
+}
+window.actualizarGraficoInsumos = actualizarGraficoInsumos;

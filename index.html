@@ -385,82 +385,212 @@
 
   <!-- PESTAÑA: TENDENCIAS Y EVOLUCIÓN HISTÓRICA -->
   <main id="tab-tendencias" class="tab-content req-estrategico">
-    <section class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2 class="card-title" style="margin:0;">📈 Evolución de Stock e Inteligencia de Consumo</h2>
-        <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
+    
+    <!-- ENCABEZADO Y BARRA DE ESTADO DE TENDENCIAS -->
+    <div style="display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 14px 20px; border-radius: 12px; border: 1px solid #334155;">
+      <div>
+        <h2 style="margin: 0; font-size: 1.15rem; color: #f8fafc; font-weight: 800;">📈 Centro de Tendencias e Inteligencia de Consumo</h2>
+        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: #94a3b8;">Análisis predictivo de equipos y consumo acumulado de insumos por categoría de almacén.</p>
+      </div>
+      <span id="tagTendencias" class="file-tag ok">Supabase: ⏳ Consultando...</span>
+    </div>
+
+    <!-- ====================================================
+         DESPLEGABLE 1: EVOLUCIÓN DE EQUIPOS ONUs
+         ==================================================== -->
+    <section class="card" style="padding: 0; overflow: hidden; background: #0f172a; border-color: #334155;">
+      <!-- CABECERA DESPLEGABLE 1 -->
+      <div onclick="toggleSeccionTendencias('sec-tendencias-onus')" style="background: #1e293b; padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; user-select: none;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.2rem;">📡</span>
+          <h2 style="margin:0; font-size: 1rem; color: #38bdf8; font-weight: 800;">1. Evolución de Stock e Inteligencia de Consumo (Equipos ONUs)</h2>
+        </div>
+        <span id="icon-sec-tendencias-onus" style="color: #38bdf8; font-weight: bold; font-size: 1.1rem;">▼</span>
       </div>
 
-      <!-- Panel de Filtros -->
-      <div style="display: flex; gap: 20px; flex-wrap: wrap; background: #0f172a; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
-        <!-- 1. Almacenes -->
-        <div style="flex: 1; min-width: 200px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🏬 Almacenes:</strong>
-          <div id="check-almacenes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; font-size: 0.82rem; color: #f8fafc;">
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> OBE Principal</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_CATRIEL" checked onchange="actualizarGraficoTendencias()"> OBE Catriel</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="SPD_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> San Pedro</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="WND_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Wanda</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ITU_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Ituzaingó</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ELDO_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Eldorado</label>
+      <!-- CUERPO DESPLEGABLE 1 (ABIERTO POR DEFECTO) -->
+      <div id="sec-tendencias-onus" style="padding: 20px; display: block;">
+        <!-- Panel de Filtros ONUs -->
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; background: #1e293b; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
+          <!-- 1. Almacenes -->
+          <div style="flex: 1; min-width: 200px;">
+            <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🏬 Almacenes Matrix:</strong>
+            <div id="check-almacenes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; font-size: 0.82rem; color: #f8fafc;">
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> OBE Principal</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="OBE_ALM_CATRIEL" checked onchange="actualizarGraficoTendencias()"> OBE Catriel</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="SPD_ALM_PRINCIPAL" checked onchange="actualizarGraficoTendencias()"> San Pedro</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="WND_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Wanda</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ITU_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Ituzaingó</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="ELDO_ALM_PRINCIPAL" onchange="actualizarGraficoTendencias()"> Eldorado</label>
+            </div>
           </div>
-        </div>
 
-        <!-- 2. Grupos de ONUs -->
-        <div style="flex: 1; min-width: 180px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">📦 Grupos ONUs:</strong>
-          <div id="check-onus" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: #f8fafc;">
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="DUAL_BAND" checked onchange="actualizarGraficoTendencias()"> 🔵 Dual Band VIP (Wi-Fi 6)</label>
-            <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="CATV" checked onchange="actualizarGraficoTendencias()"> 🟠 CATV VIP (EG8147X6 / F6600R)</label>
+          <!-- 2. Grupos de ONUs -->
+          <div style="flex: 1; min-width: 180px;">
+            <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">📦 Grupos ONUs:</strong>
+            <div id="check-onus" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: #f8fafc;">
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="DUAL_BAND" checked onchange="actualizarGraficoTendencias()"> 🔵 Dual Band VIP (Wi-Fi 6)</label>
+              <label style="cursor:pointer; display:flex; align-items:center; gap:6px;"><input type="checkbox" value="CATV" checked onchange="actualizarGraficoTendencias()"> 🟠 CATV VIP (EG8147X6 / F6600R)</label>
+            </div>
           </div>
-        </div>
 
-        <!-- 3. Escala Visual -->
-        <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px;">
-          <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🔍 Zoom / Vista General:</strong>
-          <select id="zoom-vista" style="background:#1e293b; border:1px solid #334155; color:white; padding:6px; border-radius:6px; font-size:0.82rem; width:100%;" onchange="actualizarGraficoTendencias()">
-            <option value="ALL" selected>Todo el Historial</option>
-            <option value="30">Últimos 30 días</option>
-            <option value="90">Últimos 90 días</option>
-            <option value="180">Últimos 6 meses</option>
-            <option value="365">Último año</option>
-          </select>
-        </div>
+          <!-- 3. Escala Visual -->
+          <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px;">
+            <strong style="color: #38bdf8; display: block; margin-bottom: 10px; font-size: 0.88rem;">🔍 Zoom / Vista General:</strong>
+            <select id="zoom-vista" style="background:#0f172a; border:1px solid #334155; color:white; padding:6px; border-radius:6px; font-size:0.82rem; width:100%; outline:none;" onchange="actualizarGraficoTendencias()">
+              <option value="ALL" selected>Todo el Historial</option>
+              <option value="30">Últimos 30 días</option>
+              <option value="90">Últimos 90 días</option>
+              <option value="180">Últimos 6 meses</option>
+              <option value="365">Último año</option>
+            </select>
+          </div>
 
-        <!-- 4. Tramo Específico de Cálculo -->
-        <div style="flex: 1; min-width: 220px; border-left: 1px solid #334155; padding-left: 14px;">
-          <strong style="color: #fde047; display: block; margin-bottom: 10px; font-size: 0.88rem;">📐 Tramo para Calcular Tendencia:</strong>
-          <div style="display: flex; flex-direction: column; gap: 6px;">
-            <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
-              Desde: <input type="date" id="tendencia-desde" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
+          <!-- 4. Tramo Específico de Cálculo -->
+          <div style="flex: 1; min-width: 220px; border-left: 1px solid #334155; padding-left: 14px;">
+            <strong style="color: #fde047; display: block; margin-bottom: 10px; font-size: 0.88rem;">📐 Tramo para Calcular Tendencia:</strong>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
+                Desde: <input type="date" id="tendencia-desde" style="background:#0f172a; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
+              </label>
+              <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
+                Hasta: <input type="date" id="tendencia-hasta" style="background:#0f172a; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
+              </label>
+            </div>
+          </div>
+
+          <!-- 5. Proyección -->
+          <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px; display:flex; flex-direction:column; justify-content:center;">
+            <strong style="color: #4ade80; display: block; margin-bottom: 8px; font-size: 0.88rem;">📉 Proyección:</strong>
+            <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px; font-size: 0.82rem;">
+              <input type="checkbox" id="check-proyeccion-global" onchange="actualizarGraficoTendencias()"> 
+              Activar Proyección en Gráfico
             </label>
-            <label style="color:#cbd5e1; font-size: 0.78rem; display:flex; justify-content:space-between; align-items:center;">
-              Hasta: <input type="date" id="tendencia-hasta" style="background:#1e293b; border:1px solid #334155; color:white; padding:4px 6px; border-radius:4px; font-size:0.78rem; width:130px;" onchange="actualizarGraficoTendencias()">
-            </label>
           </div>
         </div>
 
-        <!-- 5. Proyección -->
-        <div style="flex: 1; min-width: 170px; border-left: 1px solid #334155; padding-left: 14px; display:flex; flex-direction:column; justify-content:center;">
-          <strong style="color: #4ade80; display: block; margin-bottom: 8px; font-size: 0.88rem;">📉 Proyección:</strong>
-          <label style="color:#f8fafc; cursor:pointer; display:flex; align-items:center; gap:6px; font-size: 0.82rem;">
-            <input type="checkbox" id="check-proyeccion-global" onchange="actualizarGraficoTendencias()"> 
-            Activar Proyección en Gráfico
-          </label>
+        <!-- Gráfico Principal ONUs -->
+        <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+          <canvas id="chartTendenciasLines"></canvas>
         </div>
-      </div>
 
-      <!-- Gráfico Principal -->
-      <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
-        <canvas id="chartTendenciasLines"></canvas>
-      </div>
-
-      <!-- Panel de Estimaciones de Quiebre -->
-      <div id="panel-estimaciones" style="display: none; margin-top: 16px; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
-        <h3 style="color: #4ade80; font-size: 0.95rem; margin-bottom: 12px;">⏳ Estimación de Quiebre basada en el Tramo Seleccionado</h3>
-        <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
+        <!-- Panel de Estimaciones de Quiebre -->
+        <div id="panel-estimaciones" style="display: none; margin-top: 16px; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+          <h3 style="color: #4ade80; font-size: 0.95rem; margin-bottom: 12px;">⏳ Estimación de Quiebre basada en el Tramo Seleccionado</h3>
+          <div id="grid-estimaciones" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
+        </div>
       </div>
     </section>
+
+    <!-- ====================================================
+         DESPLEGABLE 2: ANÁLISIS DE INSUMOS Y MATERIALES
+         ==================================================== -->
+    <section class="card" style="padding: 0; overflow: hidden; background: #0f172a; border-color: #334155; margin-top: 10px;">
+      <!-- CABECERA DESPLEGABLE 2 -->
+      <div onclick="toggleSeccionTendencias('sec-tendencias-insumos')" style="background: #1e293b; padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; user-select: none;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.2rem;">🛠️</span>
+          <h2 style="margin:0; font-size: 1rem; color: #4ade80; font-weight: 800;">2. Análisis y Consumo Histórico de Insumos / Materiales</h2>
+        </div>
+        <span id="icon-sec-tendencias-insumos" style="color: #4ade80; font-weight: bold; font-size: 1.1rem;">►</span>
+      </div>
+
+      <!-- CUERPO DESPLEGABLE 2 (OCULTO POR DEFECTO) -->
+      <div id="sec-tendencias-insumos" style="padding: 20px; display: none;">
+        
+        <!-- PANEL DE FILTROS ACUMULATIVOS -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; background: #1e293b; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
+          
+          <!-- Filtro 1: Sucursal -->
+          <div>
+            <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🏬 1. Sucursal:</label>
+            <select id="sel-insumo-sucursal" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="alCambiarFiltroTipoOAgrupar(); actualizarGraficoInsumos();">
+              <option value="TODAS">🌐 Todas las Sucursales</option>
+              <option value="OBE">🏬 Oberá (Matriz)</option>
+              <option value="SPD">🏬 San Pedro</option>
+              <option value="WND">🏬 Wanda</option>
+              <option value="ITU">🏬 Ituzaingó</option>
+              <option value="ELDO">🏬 Eldorado</option>
+            </select>
+          </div>
+
+          <!-- Filtro 2.a: Tipo de Almacén -->
+          <div>
+            <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📦 2. Tipo de Almacén:</label>
+            <select id="sel-insumo-tipo-alm" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="alCambiarFiltroTipoOAgrupar(); actualizarGraficoInsumos();">
+              <option value="TODOS">Todos los Tipos de Almacén</option>
+              <option value="ALMACEN_CENTRAL">🏢 ALMACÉN CENTRAL</option>
+              <option value="MOVIL_TECNICO">🚚 MÓVIL TÉCNICO (Propio)</option>
+              <option value="MOVIL_TECNICO_3RO">🚜 MÓVIL TÉCNICO (3ros)</option>
+              <option value="MESA_PRUEBA">🔬 MESA PRUEBA / LAB</option>
+              <option value="DEVOLUCION">🔄 DEVOLUCIÓN / TRIAGE</option>
+              <option value="ALMACEN_AREA">⚙️ ALMACÉN DE ÁREA (Redes/Electro)</option>
+              <option value="OBSOLETO">🗑️ OBSOLETO / DESCARTE</option>
+              <option value="OTRO">📁 OTRO</option>
+            </select>
+          </div>
+
+          <!-- NUEVO: Filtro 2.b: Almacén Específico (Sub-selección) -->
+          <div>
+            <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🎯 2.b Almacén / Móvil Específico:</label>
+            <select id="sel-insumo-almacen-especifico" style="width:100%; background:#0f172a; color:#f8fafc; border:1px solid #0284c7; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="actualizarGraficoInsumos()">
+              <option value="TODOS">🌐 Todos los del Tipo Seleccionado</option>
+            </select>
+          </div>
+
+          <!-- NUEVO: Filtro 3 con Buscador / Autocompletado (Input + Datalist) -->
+          <div style="grid-column: span 2;">
+            <label style="color: #4ade80; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🔍 3. Escribir o Seleccionar Insumo / Material:</label>
+            <input type="text" id="txt-insumo-item" list="list-insumos-items" placeholder="🔍 Escribí para buscar insumo (ej: Patchcord, Conector...)" style="width:100%; background:#0f172a; color:white; border:1px solid #059669; padding:8px 12px; border-radius:6px; font-size:0.85rem; outline:none;" oninput="actualizarGraficoInsumos()">
+            <datalist id="list-insumos-items"></datalist>
+          </div>
+
+          <!-- Filtro 4: Fecha Desde -->
+          <div>
+            <label style="color: #fde047; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📅 Desde:</label>
+            <input type="date" id="insumo-fecha-desde" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:7px; border-radius:6px; font-size:0.82rem; outline:none;" onchange="actualizarGraficoInsumos()">
+          </div>
+
+          <!-- Filtro 5: Fecha Hasta -->
+          <div>
+            <label style="color: #fde047; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📅 Hasta:</label>
+            <input type="date" id="insumo-fecha-hasta" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:7px; border-radius:6px; font-size:0.82rem; outline:none;" onchange="actualizarGraficoInsumos()">
+          </div>
+
+        </div>
+
+        <!-- TARJETAS DE MÉTRICAS KPI DE CONSUMO -->
+        <div id="grid-kpi-insumos" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #334155; padding: 12px;">
+            <div class="title" style="color: #cbd5e1; font-size: 0.72rem;">📦 STOCK ACTUAL</div>
+            <div id="kpi-insumo-stock-actual" class="value" style="color: #f8fafc; font-size: 1.5rem;">0 un.</div>
+            <div class="subtext" style="color: #94a3b8;">En el filtro seleccionado</div>
+          </div>
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #ef4444; padding: 12px;">
+            <div class="title" style="color: #f87171; font-size: 0.72rem;">📉 CONSUMO ACUMULADO</div>
+            <div id="kpi-insumo-consumo-total" class="value" style="color: #f87171; font-size: 1.5rem;">0 un.</div>
+            <div class="subtext" style="color: #cbd5e1;">Salidas netas en el tramo</div>
+          </div>
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #eab308; padding: 12px;">
+            <div class="title" style="color: #fde047; font-size: 0.72rem;">📊 CONSUMO PROMEDIO DIARIO</div>
+            <div id="kpi-insumo-promedio-diario" class="value" style="color: #fde047; font-size: 1.5rem;">0 un./día</div>
+            <div class="subtext" style="color: #cbd5e1;">Ritmo de salida</div>
+          </div>
+          <div class="kpi-card-dark" style="background: #1e293b; border-color: #10b981; padding: 12px;">
+            <div class="title" style="color: #34d399; font-size: 0.72rem;">⏳ AUTONOMÍA ESTIMADA</div>
+            <div id="kpi-insumo-autonomia" class="value" style="color: #34d399; font-size: 1.5rem;">-- días</div>
+            <div class="subtext" style="color: #cbd5e1;">Hasta quiebre de stock</div>
+          </div>
+        </div>
+
+        <!-- GRÁFICO HISTÓRICO DE CONSUMO DE INSUMO -->
+        <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+          <canvas id="chartInsumosLine"></canvas>
+        </div>
+
+      </div>
+    </section>
+
   </main>
 
   <main id="tab-flota" class="tab-content">
