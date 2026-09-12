@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧪 Radar Multisucursal (Operativo + Histórico) - RECUPERO</title>
+<!-- Librerías Externas -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { 
+    font-family: system-ui, -apple-system, sans-serif; 
+    background: #0f172a; 
+    color: #f8fafc; 
+    padding: 20px; 
+  }
+  .header-test {
+    background: #1e293b;
+    border: 1px solid #334155;
+    padding: 16px 24px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+  }
+  .filtros-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 16px;
+    background: #0f172a;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+  }
+  .filtro-grupo {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .filtro-grupo label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #38bdf8;
+  }
+  input[type="date"] {
+    background: #1e293b;
+    color: white;
+    border: 1px solid #334155;
+    padding: 6px 10px;
+    border-radius: 6px;
+    outline: none;
+    font-family: monospace;
+  }
+  .checkbox-group {
+    display: flex;
+    gap: 12px;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+  }
+  .checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: #cbd5e1;
+  }
+  .grid-2x2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+    align-items: start;
+  }
+  .card-radar {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+  .card-title {
+    font-size: 0.88rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .canvas-container {
+    position: relative;
+    height: 350px;
+    width: 100%;
+  }
+  #status-bd {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: bold;
+  }
+  .status-ok { background: #064e3b; color: #4ade80; border: 1px solid #059669; }
+  .status-load { background: #713f12; color: #fde047; border: 1px solid #ca8a04; }
+  .status-err { background: #7f1d1d; color: #fca5a5; border: 1px solid #dc2626; }
+</style>
+</head>
+<body>
+
+  <div class="header-test">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1 style="font-size: 1.2rem; color: #38bdf8;">🌐 Prototipo Radar Multisucursal (Consolidado Total)</h1>
+        <p style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">Unificación en vivo de <code>recupero_operativo</code> + <code>recupero_historico_equipos</code>.</p>
+      </div>
+      <span id="status-bd" class="status-load">Esperando...</span>
+    </div>
+
+    <!-- PANEL DE FILTROS -->
+    <div class="filtros-container">
+      <div class="filtro-grupo">
+        <label>📅 Rango de Fechas (Ingreso):</label>
+        <div style="display: flex; gap: 10px;">
+          <input type="date" id="filtro-desde" onchange="cargarDatosRadar()">
+          <input type="date" id="filtro-hasta" onchange="cargarDatosRadar()">
+        </div>
+      </div>
+
+      <div class="filtro-grupo" style="flex: 1;">
+        <label>🏬 Sucursales a Comparar:</label>
+        <div class="checkbox-group" id="contenedor-sucursales">
+          <label><input type="checkbox" value="OBE" checked onchange="cargarDatosRadar()"> Oberá</label>
+          <label><input type="checkbox" value="SPD" checked onchange="cargarDatosRadar()"> San Pedro</label>
+          <label><input type="checkbox" value="WND" checked onchange="cargarDatosRadar()"> Wanda</label>
+          <label><input type="checkbox" value="ELDO" checked onchange="cargarDatosRadar()"> Eldorado</label>
+          <label><input type="checkbox" value="ITU" checked onchange="cargarDatosRadar()"> Ituzaingó</label>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: flex-end;">
+        <button onclick="cargarDatosRadar()" style="background:#0284c7; color:white; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;">
+          ⚡ Actualizar Gráficos
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MATRIZ 2x2 DE GRÁFICOS RADAR -->
+  <div class="grid-2x2">
+    <div class="card-radar">
+      <div class="card-title" style="color: #f8fafc;">
+        <span>📦 1. Recibidos vs Descarte Obs.</span>
+        <span class="etiqueta-dinamica" style="font-size: 0.72rem; color: #cbd5e1; background: #1e293b; padding: 2px 8px; border-radius: 4px;">Escala Libre</span>
+      </div>
+      <div class="canvas-container"><canvas id="radarRecibidos"></canvas></div>
+    </div>
+
+    <div class="card-radar">
+      <div class="card-title" style="color: #38bdf8;">
+        <span>🚚 2. Canales de Origen</span>
+        <span class="etiqueta-dinamica" style="font-size: 0.72rem; color: #cbd5e1; background: #1e293b; padding: 2px 8px; border-radius: 4px;">Retiro / Reclamos / Mostrador</span>
+      </div>
+      <div class="canvas-container"><canvas id="radarOrigen"></canvas></div>
+    </div>
+
+    <div class="card-radar">
+      <div class="card-title" style="color: #4ade80;">
+        <span>⭐ 3. Equipos VIP Probados</span>
+        <span class="etiqueta-dinamica" style="font-size: 0.72rem; color: #cbd5e1; background: #1e293b; padding: 2px 8px; border-radius: 4px;">Circulación vs Descarte</span>
+      </div>
+      <div class="canvas-container"><canvas id="radarVIP"></canvas></div>
+    </div>
+
+    <div class="card-radar">
+      <div class="card-title" style="color: #fde047;">
+        <span>⚡ 4. Ritmo y Cumplimiento (Meta)</span>
+        <span class="etiqueta-dinamica" style="font-size: 0.72rem; color: #cbd5e1; background: #1e293b; padding: 2px 8px; border-radius: 4px;">Acumulado del período</span>
+      </div>
+      <div class="canvas-container"><canvas id="radarRitmo"></canvas></div>
+    </div>
+  </div>
+
+<script>
+  const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let charts = {};
+  const NOMBRES_SUC = { 'OBE': 'Oberá', 'SPD': 'San Pedro', 'WND': 'Wanda', 'ELDO': 'Eldorado', 'ITU': 'Ituzaingó' };
+
+  function normalizar(txt) {
+    return (txt || '')
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase();
+  }
+
+  function obtenerInfoCatalogo(descNorm, catalogo) {
+    if (!descNorm) return { esVIP: false, precioUsd: 0.0 };
+
+    const encontrado = catalogo.find(item => {
+      const itemNorm = item.modelo_norm || normalizar(item.modelo);
+      if (!itemNorm) return false;
+      return descNorm === itemNorm || descNorm.includes(itemNorm);
+    });
+
+    return encontrado 
+      ? { esVIP: Boolean(encontrado.es_vip), precioUsd: parseFloat(encontrado.precio_usd) || 0.0 }
+      : { esVIP: false, precioUsd: 0.0 };
+  }
+
+  function mapearSucursal(sucRaw) {
+    const s = (sucRaw || 'OBE').toUpperCase();
+    if (s.includes('OBE')) return 'OBE';
+    if (s.includes('SPD')) return 'SPD';
+    if (s.includes('WND')) return 'WND';
+    if (s.includes('ELDO')) return 'ELDO';
+    if (s.includes('ITU')) return 'ITU';
+    return 'OBE';
+  }
+
+  window.onload = () => {
+    cargarDatosRadar();
+  };
+
+  function getRadarOptions() {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          beginAtZero: true,
+          ticks: {
+            color: '#94a3b8',
+            backdropColor: 'transparent',
+            font: { size: 10, weight: 'bold' }
+          },
+          grid: { color: '#334155' },
+          angleLines: { color: '#475569' },
+          pointLabels: {
+            color: '#f8fafc',
+            font: { size: 12, weight: '800' }
+          }
+        }
+      },
+      plugins: {
+        legend: { position: 'top', labels: { color: '#cbd5e1', font: { size: 11, weight: 'bold' }, boxWidth: 12 } },
+        tooltip: { backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1 }
+      }
+    };
+  }
+
+  async function cargarDatosRadar() {
+    const statusTag = document.getElementById('status-bd');
+    statusTag.textContent = '⏳ Consultando Mesa Activa e Histórico...';
+    statusTag.className = 'status-load';
+
+    const fechaDesde = document.getElementById('filtro-desde').value;
+    const fechaHasta = document.getElementById('filtro-hasta').value;
+    
+    const checkboxes = Array.from(document.querySelectorAll('#contenedor-sucursales input:checked'));
+    const sucsSeleccionadas = checkboxes.map(cb => cb.value);
+    const labelsGrafico = sucsSeleccionadas.map(cod => NOMBRES_SUC[cod] || cod);
+
+    if (sucsSeleccionadas.length === 0) {
+      statusTag.textContent = '⚠️ Seleccioná al menos una sucursal';
+      statusTag.className = 'status-err';
+      return;
+    }
+
+    try {
+      // 1. DESCARGA TRIPLE: MESA ACTIVA + HISTÓRICO DE CIERRES + CATÁLOGO
+      const [resOperativo, resHistorico, resCat] = await Promise.all([
+        db.from('recupero_operativo').select('*').order('fecha_ingreso', { ascending: false }).limit(5000),
+        db.from('recupero_historico_equipos').select('*').order('fecha_ingreso', { ascending: false }).limit(5000),
+        db.from('catalogo_equipos').select('*')
+      ]);
+
+      if (resOperativo.error) throw resOperativo.error;
+      if (resHistorico.error) throw resHistorico.error;
+      if (resCat.error) throw resCat.error;
+
+      const dataOperativo = resOperativo.data || [];
+      const dataHistorico = resHistorico.data || [];
+      const catalogo = resCat.data || [];
+
+      // Unificación total de registros
+      let dataRecTotal = [...dataOperativo, ...dataHistorico];
+
+      // 2. Aplicar filtro de fecha opcional
+      if (fechaDesde) {
+        dataRecTotal = dataRecTotal.filter(r => (r.fecha_ingreso || r.created_at || '') >= fechaDesde);
+      }
+      if (fechaHasta) {
+        dataRecTotal = dataRecTotal.filter(r => (r.fecha_ingreso || r.created_at || '') <= fechaHasta + 'T23:59:59');
+      }
+
+      // 3. Estructura de contadores por sucursal
+      const stats = {};
+      sucsSeleccionadas.forEach(suc => {
+        stats[suc] = {
+          totalRecibidos: 0,
+          directoDescarteObs: 0,
+          enCirculacionVIP: 0,
+          fueraCirculacionVIP: 0,
+          pendientesVIP: 0,
+          probadosVIP: 0,
+          origenPersonalRetiro: 0,
+          origenTecnicoReclamos: 0,
+          origenSucursal: 0,
+          origenOtros: 0
+        };
+      });
+
+      // 4. Procesamiento
+      dataRecTotal.forEach(row => {
+        const suc = mapearSucursal(row.sucursal_id || 'OBE');
+        if (!stats[suc]) return;
+
+        const cant = parseInt(row.cantidad || 1, 10) || 1;
+        const desc = row.descripcion || row.modelo || row.equipo || 'DESCONOCIDO';
+        const descNorm = normalizar(desc);
+        const condicion = normalizar(row.condicion || row.estado_final || row.estado || row.veredicto || '');
+        const origenRaw = normalizar(row.origen || row.almacen_origen || '');
+
+        if (origenRaw.includes('RETIRO') || origenRaw.includes('PERSONAL')) {
+          stats[suc].origenPersonalRetiro += cant;
+        } else if (origenRaw.includes('RECLAMO') || origenRaw.includes('TECNICO')) {
+          stats[suc].origenTecnicoReclamos += cant;
+        } else if (origenRaw.includes('SUCURSAL') || origenRaw.includes('MOSTRADOR') || origenRaw.includes('DEVOLUCION')) {
+          stats[suc].origenSucursal += cant;
+        } else {
+          stats[suc].origenOtros += cant;
+        }
+
+        const infoCat = obtenerInfoCatalogo(descNorm, catalogo);
+        const esEquipoVIP = infoCat.esVIP;
+
+        stats[suc].totalRecibidos += cant;
+
+        const esAprobado = ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO'].some(e => condicion.includes(e));
+        const esRechazado = ['DESCARTE', 'FALLA', 'BAJA', 'DEFECTUOSO', 'ROTO', 'RECHAZADO'].some(e => condicion.includes(e));
+
+        if (!esEquipoVIP) {
+          stats[suc].directoDescarteObs += cant;
+        } else if (esAprobado) {
+          stats[suc].enCirculacionVIP += cant;
+        } else if (esRechazado) {
+          stats[suc].fueraCirculacionVIP += cant;
+        } else {
+          stats[suc].pendientesVIP += cant;
+        }
+      });
+
+      sucsSeleccionadas.forEach(suc => {
+        stats[suc].probadosVIP = stats[suc].enCirculacionVIP + stats[suc].fueraCirculacionVIP;
+      });
+
+      const metaBase = 50;
+
+      // 1. CHART 1: RECIBIDOS VS DESCARTE OBS
+      renderRadar('radarRecibidos', {
+        labels: labelsGrafico,
+        datasets: [
+          {
+            label: 'Total Recibidos',
+            data: sucsSeleccionadas.map(suc => stats[suc].totalRecibidos),
+            borderColor: '#0284c7', backgroundColor: 'rgba(2, 132, 199, 0.25)', borderWidth: 2
+          },
+          {
+            label: 'Descarte Obs.',
+            data: sucsSeleccionadas.map(suc => stats[suc].directoDescarteObs),
+            borderColor: '#eab308', backgroundColor: 'rgba(234, 179, 8, 0.25)', borderWidth: 2
+          }
+        ]
+      });
+
+      // 2. CHART 2: ORIGEN / CANAL DE INGRESO
+      renderRadar('radarOrigen', {
+        labels: labelsGrafico,
+        datasets: [
+          {
+            label: 'Personal Retiro',
+            data: sucsSeleccionadas.map(suc => stats[suc].origenPersonalRetiro),
+            borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.2)', borderWidth: 2
+          },
+          {
+            label: 'Téc. Reclamos',
+            data: sucsSeleccionadas.map(suc => stats[suc].origenTecnicoReclamos),
+            borderColor: '#fde047', backgroundColor: 'rgba(253, 224, 71, 0.2)', borderWidth: 2
+          },
+          {
+            label: 'Sucursal / Mostrador',
+            data: sucsSeleccionadas.map(suc => stats[suc].origenSucursal),
+            borderColor: '#c084fc', backgroundColor: 'rgba(192, 132, 252, 0.2)', borderWidth: 2
+          }
+        ]
+      });
+
+      // 3. CHART 3: EQUIPOS VIP (CIRCULACIÓN VS DESCARTE)
+      renderRadar('radarVIP', {
+        labels: labelsGrafico,
+        datasets: [
+          {
+            label: 'En Circulación VIP',
+            data: sucsSeleccionadas.map(suc => stats[suc].enCirculacionVIP),
+            borderColor: '#4ade80', backgroundColor: 'rgba(74, 222, 128, 0.25)', borderWidth: 2
+          },
+          {
+            label: 'Fuera Circulación VIP',
+            data: sucsSeleccionadas.map(suc => stats[suc].fueraCirculacionVIP),
+            borderColor: '#f87171', backgroundColor: 'rgba(248, 113, 113, 0.25)', borderWidth: 2
+          }
+        ]
+      });
+
+      // 4. CHART 4: RITMO DIARIO vs META
+      renderRadar('radarRitmo', {
+        labels: labelsGrafico,
+        datasets: [
+          {
+            label: 'Probados VIP (Total)',
+            data: sucsSeleccionadas.map(suc => stats[suc].probadosVIP),
+            borderColor: '#4ade80', backgroundColor: 'rgba(74, 222, 128, 0.3)', borderWidth: 3
+          },
+          {
+            label: `Meta (${metaBase} un.)`,
+            data: sucsSeleccionadas.map(() => metaBase),
+            borderColor: '#94a3b8', borderDash: [5, 5], backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0
+          }
+        ]
+      });
+
+      statusTag.textContent = `✅ ${dataRecTotal.length} Registros Consolidados`;
+      statusTag.className = 'status-ok';
+
+    } catch (err) {
+      console.error(err);
+      statusTag.textContent = '❌ Error al leer Supabase';
+      statusTag.className = 'status-err';
+    }
+  }
+
+  function renderRadar(canvasId, chartData) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    if (charts[canvasId]) {
+      charts[canvasId].destroy();
+    }
+    charts[canvasId] = new Chart(ctx, {
+      type: 'radar',
+      data: chartData,
+      options: getRadarOptions()
+    });
+  }
+</script>
+</body>
+</html>

@@ -157,9 +157,10 @@ async function descargarHistorialCompleto() {
   while (hasMore) {
     const { data, error } = await supabaseTendencias
       .from('stock_historico')
-      .select('fecha_registro, almacen, descripcion, stock_total')
+      .select('id, fecha_registro, almacen, descripcion, stock_total')
       .ilike('descripcion', '%ONU%')
       .order('fecha_registro', { ascending: true })
+      .order('id', { ascending: true }) // 👈 CLAVE: Evita saltos/duplicados en paginación
       .range(from, from + step);
 
     if (error) throw error;
