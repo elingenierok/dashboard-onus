@@ -436,7 +436,7 @@ async function popularAlmacenesEspecificos() {
     let query = supabaseTendencias
       .from('stock_historico')
       .select('almacen, sucursal_id, tipo_almacen')
-      .limit(2000);
+      .limit(10000);
 
     if (sucFiltro !== 'TODAS') query = query.eq('sucursal_id', sucFiltro);
     if (tipoFiltro !== 'TODOS') query = query.eq('tipo_almacen', tipoFiltro);
@@ -495,7 +495,8 @@ async function actualizarGraficoInsumos() {
       .from('stock_historico')
       .select('fecha_registro, stock_total, sucursal_id, tipo_almacen, almacen')
       .ilike('descripcion', `%${selInsumo}%`)
-      .order('fecha_registro', { ascending: true });
+      .order('fecha_registro', { ascending: true })
+      .limit(10000);
 
     if (sucFiltro !== 'TODAS') query = query.eq('sucursal_id', sucFiltro);
     if (tipoAlmFiltro !== 'TODOS') query = query.eq('tipo_almacen', tipoAlmFiltro);
@@ -508,7 +509,7 @@ async function actualizarGraficoInsumos() {
 
     const registros = data || [];
 
-    // Agrupar suma total por fecha
+    // 1. Agrupar suma por fecha real de la BD
     const sumaPorFecha = {};
     registros.forEach(r => {
       const f = r.fecha_registro;
@@ -516,10 +517,9 @@ async function actualizarGraficoInsumos() {
       sumaPorFecha[f] += (parseInt(r.stock_total, 10) || 0);
     });
 
-    const fechasOrdenadas = Object.keys(sumaPorFecha).sort();
-    let serieStock = fechasOrdenadas.map(f => sumaPorFecha[f]);
-
-    if (fechasOrdenadas.length === 0) {
+    // 2. Generar rango continuo de fechas desde "insumo-fecha-desde" hasta "insumo-fecha-hasta"
+    const fechasOrdenadasBD = Object.keys(sumaPorFecha).sort();
+    if (fechasOrdenadasBD.length === 0) {
       if (kpiStock) kpiStock.textContent = '0 un.';
       if (kpiConsumo) kpiConsumo.textContent = '0 un.';
       if (kpiPromedio) kpiPromedio.textContent = '0 un./día';
@@ -528,7 +528,35 @@ async function actualizarGraficoInsumos() {
       return;
     }
 
-    // Cálculo de Consumo Neto (Salidas acumuladas)
+    const fInicioStr = fechaDesde || fechasOrdenadasBD[0];
+    const fFinStr = fechaHasta || fechasOrdenadasBD[fechasOrdenadasBD.length - 1];
+
+    const fechasCompletas = [];
+    let curDate = new Date(fInicioStr + 'T00:00:00');
+    const endDate = new Date(fFinStr + 'T00:00:00');
+
+    while (curDate <= endDate) {
+      fechasCompletas.push(curDate.toISOString().split('T')[0]);
+      curDate.setDate(curDate.getDate() + 1);
+    }
+
+    // 3. Arrastre de Stock (Forward Fill para cubrir fines de semana y días sin carga)
+    let ultimoStockValido = null;
+    const serieStock = [];
+
+    fechasCompletas.forEach(f => {
+      if (sumaPorFecha[f] !== undefined) {
+        ultimoStockValido = sumaPorFecha[f];
+      }
+      if (ultimoStockValido !== null) {
+        serieStock.push(ultimoStockValido);
+      }
+    });
+
+    // Recortar las fechas si el historial empieza después de fInicioStr
+    const fechasVisiblesFinal = fechasCompletas.slice(fechasCompletas.length - serieStock.length);
+
+    // 4. Cálculo de Consumo Neto
     let consumoAcumulado = 0;
     for (let i = 1; i < serieStock.length; i++) {
       const diff = serieStock[i - 1] - serieStock[i];
@@ -538,7 +566,7 @@ async function actualizarGraficoInsumos() {
     }
 
     const stockActual = serieStock[serieStock.length - 1];
-    const cantDias = Math.max(1, fechasOrdenadas.length);
+    const cantDias = Math.max(1, fechasVisiblesFinal.length);
     const promedioDiario = parseFloat((consumoAcumulado / cantDias).toFixed(1));
 
     let autonomiaDias = '--';
@@ -554,7 +582,7 @@ async function actualizarGraficoInsumos() {
     if (kpiPromedio) kpiPromedio.textContent = `${promedioDiario} un./día`;
     if (kpiAutonomia) kpiAutonomia.textContent = autonomiaDias;
 
-    // Renderizar Gráfico de Insumos
+    // Renderizar Gráfico
     const canvas = document.getElementById('chartInsumosLine');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -570,7 +598,7 @@ async function actualizarGraficoInsumos() {
     ten_insumosChart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: fechasOrdenadas,
+        labels: fechasVisiblesFinal,
         datasets: [{
           label: `Evolución: ${labelGrafico}`,
           data: serieStock,
@@ -579,8 +607,8 @@ async function actualizarGraficoInsumos() {
           fill: true,
           borderWidth: 3,
           tension: 0.2,
-          pointRadius: 4,
-          pointHoverRadius: 7
+          pointRadius: 3,
+          pointHoverRadius: 6
         }]
       },
       options: {
