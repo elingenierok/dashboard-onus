@@ -550,31 +550,59 @@ function imprimirEtiquetaPrueba() {
 
   const rawSn = equipoCargadoActual.sn || document.getElementById('pr_serial')?.value || '';
   const sn = rawSn.trim().toUpperCase().replace(/\s+/g, '');
-  const modelo = equipoCargadoActual.descripcion || 'GENERICO';
-  const dbm = document.getElementById('test_dbm')?.value || 'N/D';
+  const modelo = equipoCargadoActual.descripcion || equipoCargadoActual.modelo || 'GENERICO';
   const operadorNombre = window.USUARIO_NOMBRE_MOSTRAR || document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
   
   let veredicto = 'CIRCULACIÓN';
   const estadoPrevio = (equipoCargadoActual.condicion || '').toUpperCase();
   
-  if (estadoPrevio !== 'PENDIENTE') {
+  if (estadoPrevio !== 'PENDIENTE' && estadoPrevio !== '') {
     veredicto = estadoPrevio;
   } else {
-    veredicto = document.getElementById('boxVeredictoPrueba')?.textContent.replace('Veredicto:', '').trim();
+    veredicto = document.getElementById('boxVeredictoPrueba')?.textContent.replace('Veredicto:', '').trim() || 'CIRCULACIÓN';
   }
 
-  const fecha = new Date().toLocaleDateString('es-AR');
+  // 1. Obtener la fecha real de la prueba desde fin_prueba de la BD
+  let fechaPrueba = '--/--/----';
+  const fechaRaw = equipoCargadoActual.fin_prueba || equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at;
 
+  if (fechaRaw) {
+    const f = new Date(fechaRaw);
+    if (!isNaN(f.getTime())) {
+      const dia = String(f.getDate()).padStart(2, '0');
+      const mes = String(f.getMonth() + 1).padStart(2, '0');
+      const anio = f.getFullYear();
+      fechaPrueba = `${dia}/${mes}/${anio}`;
+    }
+  }
+
+  // 2. Extraer la Potencia Óptica real desde las observaciones "[Pot: -25.8dBm]"
+  let potenciaOptica = 'N/D';
+  const obsTexto = equipoCargadoActual.observaciones || equipoCargadoActual.detalle || '';
+  const matchPot = obsTexto.match(/\[Pot:\s*([^\]]+)\]/i);
+
+  if (matchPot && matchPot[1]) {
+    potenciaOptica = matchPot[1].trim(); // Extrae directamente "-25.8dBm"
+  } else {
+    // Fallback: si no estaba guardado en texto, intenta leer el valor activo de la UI
+    const inputDbm = document.getElementById('test_dbm')?.value;
+    if (inputDbm) {
+      potenciaOptica = inputDbm.includes('dBm') ? inputDbm : `${inputDbm} dBm`;
+    }
+  }
+
+  // 3. Inyección en los elementos HTML de la etiqueta
   if (document.getElementById('lbl_sn')) document.getElementById('lbl_sn').textContent = 'SN: ' + sn;
   if (document.getElementById('lbl_modelo')) document.getElementById('lbl_modelo').textContent = modelo;
-  if (document.getElementById('lbl_dbm')) document.getElementById('lbl_dbm').textContent = dbm + ' dBm';
-  if (document.getElementById('lbl_fecha')) document.getElementById('lbl_fecha').textContent = fecha;
+  if (document.getElementById('lbl_dbm')) document.getElementById('lbl_dbm').textContent = potenciaOptica;
+  if (document.getElementById('lbl_fecha')) document.getElementById('lbl_fecha').textContent = fechaPrueba;
 
   const lblTecnico = document.getElementById('lbl_tecnico');
   if (lblTecnico) {
     lblTecnico.textContent = equipoCargadoActual.tecnico || operadorNombre;
   }
 
+  // 4. Manejo de Fallas en la Etiqueta
   const containerFallas = document.getElementById('lbl_fallas_container');
   const txtFallas = document.getElementById('lbl_fallas_texto');
   
@@ -599,6 +627,7 @@ function imprimirEtiquetaPrueba() {
     }
   }
 
+  // 5. Formato Visual del Veredicto
   const lblVeredicto = document.getElementById('lbl_veredicto_box');
   if (lblVeredicto) {
     lblVeredicto.textContent = veredicto;
