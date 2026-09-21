@@ -1,0 +1,24 @@
+| schemaname | tablename                   | policyname                       | permissive | roles           | cmd    | qual | with_check |
+| ---------- | --------------------------- | -------------------------------- | ---------- | --------------- | ------ | ---- | ---------- |
+| public     | auditoria_control_activo    | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | auditoria_control_detalle   | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | auditoria_sucursales        | Permitir guardar auditorias      | PERMISSIVE | {anon}          | INSERT | null | true       |
+| public     | auditoria_sucursales        | Permitir leer auditorias         | PERMISSIVE | {anon}          | SELECT | true | null       |
+| public     | auditoria_sucursales        | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | catalogo_equipos            | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | catalogo_insumos            | Permitir actualizar desde la App | PERMISSIVE | {public}        | UPDATE | true | null       |
+| public     | catalogo_insumos            | Permitir insertar desde la App   | PERMISSIVE | {public}        | INSERT | null | true       |
+| public     | catalogo_insumos            | Permitir lectura desde la App    | PERMISSIVE | {public}        | SELECT | true | null       |
+| public     | comunicaciones              | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | config_stock_almacen        | Permitir guardar umbrales        | PERMISSIVE | {public}        | ALL    | true | true       |
+| public     | config_stock_almacen        | Permitir lectura de umbrales     | PERMISSIVE | {public}        | SELECT | true | null       |
+| public     | recupero_historico_equipos  | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | recupero_informes_semanales | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | recupero_operativo          | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | registro_recupero           | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | registro_stock              | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | stock_historico             | Permitir insertar historico      | PERMISSIVE | {anon}          | INSERT | null | true       |
+| public     | stock_historico             | Permitir leer historico          | PERMISSIVE | {anon}          | SELECT | true | null       |
+| public     | stock_historico             | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | stock_moviles               | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |
+| public     | usuarios_permisos           | Permitir todo a autenticados     | PERMISSIVE | {authenticated} | ALL    | true | true       |

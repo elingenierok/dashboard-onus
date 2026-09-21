@@ -48,29 +48,8 @@ function limpiarDirectorioDescargas() {
   }
 }
 
-async function ejecutarBotHistorico() {
-  console.log('🤖 [HISTÓRICO] Iniciando captura diaria...');
-
-  const fechaHoy = new Date().toISOString().split('T')[0];
-
-  // 🛡️ FRENO ANTI-SOBREESCRITURA: Verifica si ya existe foto de hoy en Supabase
-  const { data: registroExistente, error: errCheck } = await supabase
-    .from('stock_historico')
-    .select('id')
-    .eq('fecha_registro', fechaHoy)
-    .limit(1);
-
-  if (errCheck) {
-    console.error('❌ Error al consultar Supabase:', errCheck.message);
-    return;
-  }
-
-  // SI YA EXISTE DATO DE HOY, ABORTA Y PROTEGE LA MAÑANA
-  if (registroExistente && registroExistente.length > 0) {
-    console.log(`⚠️ [HISTÓRICO] Ya existe la foto de hoy (${fechaHoy}). Se cancela la ejecución para preservar la captura matutina.`);
-    return;
-  }
-
+async function ejecutarBotRealtime() {
+  console.log('⚡ [REALTIME] Actualizando stock instantáneo...');
   limpiarDirectorioDescargas();
 
   const browser = await puppeteer.launch({ 
@@ -149,21 +128,24 @@ async function ejecutarBotHistorico() {
     
     const datos = parsearCSVStock(archivoDescargado);
     
-    console.log(`🚀 [HISTÓRICO] Guardando ${datos.length} filas en 'stock_historico'...`);
+    console.log(`🧹 [REALTIME] Reemplazando tabla 'registro_stock'...`);
+    await supabase.from('registro_stock').delete().neq('id', 0); // Limpia todo el stock anterior
+    
+    console.log(`🚀 [REALTIME] Subiendo ${datos.length} filas actualizadas a 'registro_stock'...`);
     const BATCH_SIZE = 500;
     for (let i = 0; i < datos.length; i += BATCH_SIZE) {
       const lote = datos.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from('stock_historico').insert(lote);
+      const { error } = await supabase.from('registro_stock').insert(lote);
       if (error) throw error;
     }
 
     fs.unlinkSync(archivoDescargado);
-    console.log('🎉 [HISTÓRICO] ¡Carga matutina completada exitosamente!');
+    console.log('🎉 [REALTIME] ¡Stock en vivo actualizado!');
 
   } catch (error) {
-    console.error('❌ Error en Bot Histórico:', error.message);
+    console.error('❌ Error en Bot Realtime:', error.message);
     await browser.close();
   }
 }
 
-ejecutarBotHistorico();
+ejecutarBotRealtime();

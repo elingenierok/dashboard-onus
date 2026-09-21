@@ -1,6 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 const puppeteer = require('puppeteer');
 
@@ -11,6 +12,61 @@ if (!fs.existsSync(downloadPath)) {
   fs.mkdirSync(downloadPath, { recursive: true });
 }
 
+// ====================================================
+// POPUP DE WINDOWS CON CHECKBOX OBLIGATORIO
+// ====================================================
+function mostrarPopup(titulo, mensaje) {
+  try {
+    const script = `
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "${titulo.replace(/"/g, '`"')}"
+$form.Size = New-Object System.Drawing.Size(520, 260)
+$form.StartPosition = 'CenterScreen'
+$form.TopMost = $true
+$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+
+$label = New-Object System.Windows.Forms.Label
+$label.Text = "${mensaje.replace(/"/g, '`"')}"
+$label.Location = New-Object System.Drawing.Point(15, 15)
+$label.Size = New-Object System.Drawing.Size(480, 150)
+$label.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+
+$check = New-Object System.Windows.Forms.CheckBox
+$check.Text = 'He leido el mensaje'
+$check.Location = New-Object System.Drawing.Point(15, 175)
+$check.Size = New-Object System.Drawing.Size(300, 25)
+
+$btn = New-Object System.Windows.Forms.Button
+$btn.Text = 'Aceptar'
+$btn.Location = New-Object System.Drawing.Point(400, 170)
+$btn.Size = New-Object System.Drawing.Size(90, 30)
+$btn.Enabled = $false
+
+$check.Add_CheckedChanged({ $btn.Enabled = $check.Checked })
+$btn.Add_Click({ $form.Close() })
+
+$form.Controls.Add($label)
+$form.Controls.Add($check)
+$form.Controls.Add($btn)
+$form.AcceptButton = $null
+
+$form.ShowDialog() | Out-Null
+`;
+    execSync('powershell -NoProfile -Command -', { input: script, stdio: ['pipe', 'ignore', 'ignore'] });
+  } catch (e) {
+    // Si el popup falla, no rompemos el bot. Solo lo logueamos.
+    console.error('No se pudo mostrar el popup:', e.message);
+  }
+}
+
+// ====================================================
+// PARSEO DEL CSV
+// ====================================================
 function parsearCSVStock(filePath) {
   const contenido = fs.readFileSync(filePath, 'latin1');
   const lineas = contenido.split(/\r?\n/).filter(l => l.trim() !== '');
@@ -48,19 +104,28 @@ function limpiarDirectorioDescargas() {
   }
 }
 
-async function ejecutarBotRealtime() {
-  console.log('⚡ [REALTIME] Actualizando stock instantáneo...');
+function fechaHoraLocal() {
+  const d = new Date();
+  const fecha = d.toLocaleDateString('es-AR');
+  const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  return `${fecha} ${hora}`;
+}
+
+// ====================================================
+// DESCARGA DEL CSV
+// ====================================================
+async function descargarCSV() {
   limpiarDirectorioDescargas();
 
-  const browser = await puppeteer.launch({ 
-    headless: false, 
+  const browser = await puppeteer.launch({
+    headless: true,
     defaultViewport: null,
     userDataDir: path.join(__dirname, 'user_data')
   });
-  
+
   const pages = await browser.pages();
   const page = pages.length > 0 ? pages[0] : await browser.newPage();
-  
+
   const client = await page.target().createCDPSession();
   await client.send('Page.setDownloadBehavior', {
     behavior: 'allow',
@@ -125,27 +190,93 @@ async function ejecutarBotRealtime() {
     if (!archivoDescargado) throw new Error('No se detectó el archivo CSV.');
 
     await browser.close();
-    
+    return archivoDescargado;
+
+  } catch (error) {
+    await browser.close().catch(() => {});
+    throw error;
+  }
+}
+
+// ====================================================
+// CHEQUEO DE HISTORICO
+// ====================================================
+async function hayHistoricoDeHoy(fechaHoy) {
+  const { data, error } = await supabase
+    .from('stock_historico')
+    .select('id')
+    .eq('fecha_registro', fechaHoy)
+    .limit(1);
+
+  if (error) throw new Error('Error al consultar stock_historico: ' + error.message);
+  return data && data.length > 0;
+}
+
+// ====================================================
+// PROCESO PRINCIPAL
+// ====================================================
+async function ejecutarBot() {
+  const fechaHoy = new Date().toISOString().split('T')[0];
+
+  let stockVivoOk = false;
+  let historicoOk = false;
+  let historicoYaExistia = false;
+  let errorMensaje = null;
+
+  try {
+    // 1. Descargar CSV
+    const archivoDescargado = await descargarCSV();
+
+    // 2. Parsear
     const datos = parsearCSVStock(archivoDescargado);
-    
-    console.log(`🧹 [REALTIME] Reemplazando tabla 'registro_stock'...`);
-    await supabase.from('registro_stock').delete().neq('id', 0); // Limpia todo el stock anterior
-    
-    console.log(`🚀 [REALTIME] Subiendo ${datos.length} filas actualizadas a 'registro_stock'...`);
+    if (datos.length === 0) throw new Error('El CSV no tenía filas válidas.');
+
+    // 3. Actualizar registro_stock (siempre)
+    await supabase.from('registro_stock').delete().neq('id', 0);
+
     const BATCH_SIZE = 500;
     for (let i = 0; i < datos.length; i += BATCH_SIZE) {
       const lote = datos.slice(i, i + BATCH_SIZE);
       const { error } = await supabase.from('registro_stock').insert(lote);
-      if (error) throw error;
+      if (error) throw new Error('Error insertando en registro_stock: ' + error.message);
+    }
+    stockVivoOk = true;
+
+    // 4. Chequear histórico
+    historicoYaExistia = await hayHistoricoDeHoy(fechaHoy);
+
+    if (!historicoYaExistia) {
+      // 5. Insertar histórico (solo la primera del día)
+      for (let i = 0; i < datos.length; i += BATCH_SIZE) {
+        const lote = datos.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase.from('stock_historico').insert(lote);
+        if (error) throw new Error('Error insertando en stock_historico: ' + error.message);
+      }
+      historicoOk = true;
     }
 
-    fs.unlinkSync(archivoDescargado);
-    console.log('🎉 [REALTIME] ¡Stock en vivo actualizado!');
+    // 6. Limpiar CSV descargado
+    try { fs.unlinkSync(archivoDescargado); } catch (e) {}
+
+    // 7. Popup solo si insertó histórico
+    if (historicoOk) {
+      mostrarPopup(
+        'Stock actualizado correctamente',
+        `Stock vivo actualizado: ${fechaHoraLocal()}\\n\\nHistorico del dia: ${fechaHoraLocal()}\\n\\nFilas cargadas: ${datos.length}`
+      );
+    }
 
   } catch (error) {
-    console.error('❌ Error en Bot Realtime:', error.message);
-    await browser.close();
+    errorMensaje = error.message;
+  }
+
+  // 8. Popup de error, si hubo
+  if (errorMensaje) {
+    mostrarPopup(
+      'Error en el bot de stock',
+      `Detalle: ${errorMensaje}\\n\\nStock vivo actualizado: ${stockVivoOk ? 'SI' : 'NO'}\\nHistorico del dia: ${historicoYaExistia ? 'YA EXISTIA' : (historicoOk ? 'SI' : 'NO')}\\n\\nRevisar cuando puedas.`
+    );
   }
 }
 
-ejecutarBotRealtime();
+ejecutarBot();

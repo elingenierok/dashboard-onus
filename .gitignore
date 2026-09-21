@@ -1,4 +1,7 @@
 ﻿user_data/
-*.zip
 node_modules/
 .env
+descargas_bot/
+*.csv
+*.zip
+!stockactual.csv
