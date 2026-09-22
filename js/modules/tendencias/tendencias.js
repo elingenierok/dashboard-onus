@@ -397,11 +397,11 @@ async function cargarListaInsumosUnicos() {
   if (!listContainer) return;
 
   try {
-    const { data, error } = await supabaseTendencias
+        const { data, error } = await supabaseTendencias
       .from('stock_historico')
       .select('descripcion')
       .not('descripcion', 'ilike', '%ONU%')
-      .limit(3000);
+      .limit(10000);
 
     if (error) throw error;
 
@@ -411,7 +411,7 @@ async function cargarListaInsumosUnicos() {
       if (desc) mapaUnicos.add(desc);
     });
 
-    const itemsOrdenados = Array.from(mapaUnicos).sort();
+      const itemsOrdenados = Array.from(mapaUnicos).sort();
 
     let html = '';
     itemsOrdenados.forEach(desc => {
@@ -419,7 +419,12 @@ async function cargarListaInsumosUnicos() {
     });
 
     listContainer.innerHTML = html;
-    
+
+    // Aviso si se alcanzó el límite de descarga
+    if (data && data.length >= 10000) {
+      console.warn(`⚠️ Se alcanzó el límite de 10000 insumos. Puede que falten más en el autocompletado.`);
+    }
+
     // Popular subalmacenes iniciales
     await popularAlmacenesEspecificos();
   } catch (err) {
@@ -439,7 +444,7 @@ async function popularAlmacenesEspecificos() {
     let query = supabaseTendencias
       .from('stock_historico')
       .select('almacen, sucursal_id, tipo_almacen')
-      .limit(10000);
+      .limit(20000);
 
     if (sucFiltro !== 'TODAS') query = query.eq('sucursal_id', sucFiltro);
     if (tipoFiltro !== 'TODOS') query = query.eq('tipo_almacen', tipoFiltro);
@@ -460,6 +465,10 @@ async function popularAlmacenesEspecificos() {
     });
 
     selEspecifico.innerHTML = html;
+
+    if (data && data.length >= 20000) {
+      console.warn(`⚠️ Se alcanzó el límite de 20000 almacenes. Puede que falten más en el select.`);
+    }
   } catch (err) {
     console.error("Error al popular almacenes específicos:", err);
   }
