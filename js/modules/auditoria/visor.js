@@ -6,8 +6,8 @@ function getSupabaseVisorClient() {
   if (window.supabaseClient) return window.supabaseClient;
   if (window.supabase) {
     window.supabaseClient = window.supabase.createClient(
-      'https://ovluxdezwvuonlwnymna.supabase.co',
-      'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S'
+      window.APP_CONFIG.SUPABASE_URL,
+      window.APP_CONFIG.SUPABASE_KEY
     );
     return window.supabaseClient;
   }

@@ -2,13 +2,10 @@
 // MÓDULO INDEPENDIENTE DE AUDITORÍA Y CONTEO FÍSICO
 // ====================================================
 
-const SUPABASE_URL_AUD = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const SUPABASE_KEY_AUD = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-
 function getSupabaseClient() {
   if (window.supabaseClient) return window.supabaseClient;
   if (window.supabase) {
-    window.supabaseClient = window.supabase.createClient(SUPABASE_URL_AUD, SUPABASE_KEY_AUD);
+    window.supabaseClient = window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
     return window.supabaseClient;
   }
   return null;
@@ -269,9 +266,7 @@ async function guardarConteoFisicoReal() {
         sucursal_id: sucCodigo,
         modelo: modeloOriginal,
         stock_sistema: cantSistema,
-        cantidad_sistema: cantSistema,
         stock_fisico: cantFisica,
-        cantidad_fisica: cantFisica,
         diferencia: dif,
         auditor: operadorNombre,
         auditor_nombre: operadorNombre,

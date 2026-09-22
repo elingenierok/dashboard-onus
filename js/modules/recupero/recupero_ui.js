@@ -657,6 +657,7 @@ function actualizarGraficoRecuperoDiario() {
       interaction: { mode: 'index', intersect: false }
     }
   });
+}  
 
 // ====================================================
 // EXPOSICIÓN GLOBAL DE FUNCIONES DE TOGGLE
@@ -686,5 +687,3 @@ window.toggleGraficoRecuperoDiario = function() {
     panel.style.display = 'none';
   }
 };
-
-}

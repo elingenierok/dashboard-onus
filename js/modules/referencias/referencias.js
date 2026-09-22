@@ -18,9 +18,7 @@ const LISTA_ALMACENES_CONFIG = [
 function obtenerClienteSupabaseRef() {
   if (window.supabaseClient) return window.supabaseClient;
   if (window.supabase) {
-    const URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
-    const KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-    return window.supabase.createClient(URL, KEY);
+    return window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
   }
   return null;
 }
@@ -105,8 +103,7 @@ function renderizarContenidoCatalogo() {
   const contenedor = document.getElementById('ref-contenido-dinamico');
   if (!contenedor) return;
 
-  const esSuperAdmin = (window.ROL_USUARIO === 'SUPERADMIN') || 
-                       !document.querySelector('#btn-tab-admin')?.classList.contains('hidden-by-role');
+  const esSuperAdmin = Boolean(window.PERMISOS_ACTUALES && window.PERMISOS_ACTUALES.es_superadmin);
 
   const gruposUnicos = Array.from(new Set(
     memoriaCatalogoMaestro
@@ -449,110 +446,6 @@ function filtrarYRenderizarUmbrales() {
     html += `<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">No se encontraron ítems con los filtros seleccionados.</td></tr>`;
   } else {
     filtrados.forEach(item => {
-      const codUpper = (item.codigo || '').trim().toUpperCase();
-      const conf = memoriaUmbralesAlmacen.get(codUpper) || { stock_minimo: 0, punto_pedido: 0, stock_maximo: 0 };
-
-      html += `
-        <tr style="border-bottom:1px solid #cbd5e1;">
-          <td style="font-weight:700; color:#0284c7; padding:8px 10px;">${item.codigo || '-'}</td>
-          <td style="color:#1e293b; font-weight:600; padding:8px 10px; font-size:0.82rem;">${item.descripcion}</td>
-          
-          <td style="text-align:center; padding:6px;">
-            <input type="number" value="${conf.stock_minimo || 0}" min="0" 
-                   onblur="guardarUmbralAlmacen(this, '${item.codigo}', '${item.descripcion.replace(/'/g, "\\'")}', 'stock_minimo', '${almacenKey}')" 
-                   style="width:75px; text-align:center; background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:4px; padding:4px; font-weight:bold;">
-          </td>
-
-          <td style="text-align:center; padding:6px;">
-            <input type="number" value="${conf.punto_pedido || 0}" min="0" 
-                   onblur="guardarUmbralAlmacen(this, '${item.codigo}', '${item.descripcion.replace(/'/g, "\\'")}', 'punto_pedido', '${almacenKey}')" 
-                   style="width:75px; text-align:center; background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:4px; padding:4px; font-weight:bold;">
-          </td>
-
-          <td style="text-align:center; padding:6px;">
-            <input type="number" value="${conf.stock_maximo || 0}" min="0" 
-                   onblur="guardarUmbralAlmacen(this, '${item.codigo}', '${item.descripcion.replace(/'/g, "\\'")}', 'stock_maximo', '${almacenKey}')" 
-                   style="width:75px; text-align:center; background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:4px; padding:4px; font-weight:bold;">
-          </td>
-
-          <td style="text-align:center; padding:6px; font-size:0.9rem;" id="status-umb-${codUpper}">-</td>
-        </tr>
-      `;
-    });
-  }
-
-  html += '</tbody></table>';
-  wrapper.innerHTML = html;
-}
-
-async function cargarDatosUmbralesAlmacen() {
-  const wrapper = document.getElementById('tabla-umbrales-wrapper');
-  const selectAlm = document.getElementById('select-almacen-umbral');
-  if (!wrapper || !selectAlm) return;
-
-  const almacenKey = selectAlm.value;
-  wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b; font-weight:600;">⏳ Cargando parámetros de config_stock_almacen...</div>';
-
-  const cliente = obtenerClienteSupabaseRef();
-  if (!cliente) {
-    wrapper.innerHTML = '<div style="text-align:center; padding:20px; color:#ef4444;">❌ Error: Cliente Supabase no disponible.</div>';
-    return;
-  }
-
-  try {
-    // Consulta con RLS a config_stock_almacen
-    const { data: configData, error: errConfig } = await cliente
-      .from('config_stock_almacen')
-      .select('*')
-      .eq('almacen_key', almacenKey);
-
-    if (errConfig) {
-      if (errConfig.code === '42501' || (errConfig.message && errConfig.message.includes('row-level security'))) {
-        throw new Error('Permiso denegado por RLS en "config_stock_almacen". Verificá las políticas SELECT en Supabase.');
-      }
-      throw errConfig;
-    }
-
-    memoriaUmbralesAlmacen.clear();
-    if (configData) {
-      configData.forEach(conf => {
-        if (conf.codigo) memoriaUmbralesAlmacen.set(conf.codigo.trim().toUpperCase(), conf);
-      });
-    }
-
-    renderizarTablaUmbrales(almacenKey);
-
-  } catch (err) {
-    console.error('Error al cargar config_stock_almacen:', err);
-    wrapper.innerHTML = `<div style="text-align:center; padding:20px; color:#ef4444; font-weight:bold;">
-      ❌ ${err.message || 'Error al consultar config_stock_almacen'}
-    </div>`;
-  }
-}
-
-function renderizarTablaUmbrales(almacenKey) {
-  const wrapper = document.getElementById('tabla-umbrales-wrapper');
-  if (!wrapper) return;
-
-  let html = `
-    <table class="tabla-auditoria" style="width:100%; border-collapse:collapse;">
-      <thead>
-        <tr style="background:#0f172a; color:#38bdf8;">
-          <th style="padding:10px; border:1px solid #334155; text-align:left;">Código</th>
-          <th style="padding:10px; border:1px solid #334155; text-align:left;">Descripción del Ítem</th>
-          <th style="padding:10px; border:1px solid #334155; text-align:center; width:110px;">Stock Mínimo 🔴</th>
-          <th style="padding:10px; border:1px solid #334155; text-align:center; width:110px;">Punto Pedido 🟡</th>
-          <th style="padding:10px; border:1px solid #334155; text-align:center; width:110px;">Stock Máximo 🟢</th>
-          <th style="padding:10px; border:1px solid #334155; text-align:center; width:80px;">Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-
-  if (!memoriaCatalogoMaestro.length) {
-    html += `<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">No hay ítems registrados en el catálogo.</td></tr>`;
-  } else {
-    memoriaCatalogoMaestro.forEach(item => {
       const codUpper = (item.codigo || '').trim().toUpperCase();
       const conf = memoriaUmbralesAlmacen.get(codUpper) || { stock_minimo: 0, punto_pedido: 0, stock_maximo: 0 };
 

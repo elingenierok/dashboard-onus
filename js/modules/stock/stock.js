@@ -2,9 +2,7 @@
 // MÓDULO DE STOCK: EQUIPOS Y ONUS (CATEGORÍA A)
 // ====================================================
 
-const SUPABASE_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
 
 const COSTO_POR_DEFECTO = 0;
 

@@ -2,11 +2,8 @@
 // MÓDULO AUTÓNOMO DE SUITE OPERATIVA (CARGA Y LAB)
 // ====================================================
 
-const SUPABASE_URL_OPS = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const SUPABASE_KEY_OPS = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-
 // Validación blindada: Evita que el script se rompa si Supabase tarda en cargar
-const supabaseOps = window.supabase ? window.supabase.createClient(SUPABASE_URL_OPS, SUPABASE_KEY_OPS) : null;
+const supabaseOps = window.supabase ? window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY) : null;
 
 let catalogoEquiposMemoria = [];
 let equipoCargadoActual = null;

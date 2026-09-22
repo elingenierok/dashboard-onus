@@ -2,9 +2,7 @@
 // MÓDULO AUTÓNOMO: TENDENCIAS E INTELIGENCIA PREDICTIVA
 // ====================================================
 
-const SUPABASE_URL_TEN = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const SUPABASE_KEY_TEN = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-const supabaseTendencias = supabase.createClient(SUPABASE_URL_TEN, SUPABASE_KEY_TEN);
+const supabaseTendencias = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
 
 const COLORES_SUCURSAL_TEN = {
   'OBE_ALM_PRINCIPAL': { nombre: 'OBE Principal', color: '#0284c7' },
@@ -155,12 +153,17 @@ async function descargarHistorialCompleto() {
   let hasMore = true;
 
   while (hasMore) {
+        const fechaLimite = new Date();
+    fechaLimite.setMonth(fechaLimite.getMonth() - 3);
+    const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
+
     const { data, error } = await supabaseTendencias
       .from('stock_historico')
       .select('id, fecha_registro, almacen, descripcion, stock_total')
       .ilike('descripcion', '%ONU%')
+      .gte('fecha_registro', fechaLimiteStr)
       .order('fecha_registro', { ascending: true })
-      .order('id', { ascending: true }) // 👈 CLAVE: Evita saltos/duplicados en paginación
+      .order('id', { ascending: true })
       .range(from, from + step);
 
     if (error) throw error;

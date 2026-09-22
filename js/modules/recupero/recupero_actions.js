@@ -3,6 +3,24 @@
 // ====================================================
 
 async function ejecutarCierreSemanal() {
+  const btnCierre = document.querySelector('button[onclick="ejecutarCierreSemanal()"]');
+  if (btnCierre && btnCierre.disabled) return;
+  if (btnCierre) {
+    btnCierre.disabled = true;
+    btnCierre.textContent = '⏳ Procesando cierre...';
+  }
+
+  try {
+    await ejecutarCierreSemanalInterno();
+  } finally {
+    if (btnCierre) {
+      btnCierre.disabled = false;
+      btnCierre.textContent = '🔒 Cerrar Semana y Generar Informe';
+    }
+  }
+}
+
+async function ejecutarCierreSemanalInterno() {
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
   if (sucActiva === 'TODAS') {
@@ -102,6 +120,18 @@ async function ejecutarCierreSemanal() {
       tiempo_espera_hs: row.tiempo_espera_hs,
       sucursal_id: row.sucursal_id || sucActiva
     }));
+
+        // Antes de insertar, borrar del histórico los SN que se van a reinsertar
+    // (opción A: la última prueba reemplaza a la anterior)
+    const snsAInsertar = copiaHistorico.map(r => r.sn).filter(s => s);
+    if (snsAInsertar.length > 0) {
+      const { error: errBorradoHist } = await supabaseRecupero
+        .from('recupero_historico_equipos')
+        .delete()
+        .in('sn', snsAInsertar);
+
+      if (errBorradoHist) throw errBorradoHist;
+    }
 
     const { error: errHist } = await supabaseRecupero
       .from('recupero_historico_equipos')

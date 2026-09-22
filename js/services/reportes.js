@@ -3,9 +3,7 @@
 // MULTISUCURSAL Y ADAPTATIVO
 // ====================================================
 
-const SUPABASE_URL_REP = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const SUPABASE_KEY_REP = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-const supabaseReportes = supabase.createClient(SUPABASE_URL_REP, SUPABASE_KEY_REP);
+const supabaseReportes = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
 
 // Estado independiente solo para el reporte
 window.EstadoReporte = {

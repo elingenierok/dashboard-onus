@@ -2,9 +2,7 @@
 // MÓDULO ADMIN: CONTROL DE LEAD TIME Y GESTIÓN
 // ====================================================
 
-const SUPABASE_URL_ADM = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const SUPABASE_KEY_ADM = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-const supabaseAdmin = window.supabase ? window.supabase.createClient(SUPABASE_URL_ADM, SUPABASE_KEY_ADM) : null;
+const supabaseAdmin = window.supabase ? window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY) : null;
 
 function obtenerSucursalAdmin() {
   return window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';

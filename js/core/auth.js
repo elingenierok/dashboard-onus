@@ -2,9 +2,7 @@
 // CORE: AUTENTICACIÓN Y PERMISOS DE USUARIO
 // ====================================================
 
-const GLOBAL_SUPA_URL = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const GLOBAL_SUPA_KEY = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-const superbaseAuth = supabase.createClient(GLOBAL_SUPA_URL, GLOBAL_SUPA_KEY);
+const superbaseAuth = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
 
 let permisosActuales = null;
 

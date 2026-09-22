@@ -2,9 +2,7 @@
 // MÓDULO 1: DATOS Y ESTADO GLOBAL DE RECUPERO
 // ====================================================
 
-const SUPABASE_URL_REC = 'https://ovluxdezwvuonlwnymna.supabase.co';
-const SUPABASE_KEY_REC = 'sb_publishable_M2j4ddXtauXgPDqtOsNZow_-X0hLW-S';
-const supabaseRecupero = supabase.createClient(SUPABASE_URL_REC, SUPABASE_KEY_REC);
+const supabaseRecupero = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
 
 // Estado Global Expuesto (Estructura Unificada)
 window.EstadoRecupero = {
@@ -56,20 +54,20 @@ function obtenerHoraCorta(fechaIso) {
   return f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function obtenerInfoCatalogo(descNorm, catalogo) {
-  if (!descNorm) return { esVIP: false, precioUsd: 0.0 };
+window.obtenerInfoCatalogo = function(descNorm, catalogo) {
+  if (!descNorm) return { esVIP: false, precioUsd: 0.0 };
 
-  // Búsqueda exacta primero, luego coincidencia segura de subcadena
-  const encontrado = catalogo.find(item => {
-    const itemNorm = item.modelo_norm || normalizar(item.modelo);
-    if (!itemNorm) return false;
-    return descNorm === itemNorm || descNorm.includes(itemNorm);
-  });
+  // Búsqueda exacta primero, luego coincidencia segura de subcadena
+  const encontrado = catalogo.find(item => {
+    const itemNorm = item.modelo_norm || normalizar(item.modelo);
+    if (!itemNorm) return false;
+    return descNorm === itemNorm || descNorm.includes(itemNorm);
+  });
 
-  return encontrado 
-    ? { esVIP: Boolean(encontrado.es_vip), precioUsd: parseFloat(encontrado.precio_usd) || 0.0 }
-    : { esVIP: false, precioUsd: 0.0 };
-}
+  return encontrado 
+    ? { esVIP: Boolean(encontrado.es_vip), precioUsd: parseFloat(encontrado.precio_usd) || 0.0 }
+    : { esVIP: false, precioUsd: 0.0 };
+};
 
 async function cargarModuloRecupero() {
   const tag = document.getElementById('tagRecupero');
