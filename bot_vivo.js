@@ -139,14 +139,13 @@ async function descargarCSV() {
   page.on('dialog', async dialog => { await dialog.accept(); });
 
   try {
-    await page.goto(process.env.ISP_URL, { waitUntil: 'networkidle2' });
+        await page.goto(process.env.ISP_URL, { waitUntil: 'networkidle2' });
 
+    // El bot NO intenta loguearse. Si encuentra pantalla de login, corta.
+    // La sesión se renueva ejecutando bot_vivo_manual.js a mano.
     const inputPassword = await page.$('input[type="password"]');
     if (inputPassword) {
-      await page.type('input[type="text"], input[name*="user"]', process.env.ISP_USER);
-      await page.type('input[type="password"]', process.env.ISP_PASS);
-      await page.click('button[type="submit"], input[type="submit"]');
-      await page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {});
+      throw new Error('SESION_EXPIRADA');
     }
 
     await page.evaluate(() => {
@@ -270,12 +269,19 @@ async function ejecutarBot() {
     errorMensaje = error.message;
   }
 
-  // 8. Popup de error, si hubo
+   // 8. Popup de error, si hubo
   if (errorMensaje) {
-    mostrarPopup(
-      'Error en el bot de stock',
-      `Detalle: ${errorMensaje}\\n\\nStock vivo actualizado: ${stockVivoOk ? 'SI' : 'NO'}\\nHistorico del dia: ${historicoYaExistia ? 'YA EXISTIA' : (historicoOk ? 'SI' : 'NO')}\\n\\nRevisar cuando puedas.`
-    );
+    if (errorMensaje === 'SESION_EXPIRADA') {
+      mostrarPopup(
+        'Sesion del ISP expirada',
+        `La sesion del ISP se cerro (probablemente durante la noche).\n\nPara renovarla:\n1. Ejecuta "ejecutar_manual.bat" con doble clic\n2. Logueate cuando se abra la ventana de Chrome\n3. Espera a que el bot manual termine\n\nDespues, el bot automatico va a volver a funcionar solo cada 15 minutos.`
+      );
+    } else {
+      mostrarPopup(
+        'Error en el bot de stock',
+        `Detalle: ${errorMensaje}\n\nStock vivo actualizado: ${stockVivoOk ? 'SI' : 'NO'}\nHistorico del dia: ${historicoYaExistia ? 'YA EXISTIA' : (historicoOk ? 'SI' : 'NO')}\n\nRevisar cuando puedas.`
+      );
+    }
   }
 }
 
