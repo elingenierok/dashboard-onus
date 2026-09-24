@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prototipo - Auditoría de Técnicos</title>
+<style>
+  /* ESTILOS CLONADOS DE TU SISTEMA PARA QUE SE VEA IGUAL */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; padding: 20px; color: #f8fafc; }
+  .container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  
+  .card { background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+  .card-title { font-size: 1.1rem; font-weight: 800; margin-bottom: 16px; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
+  
+  /* FILTROS TIPO PASTILLA */
+  .selector-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; background: #0f172a; padding: 16px; border-radius: 8px; border: 1px solid #334155; }
+  .selector-grupo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .selector-label { font-size: 0.82rem; font-weight: 800; min-width: 130px; text-transform: uppercase; color: #fde047; }
+  .btn-pill-container { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn-pill { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; padding: 7px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
+  .btn-pill:hover { background: #334155; color: #f8fafc; }
+  .btn-pill.active { background: #0284c7; color: white; border-color: #38bdf8; }
+
+  /* CUADRO DE TEXTO */
+  .textarea-sn { width: 100%; height: 150px; background: #0f172a; border: 1px solid #059669; color: #f8fafc; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 0.9rem; resize: vertical; outline: none; }
+  .textarea-sn:focus { border-color: #34d399; box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.2); }
+  
+  .input-tecnico { width: 100%; background: #0f172a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; outline: none; margin-bottom: 16px;}
+  
+  .btn-ejecutar { background: #059669; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 800; font-size: 1rem; cursor: pointer; transition: background 0.2s; width: 100%; margin-top: 10px;}
+  .btn-ejecutar:hover { background: #047857; }
+
+  /* KPIS RESULTADOS */
+  .grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .kpi-card { background: #0f172a; border: 1px solid #334155; padding: 16px; border-radius: 10px; text-align: center; }
+  .kpi-val { font-size: 2rem; font-weight: 900; margin: 8px 0; }
+
+  /* TABLA RESULTADOS */
+  table.tabla-sn { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
+  table.tabla-sn th { background: #0f172a; color: #94a3b8; padding: 12px; border-bottom: 2px solid #334155; }
+  table.tabla-sn td { padding: 10px 12px; border-bottom: 1px solid #1e293b; background: #1e293b; }
+  .badge { padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  
+  <!-- CABECERA PRINCIPAL -->
+  <header style="border-bottom: 2px solid #334155; padding-bottom: 10px;">
+    <h1 style="font-size: 1.5rem; color: #f8fafc;">🕵️‍♂️ Módulo de Auditoría y Validación de SN (Prototipo)</h1>
+    <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;">Herramienta para detectar irregularidades en lotes de prueba declarados por los técnicos.</p>
+  </header>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; align-items: start;">
+    
+    <!-- COLUMNA 1: INGRESO DE DATOS -->
+    <div class="card">
+      <h2 class="card-title">📝 1. Ingreso de Datos a Auditar</h2>
+      
+      <label style="display:block; margin-bottom: 6px; font-size: 0.85rem; color: #cbd5e1; font-weight: bold;">
+        👤 Técnico que declara el lote:
+      </label>
+      <input type="text" class="input-tecnico" id="txt-tecnico" placeholder="Ej: Diego Obera">
+
+      <label style="display:block; margin-bottom: 6px; font-size: 0.85rem; color: #cbd5e1; font-weight: bold;">
+        📦 Pegar Números de Serie (SN) acá:
+      </label>
+      <textarea class="textarea-sn" id="txt-sns" placeholder="ZTEGD4EC0C39&#10;ZTEGD82FC7E2&#10;FALSO1234567&#10;485754434D12E0AB"></textarea>
+      <p style="font-size: 0.75rem; color: #64748b; margin-top: 6px;">Admite separaciones por coma, espacio o salto de línea (enter).</p>
+    </div>
+
+    <!-- COLUMNA 2: FILTROS Y ACCIÓN -->
+    <div class="card">
+      <h2 class="card-title">⚙️ 2. Reglas de Validación (Filtros)</h2>
+      
+      <div class="selector-bar">
+        <!-- TEMPORALIDAD -->
+        <div class="selector-grupo">
+          <span class="selector-label" style="color: #38bdf8;">📅 Lote del:</span>
+          <div class="btn-pill-container" id="filtros-tiempo">
+            <button class="btn-pill" onclick="activarPill(this)">Diario (Hoy)</button>
+            <button class="btn-pill" onclick="activarPill(this)">Semanal</button>
+            <button class="btn-pill active" onclick="activarPill(this)">Histórico</button>
+          </div>
+        </div>
+        <!-- MÉTRICA -->
+        <div class="selector-grupo">
+          <span class="selector-label" style="color: #fde047;">📌 Se declaró:</span>
+          <div class="btn-pill-container" id="filtros-metrica">
+            <button class="btn-pill active" onclick="activarPill(this)">📦 Recuperados (Todos)</button>
+            <button class="btn-pill" onclick="activarPill(this)">🟢 Solo Circulación VIP</button>
+            <button class="btn-pill" onclick="activarPill(this)">🔴 Solo Descarte VIP</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-ejecutar" onclick="simularAuditoria()">🔍 Ejecutar Validación de Lote</button>
+    </div>
+  </div>
+
+  <!-- SECCIÓN OCULTA DE RESULTADOS (Se muestra al hacer clic en Ejecutar) -->
+  <div id="panel-resultados" class="card" style="display: none; border-color: #059669;">
+    <h2 class="card-title" style="color: #34d399;">📊 3. Informe de Auditoría</h2>
+    
+    <div class="grid-kpi">
+      <div class="kpi-card" style="border-color: #38bdf8;">
+        <div style="font-size: 0.8rem; color: #38bdf8; font-weight: bold;">TOTAL SN INGRESADOS</div>
+        <div class="kpi-val" style="color: white;">4</div>
+      </div>
+      <div class="kpi-card" style="border-color: #4ade80;">
+        <div style="font-size: 0.8rem; color: #4ade80; font-weight: bold;">🟢 COINCIDENCIA (VERIFICADOS)</div>
+        <div class="kpi-val" style="color: #4ade80;">1</div>
+      </div>
+      <div class="kpi-card" style="border-color: #f87171;">
+        <div style="font-size: 0.8rem; color: #f87171; font-weight: bold;">⚠️ INCONSISTENCIAS / ALARMAS</div>
+        <div class="kpi-val" style="color: #f87171;">3</div>
+      </div>
+    </div>
+
+    <strong style="color: #f8fafc; font-size: 0.95rem; margin-bottom: 10px; display: block;">🚨 Detalle de Anomalías Detectadas:</strong>
+    <div style="overflow-x: auto; border: 1px solid #334155; border-radius: 8px;">
+      <table class="tabla-sn">
+        <thead>
+          <tr>
+            <th>Nro. Serie (SN) auditado</th>
+            <th>Diagnóstico de la BD</th>
+            <th>Técnico Real Registrado</th>
+            <th>Estado Real BD</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- MOCKUP DE DATOS FALSOS PARA VER CÓMO SE VERÍAN LAS MENTIRAS -->
+          <tr>
+            <td style="color: #38bdf8; font-family: monospace; font-weight: bold;">FALSO1234567</td>
+            <td><span class="badge" style="background: #7f1d1d; color: #fca5a5;">👻 FANTASMA (No existe en BD)</span></td>
+            <td style="color: #94a3b8;">--</td>
+            <td style="color: #94a3b8;">--</td>
+          </tr>
+          <tr>
+            <td style="color: #38bdf8; font-family: monospace; font-weight: bold;">ZTEGD4EC0C39</td>
+            <td><span class="badge" style="background: #713f12; color: #fde047;">⏳ FALSO RECUPERO (Aún Pendiente)</span></td>
+            <td style="color: #cbd5e1;">Sin probar (Pendiente)</td>
+            <td style="color: #fde047; font-weight: bold;">PENDIENTE</td>
+          </tr>
+          <tr>
+            <td style="color: #38bdf8; font-family: monospace; font-weight: bold;">485754434D12E0AB</td>
+            <td><span class="badge" style="background: #9a3412; color: #fdba74;">⚠️ AUTORÍA FALSA (Probado por otro)</span></td>
+            <td style="color: #f87171; font-weight: bold;">Rodrigo Jaquet</td>
+            <td style="color: #f87171; font-weight: bold;">DESCARTE</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+  </div>
+
+</div>
+
+<script>
+  // Script rápido para simular la interactividad visual
+  function activarPill(btn) {
+    const contenedor = btn.parentElement;
+    contenedor.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function simularAuditoria() {
+    const btn = document.querySelector('.btn-ejecutar');
+    const panel = document.getElementById('panel-resultados');
+    
+    // Simula que está procesando
+    btn.textContent = '⏳ Procesando cruce de datos...';
+    btn.style.background = '#475569';
+    panel.style.display = 'none';
+
+    setTimeout(() => {
+      // Muestra el resultado
+      btn.textContent = '🔍 Ejecutar Validación de Lote';
+      btn.style.background = '#059669';
+      panel.style.display = 'block';
+      
+      // Scroll automático a los resultados
+      panel.scrollIntoView({ behavior: 'smooth' });
+    }, 800);
+  }
+</script>
+
+</body>
+</html>

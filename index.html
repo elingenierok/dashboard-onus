@@ -527,6 +527,87 @@ table.tabla-sn td { padding: 8px 10px; border-bottom: 1px solid #1e293b; }
 		</div>
 	</section>
 
+<!-- 3. MÓDULO DE AUDITORÍA Y VALIDACIÓN DE LOTES -->
+	<section id="recupero-auditoria" class="card" style="margin-top: 24px; border-color: #059669;">
+		<h2 class="card-title" style="color: #34d399;">🕵️‍♂️ Auditoría de Lotes y Prevención de Inconsistencias</h2>
+
+		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; align-items: start;">
+			
+			<!-- COLUMNA 1: INGRESO -->
+			<div>
+				<label style="display:block; margin-bottom: 6px; font-size: 0.85rem; color: #cbd5e1; font-weight: bold;">
+					👤 Técnico que declara el lote:
+				</label>
+				<input type="text" id="txt-tecnico-audit" placeholder="Ej: Diego Obera" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: white; padding: 10px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 14px; outline: none;">
+
+				<label style="display:block; margin-bottom: 6px; font-size: 0.85rem; color: #cbd5e1; font-weight: bold;">
+					📦 Pegar Números de Serie (SN) a auditar:
+				</label>
+				<textarea id="txt-sns-audit" placeholder="Pegá los SNs aquí (separados por enter, espacio o coma)..." style="width: 100%; height: 140px; background: #0f172a; border: 1px solid #059669; color: #f8fafc; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 0.88rem; outline: none; resize: vertical;"></textarea>
+			</div>
+
+			<!-- COLUMNA 2: FILTROS Y ACCIÓN -->
+			<div>
+				<div class="selector-bar" style="margin-bottom: 14px;">
+					<div class="selector-grupo">
+						<span class="selector-label" style="color: #38bdf8;">📅 Rango Lote:</span>
+						<div class="btn-pill-container">
+							<button class="btn-pill" onclick="setAuditTemporalidad('DIARIO', this)">Diario</button>
+							<button class="btn-pill" onclick="setAuditTemporalidad('SEMANAL', this)">Semanal</button>
+							<button class="btn-pill active" onclick="setAuditTemporalidad('HISTORICO', this)">Histórico</button>
+						</div>
+					</div>
+					<div class="selector-grupo">
+						<span class="selector-label" style="color: #fde047;">📌 Estado Declarado:</span>
+						<div class="btn-pill-container">
+							<button class="btn-pill active" onclick="setAuditMetrica('TOTAL_TODOS', this)">📦 Todos</button>
+							<button class="btn-pill" onclick="setAuditMetrica('CIRCULACION', this)">🟢 En Circulación</button>
+							<button class="btn-pill" onclick="setAuditMetrica('DESCARTE', this)">🔴 En Descarte</button>
+						</div>
+					</div>
+				</div>
+
+				<button onclick="ejecutarAuditoriaLote()" style="background: #059669; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 800; font-size: 1rem; cursor: pointer; width: 100%; transition: background 0.2s;">
+					🔍 Ejecutar Auditoría de Lote
+				</button>
+			</div>
+
+		</div>
+
+		<!-- PANEL DE RESULTADOS (OCULTO INICIALMENTE) -->
+		<div id="panel-resultados-audit" style="display: none; margin-top: 24px; padding-top: 20px; border-top: 1px solid #334155;">
+			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
+				<div style="background: #0f172a; border: 1px solid #38bdf8; padding: 16px; border-radius: 10px; text-align: center;">
+					<div style="font-size: 0.8rem; color: #38bdf8; font-weight: bold;">TOTAL SN AUDITADOS</div>
+					<div id="kpi-audit-total" style="font-size: 1.8rem; font-weight: 900; color: white; margin-top: 4px;">0 un.</div>
+				</div>
+				<div style="background: #0f172a; border: 1px solid #4ade80; padding: 16px; border-radius: 10px; text-align: center;">
+					<div style="font-size: 0.8rem; color: #4ade80; font-weight: bold;">🟢 VERIFICADOS (COINCIDEN)</div>
+					<div id="kpi-audit-ok" style="font-size: 1.8rem; font-weight: 900; color: #4ade80; margin-top: 4px;">0 un.</div>
+				</div>
+				<div style="background: #0f172a; border: 1px solid #f87171; padding: 16px; border-radius: 10px; text-align: center;">
+					<div style="font-size: 0.8rem; color: #f87171; font-weight: bold;">⚠️ ANOMALÍAS DETECTADAS</div>
+					<div id="kpi-audit-err" style="font-size: 1.8rem; font-weight: 900; color: #f87171; margin-top: 4px;">0 un.</div>
+				</div>
+			</div>
+
+			<strong style="color: #f8fafc; font-size: 0.95rem; margin-bottom: 10px; display: block;">🚨 Detalle de Anomalías Detectadas:</strong>
+			<div style="overflow-x: auto; border: 1px solid #334155; border-radius: 8px;">
+				<table class="tabla-sn" style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left;">
+					<thead>
+						<tr style="background: #0f172a; color: #94a3b8;">
+							<th style="padding: 10px;">SN Auditado</th>
+							<th style="padding: 10px;">Diagnóstico de Auditoría</th>
+							<th style="padding: 10px;">Técnico Real en BD</th>
+							<th style="padding: 10px;">Estado Real en BD</th>
+						</tr>
+					</thead>
+					<tbody id="tbody-audit-anomalias"></tbody>
+				</table>
+			</div>
+		</div>
+	</section>
+
   <!-- 3. INDICADORES OPERATIVOS Y RESUMEN DE GESTIÓN -->
   <section id="recupero-operativo" class="card">
     <h2 class="card-title">⚙️ Indicadores Operativos - Desglose por Modelo y Origen</h2>
@@ -927,6 +1008,7 @@ table.tabla-sn td { padding: 8px 10px; border-bottom: 1px solid #1e293b; }
 <script src="js/modules/stock/stock.js"></script>
 <script src="js/modules/recupero/recupero.js"></script>
 <script src="js/modules/recupero/recupero_ui.js"></script>
+<script src="js/modules/recupero/recupero_auditoria.js"></script>
 <script src="js/modules/recupero/recupero_actions.js"></script>
 <script src="js/modules/recupero/recupero_radar.js"></script>
 <script src="js/modules/tendencias/tendencias.js"></script>

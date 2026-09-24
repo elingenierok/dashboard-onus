@@ -115,6 +115,7 @@ function coincideMetricaMatriz(r) {
 
 window.renderizarResumenGestionUI = function(dataUnificada, catalogo) {
   matrizDatosCombinados = dataUnificada || [];
+  window.matrizDatosCombinados = matrizDatosCombinados; // Exponer para auditoría
   if (catalogo) matrizCatalogoGlobal = catalogo;
   actualizarMatrizYDetalleUI();
 };
