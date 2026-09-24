@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visor de Prueba - Matriz e Inspección SN</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      padding: 20px;
+    }
+
+    .card-matriz {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .header-matriz {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 16px;
+    }
+
+    .header-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #status-carga {
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: bold;
+      background: #0f172a;
+      color: #38bdf8;
+      border: 1px solid #0284c7;
+    }
+
+    /* FILTROS DE TIEMPO Y MÉTRICAS (BOTONES PILL) */
+    .selector-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 20px;
+      background: #0f172a;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+    }
+
+    .selector-grupo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .selector-label {
+      font-size: 0.82rem;
+      font-weight: 800;
+      min-width: 130px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-pill-container {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn-pill {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-pill:hover {
+      color: #f8fafc;
+      background: #334155;
+    }
+
+    .btn-pill.active {
+      background: #0284c7;
+      color: white;
+      border-color: #38bdf8;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+    }
+
+    /* TABLA PIVOT / MATRIZ */
+    .tabla-container {
+      overflow-x: auto;
+    }
+
+    table.matriz-pivot {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: center;
+    }
+
+    table.matriz-pivot th, table.matriz-pivot td {
+      padding: 12px 10px;
+      border: 1px solid #334155;
+    }
+
+    table.matriz-pivot th {
+      background: #0f172a;
+      color: #94a3b8;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+    }
+
+    table.matriz-pivot td.col-origen {
+      text-align: left;
+      font-weight: 700;
+      color: #38bdf8;
+      background: #0f172a;
+      width: 220px;
+    }
+
+    table.matriz-pivot td.val-celda {
+      font-weight: 800;
+      font-size: 1.05rem;
+      color: #f8fafc;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    table.matriz-pivot td.val-celda:hover {
+      background: #0284c7 !important;
+      color: white !important;
+    }
+
+    table.matriz-pivot td.val-celda.celda-activa {
+      background: #0369a1 !important;
+      border: 2px solid #38bdf8 !important;
+      box-shadow: inset 0 0 10px rgba(56, 189, 248, 0.5);
+    }
+
+    table.matriz-pivot tr.fila-total {
+      background: #0f172a;
+      font-weight: 800;
+    }
+
+    table.matriz-pivot tr.fila-total td {
+      color: #4ade80;
+      font-size: 1.1rem;
+      border-top: 2px solid #0284c7;
+    }
+
+    /* SECCIONES DE DETALLE Y TABLAS SECUNDARIAS */
+    .card-detalle-sn {
+      margin-top: 24px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 18px;
+    }
+
+    .detalle-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .btn-limpiar-filtro {
+      background: #334155;
+      color: #f8fafc;
+      border: none;
+      padding: 5px 12px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .btn-limpiar-filtro:hover { background: #475569; }
+
+    table.tabla-sn {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      text-align: left;
+    }
+
+    table.tabla-sn th {
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 10px;
+      border-bottom: 2px solid #334155;
+      user-select: none;
+    }
+
+    table.tabla-sn th.sortable {
+      cursor: pointer;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+
+    table.tabla-sn th.sortable:hover {
+      color: #38bdf8;
+      background: #334155;
+    }
+
+    table.tabla-sn td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .code-sn {
+      background: #1e293b;
+      color: #38bdf8;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-weight: bold;
+      font-size: 0.85rem;
+      border: 1px solid #334155;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card-matriz">
+    
+    <div class="header-matriz">
+      <div class="header-title">
+        <span>📊 Matriz de Control Operativo y Recupero</span>
+      </div>
+      <span id="status-carga">⏳ Conectando a Supabase...</span>
+    </div>
+
+    <!-- BARRA DE CONTROLES (TEMPORALIDAD Y MÉTRICA EN BOTONES) -->
+    <div class="selector-bar">
+      
+      <!-- 1. TEMPORALIDAD -->
+      <div class="selector-grupo">
+        <span class="selector-label" style="color: #38bdf8;">📅 Período:</span>
+        <div class="btn-pill-container">
+          <button class="btn-pill" onclick="setTemporalidad('DIARIO', this)">Diario</button>
+          <button class="btn-pill" onclick="setTemporalidad('SEMANAL', this)">Semanal</button>
+          <button class="btn-pill" onclick="setTemporalidad('MENSUAL', this)">Mensual</button>
+          <button class="btn-pill active" onclick="setTemporalidad('HISTORICO', this)">Histórico</button>
+        </div>
+      </div>
+
+      <!-- 2. MÉTRICA -->
+      <div class="selector-grupo">
+        <span class="selector-label" style="color: #fde047;">📌 Métrica:</span>
+        <div class="btn-pill-container">
+          <button class="btn-pill active" onclick="setMetrica('TOTAL_TODOS', this)">📦 Total Equipos (VIP + Obs)</button>
+          <button class="btn-pill" onclick="setMetrica('VIP_TOTAL', this)">⭐ Solo VIP Ingresados</button>
+          <button class="btn-pill" onclick="setMetrica('PENDIENTES', this)">⏳ Pendientes en Lab</button>
+          <button class="btn-pill" onclick="setMetrica('CIRCULACION', this)">🟢 En Circulación</button>
+          <button class="btn-pill" onclick="setMetrica('DESCARTE', this)">🔴 En Descarte</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TABLA PIVOT DE DOBLE ENTRADA -->
+    <div class="tabla-container">
+      <table class="matriz-pivot">
+        <thead>
+          <tr>
+            <th style="text-align: left;">Canal de Origen / Sucursal</th>
+            <th>OBERA</th>
+            <th>ELDORADO</th>
+            <th>WANDA</th>
+            <th>SAN PEDRO</th>
+            <th>ITUZAINGO</th>
+            <th style="background: #0284c7; color: white;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-matriz-pivot">
+          <!-- Renderizado dinámico -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SECCIÓN DE DETALLE DE EQUIPOS (SN) CON ENCABEZADOS ORDENABLES -->
+    <div class="card-detalle-sn">
+      <div class="detalle-header">
+        <strong id="lbl-titulo-detalle" style="color: #38bdf8; font-size: 0.9rem;">
+          📋 Detalle de Equipos (Hacé clic en cualquier celda para filtrar por Origen y Sucursal)
+        </strong>
+        <button class="btn-limpiar-filtro" onclick="limpiarFiltroCelda()">🌐 Mostrar Todos del Filtro</button>
+      </div>
+
+      <div style="max-height: 280px; overflow-y: auto;">
+        <table class="tabla-sn">
+          <thead>
+            <tr>
+              <th class="sortable" onclick="ordenarTabla('fecha')">Fecha <span id="sort-icon-fecha">▼</span></th>
+              <th class="sortable" onclick="ordenarTabla('sn')">Número de Serie (SN) <span id="sort-icon-sn">↕</span></th>
+              <th class="sortable" onclick="ordenarTabla('modelo')">Modelo / Descripción <span id="sort-icon-modelo">↕</span></th>
+              <th class="sortable" onclick="ordenarTabla('origen')">Origen <span id="sort-icon-origen">↕</span></th>
+              <th class="sortable" onclick="ordenarTabla('sucursal')">Sucursal <span id="sort-icon-sucursal">↕</span></th>
+              <th class="sortable" onclick="ordenarTabla('estado')">Estado / Veredicto <span id="sort-icon-estado">↕</span></th>
+              <th class="sortable" onclick="ordenarTabla('tecnico')">Técnico de Prueba <span id="sort-icon-tecnico">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-detalle-sn">
+            <tr><td colspan="7" style="text-align: center; color: #64748b; padding: 15px;">Cargando datos...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECCIÓN: RENDIMIENTO Y PROCESAMIENTO POR TÉCNICO DE PRUEBA -->
+    <div class="card-detalle-sn" style="border-color: #0284c7;">
+      <div class="detalle-header">
+        <strong id="lbl-titulo-tecnicos" style="color: #4ade80; font-size: 0.9rem;">
+          👨‍🔧 Rendimiento por Técnico de Prueba (Filtro Activo)
+        </strong>
+      </div>
+
+      <div style="max-height: 250px; overflow-y: auto;">
+        <table class="tabla-sn">
+          <thead>
+            <tr>
+              <th>Técnico de Prueba</th>
+              <th style="text-align: center;">Total Equipos</th>
+              <th style="text-align: center; color: #4ade80;">🟢 En Circulación</th>
+              <th style="text-align: center; color: #f87171;">🔴 En Descarte</th>
+              <th style="text-align: center; color: #fde047;">⏳ Pendientes</th>
+              <th style="text-align: center; color: #38bdf8;">% Efectividad</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-tecnicos">
+            <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 15px;">Cargando rendimiento de técnicos...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CONFIGURACIÓN Y SCRIPT -->
+  <script src="js/core/config.js"></script>
+  <script>
+    let supabaseClient = null;
+
+    let temporalidadActiva = 'HISTORICO';
+    let metricaActiva = 'TOTAL_TODOS';
+    let celdaFiltroActiva = null; // { origen, sucursal }
+
+    // VARIABLES DE ORDENAMIENTO DE LA TABLA SN
+    let columnaOrdenActiva = 'fecha';
+    let ordenAscendente = false;
+
+    let datosOperativos = [];
+    let catalogoMemoria = [];
+
+    const SUCURSALES = ['OBE', 'ELDO', 'WND', 'SPD', 'ITU'];
+    const ORIGENES = ['Técnico Reclamos', 'Personal Retiro', 'Sucursal / Mostrador', 'Otros'];
+
+    function setTemporalidad(temp, btn) {
+      btn.parentElement.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      temporalidadActiva = temp;
+      actualizarMatrizYDetalle();
+    }
+
+    function setMetrica(met, btn) {
+      btn.parentElement.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      metricaActiva = met;
+      actualizarMatrizYDetalle();
+    }
+
+    function ordenarTabla(columna) {
+      if (columnaOrdenActiva === columna) {
+        ordenAscendente = !ordenAscendente;
+      } else {
+        columnaOrdenActiva = columna;
+        ordenAscendente = true;
+      }
+      actualizarIconosOrden();
+      actualizarMatrizYDetalle();
+    }
+
+    function actualizarIconosOrden() {
+      const columnas = ['fecha', 'sn', 'modelo', 'origen', 'sucursal', 'estado', 'tecnico'];
+      columnas.forEach(c => {
+        const span = document.getElementById(`sort-icon-${c}`);
+        if (span) {
+          if (c === columnaOrdenActiva) {
+            span.textContent = ordenAscendente ? '▲' : '▼';
+            span.style.color = '#38bdf8';
+          } else {
+            span.textContent = '↕';
+            span.style.color = '#94a3b8';
+          }
+        }
+      });
+    }
+
+    function normalizarOrigen(txt) {
+      const norm = (txt || '').toUpperCase();
+      if (norm.includes('RECLAMO') || norm.includes('TECNICO')) return 'Técnico Reclamos';
+      if (norm.includes('RETIRO') || norm.includes('PERSONAL')) return 'Personal Retiro';
+      if (norm.includes('SUCURSAL') || norm.includes('MOSTRADOR') || norm.includes('DEVOLUCION')) return 'Sucursal / Mostrador';
+      return 'Otros';
+    }
+
+    function esVIP(desc) {
+      const norm = (desc || '').toUpperCase();
+      const match = catalogoMemoria.find(c => {
+        const modNorm = (c.modelo || c.descripcion || '').toUpperCase();
+        return modNorm && (norm.includes(modNorm) || modNorm.includes(norm));
+      });
+      return match ? Boolean(match.es_vip) : false;
+    }
+
+    function esDeFecha(fechaIso, modo) {
+      if (!fechaIso) return false;
+      const f = new Date(fechaIso);
+      if (isNaN(f.getTime())) return false;
+
+      const hoy = new Date();
+      if (modo === 'DIARIO') {
+        return f.toDateString() === hoy.toDateString();
+      } else if (modo === 'SEMANAL') {
+        // Últimos 7 días móviles
+        const diffDias = (hoy - f) / (1000 * 60 * 60 * 24);
+        return diffDias >= 0 && diffDias <= 7;
+      } else if (modo === 'MENSUAL') {
+        // Mes calendario actual (mismo mes y año que la fecha actual)
+        return f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
+      }
+      return true; // HISTORICO
+    }
+
+    async function cargarDatosBD() {
+      const tagStatus = document.getElementById('status-carga');
+      
+      try {
+        if (!window.supabase || !window.APP_CONFIG) {
+          if (tagStatus) tagStatus.textContent = '❌ Error de configuración';
+          return;
+        }
+
+        supabaseClient = window.supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
+
+        const [resOp, resCat] = await Promise.all([
+          supabaseClient.from('recupero_operativo').select('*').order('fecha_ingreso', { ascending: false }).limit(10000),
+          supabaseClient.from('catalogo_equipos').select('*')
+        ]);
+
+        if (resOp.error) throw resOp.error;
+
+        datosOperativos = resOp.data || [];
+        catalogoMemoria = resCat.data || [];
+
+        if (tagStatus) {
+          tagStatus.textContent = `✅ ${datosOperativos.length} Registros Cargados`;
+          tagStatus.style.borderColor = '#059669';
+          tagStatus.style.color = '#34d399';
+        }
+
+        actualizarIconosOrden();
+        actualizarMatrizYDetalle();
+      } catch (err) {
+        console.error("Error al cargar datos desde Supabase:", err);
+        if (tagStatus) {
+          tagStatus.textContent = `❌ Error: ${err.message || 'Sin conexión'}`;
+          tagStatus.style.borderColor = '#dc2626';
+          tagStatus.style.color = '#f87171';
+        }
+      }
+    }
+
+    function coincideMetrica(r) {
+      const cond = (r.condicion || '').toUpperCase();
+      const modelo = r.descripcion || r.modelo || '';
+      const vip = esVIP(modelo);
+
+      if (metricaActiva === 'TOTAL_TODOS') return true;
+      if (metricaActiva === 'VIP_TOTAL') return vip;
+      if (metricaActiva === 'PENDIENTES') return cond === 'PENDIENTE' || cond === '';
+      if (metricaActiva === 'CIRCULACION') return cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO');
+      if (metricaActiva === 'DESCARTE') return cond.includes('DESCARTE') || cond.includes('FALLA');
+      return true;
+    }
+
+    function actualizarMatrizYDetalle() {
+      const tbodyMatriz = document.getElementById('tbody-matriz-pivot');
+      if (!tbodyMatriz) return;
+
+      const matriz = {};
+      ORIGENES.forEach(o => {
+        matriz[o] = {};
+        SUCURSALES.forEach(s => matriz[o][s] = 0);
+      });
+
+      const totalesCol = {};
+      SUCURSALES.forEach(s => totalesCol[s] = 0);
+      let granTotal = 0;
+
+      const itemsFiltradosGlobal = datosOperativos.filter(r => {
+        const fecha = r.fin_prueba || r.fecha_ingreso || r.created_at;
+        if (temporalidadActiva !== 'HISTORICO' && !esDeFecha(fecha, temporalidadActiva)) return false;
+        return coincideMetrica(r);
+      });
+
+      itemsFiltradosGlobal.forEach(r => {
+        let suc = (r.sucursal_id || 'OBE').toUpperCase();
+        if (suc === 'TODAS') suc = 'OBE';
+        
+        const origenNorm = normalizarOrigen(r.almacen_origen || r.origen);
+
+        if (matriz[origenNorm] && matriz[origenNorm][suc] !== undefined) {
+          matriz[origenNorm][suc]++;
+        }
+      });
+
+      let htmlMatriz = '';
+      ORIGENES.forEach(orig => {
+        let totalFila = 0;
+        htmlMatriz += `<tr>`;
+        htmlMatriz += `<td class="col-origen">${orig}</td>`;
+
+        SUCURSALES.forEach(suc => {
+          const val = matriz[orig][suc] || 0;
+          totalFila += val;
+          totalesCol[suc] += val;
+
+          const esActiva = celdaFiltroActiva && celdaFiltroActiva.origen === orig && celdaFiltroActiva.sucursal === suc;
+          const claseActiva = esActiva ? 'celda-activa' : '';
+          const colorTexto = val > 0 ? '#f8fafc' : '#64748b';
+
+          htmlMatriz += `<td class="val-celda ${claseActiva}" style="color: ${colorTexto};" onclick="seleccionarCelda('${orig}', '${suc}')">${val}</td>`;
+        });
+
+        granTotal += totalFila;
+        htmlMatriz += `<td class="val-celda" style="background: #0f172a; color: #38bdf8;">${totalFila}</td>`;
+        htmlMatriz += `</tr>`;
+      });
+
+      htmlMatriz += `<tr class="fila-total">`;
+      htmlMatriz += `<td style="text-align: left; color: #4ade80;">TOTALES</td>`;
+      SUCURSALES.forEach(suc => htmlMatriz += `<td>${totalesCol[suc]}</td>`);
+      htmlMatriz += `<td style="background: #0284c7; color: white;">${granTotal}</td>`;
+      htmlMatriz += `</tr>`;
+
+      tbodyMatriz.innerHTML = htmlMatriz;
+
+      renderTablaDetalleSN(itemsFiltradosGlobal);
+    }
+
+    function seleccionarCelda(origen, sucursal) {
+      if (celdaFiltroActiva && celdaFiltroActiva.origen === origen && celdaFiltroActiva.sucursal === sucursal) {
+        celdaFiltroActiva = null;
+      } else {
+        celdaFiltroActiva = { origen, sucursal };
+      }
+      actualizarMatrizYDetalle();
+    }
+
+    function limpiarFiltroCelda() {
+      celdaFiltroActiva = null;
+      actualizarMatrizYDetalle();
+    }
+
+    function renderTablaDetalleSN(itemsBase) {
+      const tbodySN = document.getElementById('tbody-detalle-sn');
+      const lblTitulo = document.getElementById('lbl-titulo-detalle');
+
+      let listaVisual = [...itemsBase];
+
+      if (celdaFiltroActiva) {
+        lblTitulo.textContent = `📋 Detalle de Equipos: ${celdaFiltroActiva.origen} ➔ Sucursal [${celdaFiltroActiva.sucursal}]`;
+        listaVisual = listaVisual.filter(r => {
+          let suc = (r.sucursal_id || 'OBE').toUpperCase();
+          if (suc === 'TODAS') suc = 'OBE';
+          const orig = normalizarOrigen(r.almacen_origen || r.origen);
+          return suc === celdaFiltroActiva.sucursal && orig === celdaFiltroActiva.origen;
+        });
+      } else {
+        lblTitulo.textContent = `📋 Listado Completo del Filtro (${itemsBase.length} equipos)`;
+      }
+
+      // ORDENAMIENTO DINÁMICO
+      listaVisual.sort((a, b) => {
+        let valA = '', valB = '';
+
+        if (columnaOrdenActiva === 'fecha') {
+          valA = new Date(a.fin_prueba || a.fecha_ingreso || a.created_at || 0).getTime();
+          valB = new Date(b.fin_prueba || b.fecha_ingreso || b.created_at || 0).getTime();
+        } else if (columnaOrdenActiva === 'sn') {
+          valA = (a.sn || '').toUpperCase();
+          valB = (b.sn || '').toUpperCase();
+        } else if (columnaOrdenActiva === 'modelo') {
+          valA = (a.descripcion || a.modelo || '').toUpperCase();
+          valB = (b.descripcion || b.modelo || '').toUpperCase();
+        } else if (columnaOrdenActiva === 'origen') {
+          valA = normalizarOrigen(a.almacen_origen || a.origen);
+          valB = normalizarOrigen(b.almacen_origen || b.origen);
+        } else if (columnaOrdenActiva === 'sucursal') {
+          valA = (a.sucursal_id || 'OBE').toUpperCase();
+          valB = (b.sucursal_id || 'OBE').toUpperCase();
+        } else if (columnaOrdenActiva === 'estado') {
+          valA = (a.condicion || 'PENDIENTE').toUpperCase();
+          valB = (b.condicion || 'PENDIENTE').toUpperCase();
+        } else if (columnaOrdenActiva === 'tecnico') {
+          valA = (a.tecnico_prueba || a.tecnico || '').toUpperCase();
+          valB = (b.tecnico_prueba || b.tecnico || '').toUpperCase();
+        }
+
+        if (valA < valB) return ordenAscendente ? -1 : 1;
+        if (valA > valB) return ordenAscendente ? 1 : -1;
+        return 0;
+      });
+
+      if (listaVisual.length === 0) {
+        tbodySN.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 15px;">Sin equipos registrados para este filtro.</td></tr>`;
+      } else {
+        tbodySN.innerHTML = listaVisual.map(r => {
+          const fechaRaw = r.fin_prueba || r.fecha_ingreso || r.created_at || '';
+          const fecha = fechaRaw ? fechaRaw.split('T')[0] : '--/--/----';
+          const cond = (r.condicion || 'PENDIENTE').toUpperCase();
+          let colorCond = '#cbd5e1';
+
+          if (cond.includes('CIRCULACI') || cond.includes('OK')) colorCond = '#4ade80';
+          else if (cond.includes('DESCARTE') || cond.includes('FALLA')) colorCond = '#f87171';
+          else if (cond === 'PENDIENTE') colorCond = '#fde047';
+
+          const tecPrueba = r.tecnico_prueba || 'Sin Registro (Histórico)';
+
+          return `
+            <tr>
+              <td style="color: #cbd5e1;">${fecha}</td>
+              <td><span class="code-sn">${r.sn || 'SIN SN'}</span></td>
+              <td style="color: #f8fafc; font-weight: 600;">${r.descripcion || r.modelo || '-'}</td>
+              <td style="color: #38bdf8;">${r.almacen_origen || r.origen || '-'}</td>
+              <td><strong>${r.sucursal_id || 'OBE'}</strong></td>
+              <td><span style="color: ${colorCond}; font-weight: bold;">${cond}</span></td>
+              <td style="color: #94a3b8;">${tecPrueba}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      renderTablaTecnicos(listaVisual);
+    }
+
+    function renderTablaTecnicos(itemsVisual) {
+      const tbodyTec = document.getElementById('tbody-tecnicos');
+      const lblTituloTec = document.getElementById('lbl-titulo-tecnicos');
+      if (!tbodyTec) return;
+
+      if (celdaFiltroActiva) {
+        lblTituloTec.textContent = `👨‍🔧 Rendimiento por Técnico de Prueba en: ${celdaFiltroActiva.origen} ➔ Sucursal [${celdaFiltroActiva.sucursal}]`;
+      } else {
+        lblTituloTec.textContent = `👨‍🔧 Rendimiento por Técnico de Prueba (Filtro Activo)`;
+      }
+
+      const mapaTecnicos = {};
+
+      itemsVisual.forEach(r => {
+        const cond = (r.condicion || 'PENDIENTE').toUpperCase();
+        const esProbado = cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO') || cond.includes('DESCARTE') || cond.includes('FALLA');
+        
+        let tecNombre = '';
+        if (r.tecnico_prueba && r.tecnico_prueba.trim() !== '') {
+          tecNombre = r.tecnico_prueba.trim();
+        } else if (esProbado) {
+          tecNombre = 'Histórico / Sin Registro de Prueba';
+        } else {
+          tecNombre = 'Pendientes de Prueba';
+        }
+
+        if (!mapaTecnicos[tecNombre]) {
+          mapaTecnicos[tecNombre] = { total: 0, circ: 0, desc: 0, pend: 0 };
+        }
+
+        mapaTecnicos[tecNombre].total++;
+
+        if (cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO')) {
+          mapaTecnicos[tecNombre].circ++;
+        } else if (cond.includes('DESCARTE') || cond.includes('FALLA')) {
+          mapaTecnicos[tecNombre].desc++;
+        } else {
+          mapaTecnicos[tecNombre].pend++;
+        }
+      });
+
+      const listaTecnicos = Object.entries(mapaTecnicos);
+
+      if (listaTecnicos.length === 0) {
+        tbodyTec.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 15px;">Sin registros para los técnicos en este filtro.</td></tr>`;
+        return;
+      }
+
+      listaTecnicos.sort((a, b) => b[1].total - a[1].total);
+
+      tbodyTec.innerHTML = listaTecnicos.map(([nombre, c]) => {
+        const probados = c.circ + c.desc;
+        const pctEfectividad = probados > 0 ? ((c.circ / probados) * 100).toFixed(1) : '0.0';
+
+        return `
+          <tr>
+            <td style="color: #f8fafc; font-weight: 700;">👤 ${nombre}</td>
+            <td style="text-align: center; font-weight: bold; color: #38bdf8;">${c.total} un.</td>
+            <td style="text-align: center; font-weight: bold; color: #4ade80;">${c.circ} un.</td>
+            <td style="text-align: center; font-weight: bold; color: #f87171;">${c.desc} un.</td>
+            <td style="text-align: center; font-weight: bold; color: #fde047;">${c.pend} un.</td>
+            <td style="text-align: center; font-weight: bold; color: #38bdf8;">${pctEfectividad}%</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', cargarDatosBD);
+  </script>
+</body>
+</html>

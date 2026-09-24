@@ -4,261 +4,176 @@
 
 const supabaseRecupero = supabase.createClient(window.APP_CONFIG.SUPABASE_URL, window.APP_CONFIG.SUPABASE_KEY);
 
-// Estado Global Expuesto (Estructura Unificada)
 window.EstadoRecupero = {
-  cargado: false,
-  totalRecibidos: 0,
-  directoDescarteObs: 0,
-  enCirculacionVIP: 0,
-  fueraCirculacionVIP: 0,
-  pendientesVIP: 0, // 👈 Agregado para equipos VIP sin veredicto
-  probadosVIP: 0,
-  pctReaprovechamiento: "0.0",
-  valorPromedioRecuperado: 0,
-  capitalRevalorizado: 0,
-  capitalTotal: 0, // 👈 Normalizado con la actualización
-  recuperadosHoy: 0,
-  itemsIngresadosHoy: [],
-  itemsVipTesteadosHoy: [],
-  desgloseOperativo: {},
-  origenPersonalRetiro: 0,
-  origenTecnicoReclamos: 0,
-  origenSucursal: 0,
-  origenOtros: 0
+  cargado: false, totalRecibidos: 0, directoDescarteObs: 0, enCirculacionVIP: 0,
+  fueraCirculacionVIP: 0, pendientesVIP: 0, probadosVIP: 0, pctReaprovechamiento: "0.0",
+  valorPromedioRecuperado: 0, capitalRevalorizado: 0, capitalTotal: 0, recuperadosHoy: 0,
+  itemsIngresadosHoy: [], itemsVipTesteadosHoy: [], desgloseOperativo: {},
+  origenPersonalRetiro: 0, origenTecnicoReclamos: 0, origenSucursal: 0, origenOtros: 0
 };
 
 function normalizar(txt) {
-  return (txt || '')
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
+  return (txt || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function normalizarSucursal(suc) {
+  const norm = (suc || '').toUpperCase().trim();
+  if (norm.includes('ELD')) return 'ELDO';
+  if (norm.includes('WAN') || norm.includes('WND')) return 'WND';
+  if (norm.includes('PEDRO') || norm.includes('SPD') || norm.includes('SAN')) return 'SPD';
+  if (norm.includes('ITU')) return 'ITU';
+  return 'OBE';
 }
 
 function esDeHoy(fechaIso) {
-  if (!fechaIso) return false;
-  const f = new Date(fechaIso);
-  if (isNaN(f.getTime())) return false;
-  
-  const hoy = new Date();
-  return f.getDate() === hoy.getDate() &&
-         f.getMonth() === hoy.getMonth() &&
-         f.getFullYear() === hoy.getFullYear();
+  if (!fechaIso) return false;
+  const f = new Date(fechaIso);
+  if (isNaN(f.getTime())) return false;
+  const hoy = new Date();
+  return f.getDate() === hoy.getDate() && f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
 }
 
 function obtenerHoraCorta(fechaIso) {
-  if (!fechaIso) return '--:--';
-  const f = new Date(fechaIso);
-  if (isNaN(f.getTime())) return '--:--';
-  return f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  if (!fechaIso) return '--:--';
+  const f = new Date(fechaIso);
+  if (isNaN(f.getTime())) return '--:--';
+  return f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
 window.obtenerInfoCatalogo = function(descNorm, catalogo) {
   if (!descNorm) return { esVIP: false, precioUsd: 0.0 };
-
-  // Búsqueda exacta primero, luego coincidencia segura de subcadena
   const encontrado = catalogo.find(item => {
     const itemNorm = item.modelo_norm || normalizar(item.modelo);
     if (!itemNorm) return false;
     return descNorm === itemNorm || descNorm.includes(itemNorm);
   });
-
-  return encontrado 
-    ? { esVIP: Boolean(encontrado.es_vip), precioUsd: parseFloat(encontrado.precio_usd) || 0.0 }
-    : { esVIP: false, precioUsd: 0.0 };
+  return encontrado ? { esVIP: Boolean(encontrado.es_vip), precioUsd: parseFloat(encontrado.precio_usd) || 0.0 } : { esVIP: false, precioUsd: 0.0 };
 };
 
 async function cargarModuloRecupero() {
-  const tag = document.getElementById('tagRecupero');
-  if (tag) {
-    tag.textContent = 'Supabase: ⏳ Consultando...';
-    tag.className = 'file-tag no';
-  }
+  const tag = document.getElementById('tagRecupero');
+  if (tag) { tag.textContent = 'Supabase: ⏳ Consultando...'; tag.className = 'file-tag no'; }
 
-  try {
-    const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+  try {
+    const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
-    // 1. Traemos los últimos 5000 registros, ordenados por FECHA REAL
-    const [resRec, resCatalogo] = await Promise.all([
-      supabaseRecupero
-        .from('recupero_operativo')
-        .select('*')
-        .order('fecha_ingreso', { ascending: false })
-        .limit(5000),
-      supabaseRecupero
-        .from('catalogo_equipos')
-        .select('*')
-    ]);
+    // 1. Descargamos las tablas en paralelo
+    const [resRec, resCatalogo, resHistorico] = await Promise.all([
+      supabaseRecupero.from('recupero_operativo').select('*').order('fecha_ingreso', { ascending: false }).limit(5000),
+      supabaseRecupero.from('catalogo_equipos').select('*'),
+      supabaseRecupero.from('recupero_historico_equipos').select('*').limit(10000)
+    ]);
 
-    if (resRec.error) throw resRec.error;
-    if (resCatalogo.error) throw resCatalogo.error;
+    if (resRec.error) throw resRec.error;
+    if (resCatalogo.error) throw resCatalogo.error;
+    if (resHistorico.error) throw resHistorico.error;
 
-    const dataRecCrudo = resRec.data || [];
-    const catalogo = resCatalogo.data || [];
+    const catalogo = resCatalogo.data || [];
 
-    // 2. Filtrado estricto en JS
-    const dataRec = dataRecCrudo.filter(row => {
-      if (sucActiva === 'TODAS') return true;
-      return (row.sucursal_id || 'OBE') === sucActiva;
-    });
+    // 2. UNIFICAMOS Y DESDUPLICAMOS (El corazón del sistema)
+    const mapaUnicos = new Map();
 
-    if (tag) {
-      tag.textContent = `Supabase: ✅ ${dataRec.length} Registros [${sucActiva}]`;
-      tag.className = 'file-tag ok';
-    }
+    // Primero metemos el historial viejo
+    (resHistorico.data || []).forEach(r => {
+      const key = (r.sn || '').toString().trim().toUpperCase();
+      if (key) mapaUnicos.set(key, r);
+    });
 
-    // 3. Procesar Cabeceras y Tabla Vieja
-    procesarDatosRecupero(dataRec, catalogo);
+    // Luego pisamos con la mesa activa (para tener el estado real)
+    (resRec.data || []).forEach(r => {
+      const key = (r.sn || '').toString().trim().toUpperCase();
+      if (key) mapaUnicos.set(key, r);
+    });
 
-    // 4. NUEVO: DIBUJAR LA TABLA DE RENDIMIENTO DIARIO
-    if (typeof renderTablaRecuperoDiario === 'function') {
-      renderTablaRecuperoDiario(dataRec, catalogo);
-    } else {
-      console.warn("⚠️ La función renderTablaRecuperoDiario no está definida. Revisá si pegaste el código en recupero_ui.js");
-    }
+    const dataUnificada = Array.from(mapaUnicos.values());
 
-    // 5. Disparar renderizado adicional de UI
-    if (typeof window.renderizarModuloRecuperoUI === 'function') {
-      try {
-        window.renderizarModuloRecuperoUI();
-      } catch (uiErr) {
-        console.error('Error al renderizar UI de Recupero:', uiErr);
-      }
-    }
-  } catch (err) {
-    console.error('Error al cargar datos de Recupero:', err);
-    if (tag) {
-      tag.textContent = 'Supabase: ❌ Error';
-      tag.className = 'file-tag no';
-    }
-  }
+    // 3. Filtramos por sucursal solo para las gráficas de arriba
+    const dataProcesar = dataUnificada.filter(row => {
+      if (sucActiva === 'TODAS') return true;
+      return normalizarSucursal(row.sucursal_id) === normalizarSucursal(sucActiva);
+    });
+
+    if (tag) {
+      tag.textContent = `Supabase: ✅ ${dataUnificada.length} Equipos [${sucActiva}]`;
+      tag.className = 'file-tag ok';
+    }
+
+    // 4. Calculamos barras de arriba
+    procesarDatosRecupero(dataProcesar, catalogo);
+
+    // 5. Dibujamos matriz de abajo con TODA la información (dataUnificada)
+    if (typeof window.renderizarResumenGestionUI === 'function') {
+      window.renderizarResumenGestionUI(dataUnificada, catalogo);
+    }
+
+    if (typeof window.renderizarModuloRecuperoUI === 'function') {
+      window.renderizarModuloRecuperoUI();
+    }
+  } catch (err) {
+    console.error('Error al cargar datos de Recupero:', err);
+    if (tag) { tag.textContent = 'Supabase: ❌ Error'; tag.className = 'file-tag no'; }
+  }
 }
 
 function procesarDatosRecupero(data, catalogo) {
-  let totalRecibidos = 0;
-  let directoDescarteObs = 0;
-  let enCirculacionVIP = 0;
-  let fueraCirculacionVIP = 0;
-  let pendientesVIP = 0;
-  let capitalRevalorizado = 0;
-  let recuperadosHoy = 0;
+  let totalRecibidos = 0, directoDescarteObs = 0, enCirculacionVIP = 0, fueraCirculacionVIP = 0, pendientesVIP = 0, capitalRevalorizado = 0, recuperadosHoy = 0;
+  let origenPersonalRetiro = 0, origenTecnicoReclamos = 0, origenSucursal = 0, origenOtros = 0;
+  const desgloseOperativo = {}, itemsIngresadosHoy = [], itemsVipTesteadosHoy = [];
 
-  let origenPersonalRetiro = 0;
-  let origenTecnicoReclamos = 0;
-  let origenSucursal = 0;
-  let origenOtros = 0;
+  data.forEach(row => {
+    const cant = parseInt(row.cantidad || 1, 10) || 1;
+    const desc = row.descripcion || row.modelo || row.equipo || 'DESCONOCIDO';
+    const descNorm = normalizar(desc);
+    const condicion = normalizar(row.condicion || row.estado_final || row.estado || row.veredicto || '');
+    
+    const origenRaw = normalizar(row.origen || row.almacen_origen || '');
+    if (origenRaw.includes('RETIRO') || origenRaw.includes('PERSONAL')) origenPersonalRetiro += cant;
+    else if (origenRaw.includes('RECLAMO') || origenRaw.includes('TECNICO')) origenTecnicoReclamos += cant;
+    else if (origenRaw.includes('SUCURSAL') || origenRaw.includes('MOSTRADOR') || origenRaw.includes('DEVOLUCION')) origenSucursal += cant;
+    else origenOtros += cant;
 
-  const desgloseOperativo = {};
-  const itemsIngresadosHoy = [];
-  const itemsVipTesteadosHoy = [];
+    const infoCat = obtenerInfoCatalogo(descNorm, catalogo);
+    const esEquipoVIP = infoCat.esVIP;
+    const precioUnit = infoCat.precioUsd;
 
-  data.forEach(row => {
-    const cant = parseInt(row.cantidad || 1, 10) || 1;
-    const desc = row.descripcion || row.modelo || row.equipo || 'DESCONOCIDO';
-    const descNorm = normalizar(desc);
-    const condicion = normalizar(row.condicion || row.estado_final || row.estado || row.veredicto || '');
-    
-    // Clasificación por Origen
-    const origenRaw = normalizar(row.origen || row.almacen_origen || '');
-    if (origenRaw.includes('RETIRO') || origenRaw.includes('PERSONAL')) {
-      origenPersonalRetiro += cant;
-    } else if (origenRaw.includes('RECLAMO') || origenRaw.includes('TECNICO')) {
-      origenTecnicoReclamos += cant;
-    } else if (origenRaw.includes('SUCURSAL') || origenRaw.includes('MOSTRADOR') || origenRaw.includes('DEVOLUCION')) {
-      origenSucursal += cant;
-    } else {
-      origenOtros += cant;
-    }
+    totalRecibidos += cant;
 
-    const infoCat = obtenerInfoCatalogo(descNorm, catalogo);
-    const esEquipoVIP = infoCat.esVIP;
-    const precioUnit = infoCat.precioUsd;
+    if (!desgloseOperativo[descNorm]) desgloseOperativo[descNorm] = { desc, vip: esEquipoVIP, circ: 0, descVIP: 0, descObs: 0, pendVIP: 0 };
 
-    totalRecibidos += cant;
+    const esAprobado = ['CIRCULACI', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO'].some(e => condicion.includes(e));
+    const esRechazado = ['DESCARTE', 'FALLA', 'BAJA', 'DEFECTUOSO', 'ROTO', 'RECHAZADO'].some(e => condicion.includes(e));
 
-    if (!desgloseOperativo[descNorm]) {
-      desgloseOperativo[descNorm] = { desc: desc, vip: esEquipoVIP, circ: 0, descVIP: 0, descObs: 0, pendVIP: 0 };
-    }
+    const fechaIng = row.fecha_ingreso || row.created_at;
+    const fechaFin = row.fin_prueba;
 
-    const esAprobado = ['CIRCULACION', 'RECUPERADO', 'OK', 'BUENO', 'APROBADO'].some(e => condicion.includes(e));
-    const esRechazado = ['DESCARTE', 'FALLA', 'BAJA', 'DEFECTUOSO', 'ROTO', 'RECHAZADO'].some(e => condicion.includes(e));
+    if (esDeHoy(fechaIng)) itemsIngresadosHoy.push({ hora: obtenerHoraCorta(fechaIng), sn: row.sn || 'SIN SN', modelo: desc, esVIP: esEquipoVIP, tecnico: row.tecnico || 'Operador' });
+    if (esEquipoVIP && fechaFin && esDeHoy(fechaFin)) itemsVipTesteadosHoy.push({ hora: obtenerHoraCorta(fechaFin), sn: row.sn || 'SIN SN', modelo: desc, esAprobado, condicionRaw: condicion, observaciones: row.observaciones || 'Sin detalles' });
 
-    const fechaIng = row.fecha_ingreso || row.created_at;
-    const fechaFin = row.fin_prueba;
+    if (!esEquipoVIP) {
+      directoDescarteObs += cant;
+      desgloseOperativo[descNorm].descObs += cant;
+    } else if (esAprobado) {
+      enCirculacionVIP += cant;
+      capitalRevalorizado += (cant * precioUnit);
+      desgloseOperativo[descNorm].circ += cant;
+      if (esDeHoy(fechaFin)) recuperadosHoy += cant;
+    } else if (esRechazado) {
+      fueraCirculacionVIP += cant;
+      desgloseOperativo[descNorm].descVIP += cant;
+    } else {
+      pendientesVIP += cant;
+      desgloseOperativo[descNorm].pendVIP += cant;
+    }
+  });
 
-    if (esDeHoy(fechaIng)) {
-      itemsIngresadosHoy.push({
-        hora: obtenerHoraCorta(fechaIng),
-        sn: row.sn || 'SIN SN',
-        modelo: desc,
-        esVIP: esEquipoVIP,
-        tecnico: row.tecnico || 'Operador'
-      });
-    }
+  const probadosVIP = enCirculacionVIP + fueraCirculacionVIP;
+  const pctReaprovechamiento = probadosVIP > 0 ? ((enCirculacionVIP / probadosVIP) * 100).toFixed(1) : "0.0";
+  const valorPromedioRecuperado = enCirculacionVIP > 0 ? Math.round(capitalRevalorizado / enCirculacionVIP) : 0;
 
-    if (esEquipoVIP && fechaFin && esDeHoy(fechaFin)) {
-      itemsVipTesteadosHoy.push({
-        hora: obtenerHoraCorta(fechaFin),
-        sn: row.sn || 'SIN SN',
-        modelo: desc,
-        esAprobado: esAprobado,
-        condicionRaw: condicion,
-        observaciones: row.observaciones || 'Sin detalles'
-      });
-    }
-
-    if (!esEquipoVIP) {
-      directoDescarteObs += cant;
-      desgloseOperativo[descNorm].descObs += cant;
-    } else if (esAprobado) {
-      enCirculacionVIP += cant;
-      capitalRevalorizado += (cant * precioUnit);
-      desgloseOperativo[descNorm].circ += cant;
-
-      if (esDeHoy(fechaFin)) {
-        recuperadosHoy += cant;
-      }
-    } else if (esRechazado) {
-      fueraCirculacionVIP += cant;
-      desgloseOperativo[descNorm].descVIP += cant;
-    } else {
-      // Caso VIP sin testear / sin resolución
-      pendientesVIP += cant;
-      desgloseOperativo[descNorm].pendVIP += cant;
-    }
-  });
-
-  const probadosVIP = enCirculacionVIP + fueraCirculacionVIP;
-  const pctReaprovechamiento = probadosVIP > 0 ? ((enCirculacionVIP / probadosVIP) * 100).toFixed(1) : "0.0";
-  const valorPromedioRecuperado = enCirculacionVIP > 0 ? Math.round(capitalRevalorizado / enCirculacionVIP) : 0;
-
-  // Estado Global Sincronizado
-  window.EstadoRecupero = {
-    cargado: true,
-    totalRecibidos,
-    directoDescarteObs,
-    enCirculacionVIP,
-    fueraCirculacionVIP,
-    pendientesVIP,
-    probadosVIP,
-    pctReaprovechamiento,
-    valorPromedioRecuperado,
-    capitalRevalorizado,
-    capitalTotal: capitalRevalorizado,
-    recuperadosHoy,
-    itemsIngresadosHoy,
-    itemsVipTesteadosHoy,
-    desgloseOperativo,
-    origenPersonalRetiro,
-    origenTecnicoReclamos,
-    origenSucursal,
-    origenOtros
-  };
+  window.EstadoRecupero = {
+    cargado: true, totalRecibidos, directoDescarteObs, enCirculacionVIP, fueraCirculacionVIP, pendientesVIP, probadosVIP, pctReaprovechamiento, valorPromedioRecuperado, capitalRevalorizado, capitalTotal: capitalRevalorizado, recuperadosHoy, itemsIngresadosHoy, itemsVipTesteadosHoy, desgloseOperativo, origenPersonalRetiro, origenTecnicoReclamos, origenSucursal, origenOtros
+  };
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', cargarModuloRecupero);
-} else {
-  cargarModuloRecupero();
-}
+if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', cargarModuloRecupero); } 
+else { cargarModuloRecupero(); }

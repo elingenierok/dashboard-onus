@@ -139,13 +139,37 @@ async function descargarCSV() {
   page.on('dialog', async dialog => { await dialog.accept(); });
 
   try {
-        await page.goto(process.env.ISP_URL, { waitUntil: 'networkidle2' });
+    await page.goto(process.env.ISP_URL, { waitUntil: 'networkidle2' });
 
-    // El bot NO intenta loguearse. Si encuentra pantalla de login, corta.
-    // La sesión se renueva ejecutando bot_vivo_manual.js a mano.
+    // El bot intenta loguearse con timeout corto.
+    // Si el ISP responde, sigue normal (vivo + histórico).
+    // Si tarda demasiado, corta con aviso.
     const inputPassword = await page.$('input[type="password"]');
     if (inputPassword) {
-      throw new Error('SESION_EXPIRADA');
+      try {
+        await page.type('input[type="text"], input[name*="user"]', process.env.ISP_USER);
+        await page.type('input[type="password"]', process.env.ISP_PASS);
+
+        await Promise.race([
+          page.click('button[type="submit"], input[type="submit"]').then(() =>
+            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 })
+          ),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('LOGIN_TIMEOUT')), 20000)
+          )
+        ]);
+
+        // Verificar que el login funcionó (que no siga el input de password)
+        const sigueLogin = await page.$('input[type="password"]');
+        if (sigueLogin) {
+          throw new Error('LOGIN_FALLIDO');
+        }
+      } catch (err) {
+        if (err.message === 'LOGIN_TIMEOUT' || err.message === 'LOGIN_FALLIDO') {
+          throw new Error('SESION_EXPIRADA');
+        }
+        throw err;
+      }
     }
 
     await page.evaluate(() => {

@@ -127,13 +127,11 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const btnSubmitCarga = document.querySelector('#form-carga .btn-submit');
   
-  // 🛡️ 1. BLOQUEO ANTI DOBLE-CLIC INMEDIATO
   if (btnSubmitCarga) btnSubmitCarga.disabled = true;
 
   const msg = document.getElementById('statusCarga');
   const rawSn = document.getElementById('cg_serial')?.value || '';
   
-  // Clean string: Mayúsculas, sin espacios ni saltos de línea
   const sn = rawSn.trim().toUpperCase().replace(/\s+/g, '');
   const modelo = document.getElementById('cg_modelo')?.value;
   const origen = document.getElementById('cg_origen')?.value || 'Sucursal / Mostrador';
@@ -142,7 +140,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
   const operadorNombre = window.USUARIO_NOMBRE_MOSTRAR || document.getElementById('user-badge')?.textContent.replace('👤', '').trim() || 'Operador';
 
   try {
-    // 🛡️ 2. VALIDACIÓN DE CAMPOS OBLIGATORIOS
     if (!sn || !modelo) {
       if (msg) {
         msg.textContent = '⚠️ Debe ingresar el Número de Serie y seleccionar un Modelo.';
@@ -151,11 +148,8 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       return;
     }
 
-    // 🛡️ 3. VALIDACIÓN SINTÁCTICA (PREFIJOS AUTORIZADOS Y SERIALES LARGOS HEX)
     const PREFIJOS_PERMITIDOS = ['ZTEGD', 'HWTC', 'FKBA', 'ALCL', 'GPON', 'SN'];
     const esSerialEstandar = PREFIJOS_PERMITIDOS.some(p => sn.startsWith(p));
-    
-    // Evalúa si es un Serial Largo Escaneado (Hexadecimal de 16 caracteres)
     const esSerialLargoHex = /^[0-9A-F]{16}$/i.test(sn);
 
     if (!esSerialEstandar && !esSerialLargoHex) {
@@ -168,7 +162,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       return;
     }
 
-    // 🛡️ 4. VALIDACIÓN DE LONGITUD DE CARACTERES
     if (sn.length < 10 || sn.length > 20) {
       const errTxt = `El serial "${sn}" posee ${sn.length} caracteres.\nLa longitud permitida para equipos de fibra es entre 10 y 20 caracteres.`;
       if (msg) {
@@ -179,7 +172,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       return;
     }
 
-    // 🛡️ 5. CONFIRMACIÓN DEL OPERADOR
     const mensajeConfirmacion = `⚠️ CONFIRMACIÓN DE INGRESO [Sucursal: ${sucActiva}]\n\n` +
                                 `¿Seguro que desea guardar este registro?\n\n` +
                                 `• SN: ${sn}\n` +
@@ -198,7 +190,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       msg.style.color = '#38bdf8';
     }
 
-    // 🛡️ 6. CONSULTA GLOBAL Y PERMISO PARA PISAR / REINGRESAR
     const [resOperativo, resHistorico] = await Promise.all([
       supabaseOps.from('recupero_operativo').select('id, sn, sucursal_id, condicion').ilike('sn', sn).limit(1),
       supabaseOps.from('recupero_historico_equipos').select('id, sn, sucursal_id').ilike('sn', sn).limit(1)
@@ -207,7 +198,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
     if (resOperativo.error) throw resOperativo.error;
     if (resHistorico.error) throw resHistorico.error;
 
-    // Si ya existe en la Mesa Activa, se le permite al operador "PISAR" el registro anterior
     if (resOperativo.data && resOperativo.data.length > 0) {
       const reg = resOperativo.data[0];
       const sucOrigen = reg.sucursal_id || 'Mesa Activa';
@@ -240,7 +230,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       }
     }
 
-    // Si el equipo pertenecía a un Histórico (Cierre semanal previo), se permite reingresarlo para volver a probar
     if (resHistorico.data && resHistorico.data.length > 0) {
       const regHist = resHistorico.data[0];
       const sucOrigen = regHist.sucursal_id || 'Histórico';
@@ -260,7 +249,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       }
     }
 
-    // 🛡️ 7. INSERCIÓN DE REGISTRO NUEVO
     const esVIP = esModeloVIP(modelo);
     const condicionAsignada = esVIP ? 'PENDIENTE' : 'DESCARTE';
     
@@ -273,7 +261,7 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       sn: sn,
       descripcion: modelo,
       almacen_origen: origen,
-      tecnico: operadorNombre,
+      tecnico: operadorNombre, // Guarda al operador que ingresó el equipo
       observaciones: detalleObs,
       condicion: condicionAsignada,
       sucursal_id: sucActiva
@@ -316,7 +304,6 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
 // ====================================================
 async function buscarEquipoParaPrueba() {
   const rawSn = document.getElementById('pr_serial')?.value || '';
-  // Clean string: Sanitización estricta idéntica al módulo de carga
   const sn = rawSn.trim().toUpperCase().replace(/\s+/g, '');
   
   const infoBox = document.getElementById('infoEquipoEnc');
@@ -345,7 +332,6 @@ async function buscarEquipoParaPrueba() {
     query = query.eq('sucursal_id', sucActiva);
   }
 
-  // 🛡️ CORRECCIÓN CLAVE: Ordenar por fecha_ingreso (cronológico) en lugar de id (UUID)
   const { data, error } = await query.order('fecha_ingreso', { ascending: false }).limit(1);
 
   if (error || !data || data.length === 0) {
@@ -367,7 +353,7 @@ async function buscarEquipoParaPrueba() {
   const descModelo = equipoCargadoActual.descripcion || equipoCargadoActual.modelo || '-';
   
   if (document.getElementById('infModelo')) document.getElementById('infModelo').textContent = 'Modelo: ' + descModelo;
-  if (document.getElementById('infOrigen')) document.getElementById('infOrigen').textContent = 'Origen: ' + (equipoCargadoActual.almacen_origen || '-') + ' | Técnico: ' + (equipoCargadoActual.tecnico || '-');
+  if (document.getElementById('infOrigen')) document.getElementById('infOrigen').textContent = 'Origen: ' + (equipoCargadoActual.almacen_origen || '-') + ' | Carga: ' + (equipoCargadoActual.tecnico || '-') + (equipoCargadoActual.tecnico_prueba ? ' | Probo: ' + equipoCargadoActual.tecnico_prueba : '');
   
   const urlImgPrueba = obtenerUrlImagenModelo(descModelo);
   if (urlImgPrueba && boxPreviewPrueba && imgPreviewPrueba) {
@@ -405,7 +391,7 @@ async function buscarEquipoParaPrueba() {
     if (bannerTesteado) {
       bannerTesteado.innerHTML = `ℹ️ <strong>Equipo ya testeado o procesado</strong><br>` +
         `Veredicto previo: ${veredictoFormateado}<br>` +
-        `📥 Ingreso: <strong>${fechaIngresoStr}</strong> | 🔬 Testeado: <strong>${fechaPruebaStr}</strong><br>` +
+        `📥 Ingreso: <strong>${fechaIngresoStr}</strong> | 🔬 Testeado: <strong>${fechaPruebaStr}</strong> (por ${equipoCargadoActual.tecnico_prueba || equipoCargadoActual.tecnico || 'Lab'})<br>` +
         `Detalle / Observación: ${equipoCargadoActual.observaciones || 'Ninguno'}`;
     }
     
@@ -470,7 +456,6 @@ document.getElementById('form-prueba')?.addEventListener('submit', async (e) => 
   e.preventDefault();
   const btnGuardarPrueba = document.getElementById('btnGuardarPrueba');
   
-  // 🛡️ 1. BLOQUEO ANTI DOBLE-CLIC
   if (btnGuardarPrueba) btnGuardarPrueba.disabled = true;
 
   const msg = document.getElementById('statusPrueba');
@@ -485,7 +470,6 @@ document.getElementById('form-prueba')?.addEventListener('submit', async (e) => 
     return;
   }
 
-  // 🛡️ 2. RECALCULAR VEREDICTO JUSTO ANTES DE GUARDAR
   evaluarVeredictoPrueba();
 
   if (msg) {
@@ -506,9 +490,10 @@ document.getElementById('form-prueba')?.addEventListener('submit', async (e) => 
     const potenciaIngresada = parseFloat(document.getElementById('test_dbm')?.value);
     const motivoFalla = veredictoFinalCalculado === 'DESCARTE' ? (document.getElementById('pr_motivo')?.value || 'Sin especificar') : 'Ninguno';
 
+    // 🛡️ AQUÍ SE SEPARA EL TÉCNICO DE PRUEBA DEL TÉCNICO DE CARGA
     const payloadUpdate = {
       condicion: veredictoFinalCalculado,
-      tecnico: operadorNombre,
+      tecnico_prueba: operadorNombre, // Regista quién cerró la prueba de lab
       inicio_prueba: fechaInicioPruebaTemp ? fechaInicioPruebaTemp.toISOString() : null,
       fin_prueba: fechaFinPrueba.toISOString(),
       tiempo_prueba_seg: tiempoPruebaSeg,
@@ -522,6 +507,9 @@ document.getElementById('form-prueba')?.addEventListener('submit', async (e) => 
       .eq('id', equipoCargadoActual.id);
 
     if (error) throw error;
+
+    equipoCargadoActual.tecnico_prueba = operadorNombre;
+    equipoCargadoActual.condicion = veredictoFinalCalculado;
 
     if (msg) {
       msg.textContent = '✅ ¡Resultado de laboratorio guardado con éxito!';
@@ -559,7 +547,6 @@ function imprimirEtiquetaPrueba() {
     veredicto = document.getElementById('boxVeredictoPrueba')?.textContent.replace('Veredicto:', '').trim() || 'CIRCULACIÓN';
   }
 
-  // 1. Obtener la fecha real de la prueba desde fin_prueba de la BD
   let fechaPrueba = '--/--/----';
   const fechaRaw = equipoCargadoActual.fin_prueba || equipoCargadoActual.fecha_ingreso || equipoCargadoActual.created_at;
 
@@ -573,22 +560,19 @@ function imprimirEtiquetaPrueba() {
     }
   }
 
-  // 2. Extraer la Potencia Óptica real desde las observaciones "[Pot: -25.8dBm]"
   let potenciaOptica = 'N/D';
   const obsTexto = equipoCargadoActual.observaciones || equipoCargadoActual.detalle || '';
   const matchPot = obsTexto.match(/\[Pot:\s*([^\]]+)\]/i);
 
   if (matchPot && matchPot[1]) {
-    potenciaOptica = matchPot[1].trim(); // Extrae directamente "-25.8dBm"
+    potenciaOptica = matchPot[1].trim();
   } else {
-    // Fallback: si no estaba guardado en texto, intenta leer el valor activo de la UI
     const inputDbm = document.getElementById('test_dbm')?.value;
     if (inputDbm) {
       potenciaOptica = inputDbm.includes('dBm') ? inputDbm : `${inputDbm} dBm`;
     }
   }
 
-  // 3. Inyección en los elementos HTML de la etiqueta
   if (document.getElementById('lbl_sn')) document.getElementById('lbl_sn').textContent = 'SN: ' + sn;
   if (document.getElementById('lbl_modelo')) document.getElementById('lbl_modelo').textContent = modelo;
   if (document.getElementById('lbl_dbm')) document.getElementById('lbl_dbm').textContent = potenciaOptica;
@@ -596,10 +580,10 @@ function imprimirEtiquetaPrueba() {
 
   const lblTecnico = document.getElementById('lbl_tecnico');
   if (lblTecnico) {
-    lblTecnico.textContent = equipoCargadoActual.tecnico || operadorNombre;
+    // Imprime el técnico responsable del test
+    lblTecnico.textContent = equipoCargadoActual.tecnico_prueba || equipoCargadoActual.tecnico || operadorNombre;
   }
 
-  // 4. Manejo de Fallas en la Etiqueta
   const containerFallas = document.getElementById('lbl_fallas_container');
   const txtFallas = document.getElementById('lbl_fallas_texto');
   
@@ -624,7 +608,6 @@ function imprimirEtiquetaPrueba() {
     }
   }
 
-  // 5. Formato Visual del Veredicto
   const lblVeredicto = document.getElementById('lbl_veredicto_box');
   if (lblVeredicto) {
     lblVeredicto.textContent = veredicto;
@@ -642,7 +625,6 @@ function imprimirEtiquetaPrueba() {
 // INICIALIZACIÓN DE EVENTOS EN DOM
 // ====================================================
 document.addEventListener('DOMContentLoaded', () => {
-  // Preview de imagen en Formulario Carga
   document.getElementById('cg_modelo')?.addEventListener('change', (e) => {
     const modelo = e.target.value;
     const urlImg = obtenerUrlImagenModelo(modelo);
@@ -657,7 +639,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Búsqueda por ENTER en Laboratorio
   document.getElementById('pr_serial')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -665,7 +646,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Revaluación dinámica en tiempo real durante la prueba
   ['test_1', 'test_2', 'test_dbm', 'pr_motivo'].forEach(id => {
     const elem = document.getElementById(id);
     if (elem) {

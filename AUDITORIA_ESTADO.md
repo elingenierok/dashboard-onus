@@ -1,311 +1,310 @@
 # Estado de la auditoría del dashboard-onus_test
 
-> **Última actualización:** 2026-09-22
-> **Estado:** Pausado. Proyecto estable y auditado. Sin bugs críticos pendientes.
+> **Última actualización:** 2026-09-23
+> **Estado:** Pausado. Proyecto estable. Pendiente: verificar si el bot automático
+> logra loguearse solo (probar mañana a la mañana).
 
 ---
 
 ## CÓMO RETOMAR EL TRABAJO
 
-1. **Leer este archivo completo** antes de tocar nada.
-2. **Empezar por la sección "Próximos pasos sugeridos"** al final.
-3. **Antes de cada cambio:** abrir el archivo, leerlo entero, entender qué hace, después modificar.
-4. **Después de cada cambio:** recargar el dashboard con `Ctrl + F5`, verificar la pestaña correspondiente, y actualizar este `.md`.
-5. **Si algo se rompe:** revisar la consola del navegador (F12 → Console) primero. Casi siempre dice qué archivo y qué línea falló.
+1. Leer este archivo completo antes de tocar nada.
+2. Empezar por la sección "Próximos pasos sugeridos" al final.
+3. Antes de cada cambio: abrir el archivo, leerlo entero, entender qué hace.
+4. Después de cada cambio: recargar el dashboard con Ctrl + F5 y verificar.
+5. Si algo se rompe: revisar la consola del navegador (F12 → Console) primero.
 
 ---
 
-## Cerrado (ya hecho)
+## HISTORIAL DE CAMBIOS (por sesión)
 
-### Eliminaciones y limpieza
+### Sesión 2026-09-21 — Auditoría inicial
 
-| Fecha | Acción | Detalle |
-|---|---|---|
-| 2026-09-21 | Borrado `bot_precios.js` | Apuntaba a tabla inexistente |
-| 2026-09-21 | Borrado `cargar_precios.js` | Duplicado manual del anterior |
-| 2026-09-21 | Borrado `server.js` | Llamaba a `bot.js` inexistente |
-| 2026-09-21 | Borrado `bot_historico.js` | Unificado en `bot_vivo.js` |
-| 2026-09-21 | Borrado `bot_vivo.js.old` | Ya no hacía falta |
-| 2026-09-21 | Tarea del Programador del histórico | Borrada |
-| 2026-09-22 | Borrada tabla `stock_historico_test` | 16 filas de prueba |
-| 2026-09-22 | Borrada tabla `stock_moviles` | 2 filas de prueba |
-| 2026-09-22 | Borrada tabla `comunicaciones` | 0 filas, huérfana |
-| 2026-09-22 | Borrada tabla `registro_recupero` | 22 filas huérfanas |
+- Lectura de archivos principales.
+- Identificación de `server.js` roto, `bot_precios.js` roto, 3 bots duplicados.
 
-### Bots y automatización
+### Sesión 2026-09-22 — Cambios grandes
 
-| Fecha | Acción | Detalle |
-|---|---|---|
-| 2026-09-22 | Unificado `bot_vivo.js` | Stock vivo + histórico + popup con check |
-| 2026-09-22 | Creado `bot_vivo_manual.js` + `.bat` | Bot manual para desbloquear sesión del ISP |
+- Unificación de bots en un solo `bot_vivo.js`.
+- Reescritura completa de políticas RLS (50 nuevas).
+- Limpieza de tablas huérfanas y columnas redundantes.
+- Centralización de credenciales en `js/core/config.js`.
+- Creación del radar multisucursal (`recupero_radar.js`).
+- Fixes en `recupero_ui.js`, `recupero_actions.js`, `referencias.js`, `tendencias.js`.
 
-### Base de datos (seguridad y estructura)
+### Sesión 2026-09-23 — Login del bot automático
 
-| Fecha | Acción | Detalle |
-|---|---|---|
-| 2026-09-22 | RLS activo en 3 tablas | Antes sin RLS |
-| 2026-09-22 | Políticas RLS reescritas | 50 políticas nuevas por comando y rol |
-| 2026-09-22 | Función `es_superadmin()` creada | Para las políticas |
-| 2026-09-22 | Índices agregados a `stock_historico` | fecha, codigo, unique |
-| 2026-09-22 | `registro_stock` con `sucursal_id` + `tipo_almacen` | + trigger |
-| 2026-09-22 | Fix del default `OBE` | Ahora el trigger deduce bien |
-| 2026-09-22 | Borradas columnas redundantes de `auditoria_control_detalle` | cantidad_sistema, cantidad_fisica, auditoria_id |
-| 2026-09-22 | Limpieza de `recupero_historico_equipos` | 991 duplicados borrados, quedan 1397 únicos |
-| 2026-09-22 | UNIQUE en `recupero_historico_equipos.sn` | Previene duplicados futuros |
-
-### Código del frontend
-
-| Fecha | Acción | Detalle |
-|---|---|---|
-| 2026-09-22 | Fix `recupero_ui.js` | Llave `}` faltante en `actualizarGraficoRecuperoDiario` |
-| 2026-09-22 | Fix `recupero.js` | `obtenerInfoCatalogo` expuesto en `window` |
-| 2026-09-22 | Fix `recupero_actions.js` | Anti-doble-click + borrar del histórico antes de reinsertar |
-| 2026-09-22 | Fix `referencias.js` | Borrada función duplicada y código muerto |
-| 2026-09-22 | Fix `referencias.js` | Detección de superadmin por `window.PERMISOS_ACTUALES` |
-| 2026-09-22 | Fix `tendencias.js` | Filtrar últimos 3 meses en `descargarHistorialCompleto` |
-| 2026-09-22 | Fix `tendencias.js` | Subir límites de autocompletado (3000→10000, 10000→20000) + avisos |
-| 2026-09-22 | `.gitignore` actualizado | descargas_bot, *.csv, *.zip |
-
-### Centralización de credenciales
-
-| Fecha | Acción | Detalle |
-|---|---|---|
-| 2026-09-22 | Creado `js/core/config.js` | Credenciales centralizadas en `window.APP_CONFIG` |
-| 2026-09-22 | Unificadas credenciales en 10 archivos | URL y KEY solo viven en `config.js` |
-| 2026-09-22 | `index.html` y `ops.html` cargan `config.js` antes de `auth.js` | — |
-
-### Radar Multisucursal (nuevo módulo)
-
-| Fecha | Acción | Detalle |
-|---|---|---|
-| 2026-09-22 | Creado `js/modules/recupero/recupero_radar.js` | Comparativo multisucursal con 4 gráficos radar |
-| 2026-09-22 | `index.html` con sección radar | Botón desplegable dentro de pestaña RECUPERO |
+- Se detectó que el bot automático fallaba a la mañana por sesión expirada del ISP.
+- Se modificó `bot_vivo.js` para intentar login con timeout de 20 segundos.
+- Pendiente: verificar mañana si el login automático funciona de verdad.
 
 ---
 
-## Resumen de lectura de módulos
+## ESTADO DEL BOT (IMPORTANTE)
 
-| Módulo | Estado | Hallazgos activos |
-|---|---|---|
-| `stock.js` | ✅ Leído | 2 (código muerto, var sin asignar) |
-| `stock_insumos.js` | ✅ Leído | 1 (duplicación menor) |
-| `recupero.js` | ✅ Leído | 2 (items huérfanos, reasignación) |
-| `recupero_ui.js` | ✅ Leído | 1 (duplicación de cálculo) |
-| `recupero_actions.js` | ✅ Leído | 0 |
-| `recupero_radar.js` | ✅ Nuevo | 0 |
-| `tendencias.js` | ✅ Leído | 1 (upsert masivo de referencias) |
-| `referencias.js` | ✅ Leído | 1 (upsert masivo) |
-| `admin.js` | ✅ Leído | 0 |
-| `ops.js` | ✅ Leído | 0 |
-| `app.js` | ✅ Leído | 0 |
-| `auth.js` | ✅ Leído | 0 |
-| `config.js` | ✅ Nuevo | 0 |
-| `reportes.js` | ⏸️ Congelado | No se audita |
-| `ops.html` | ✅ Leído | 0 |
-| `index.html` | ✅ Leído | 0 |
-| `auditoria.html` | ❌ No leído | Pendiente |
-| `test_recupero_radar.html` | ⏸️ Prototipo viejo | Reemplazado por `recupero_radar.js` |
+### Situación actual
+
+| Escenario | Comportamiento |
+|---|---|
+| Sesión viva | Bot corre invisible. Actualiza vivo + histórico |
+| Sesión expirada, ISP responde | Bot se loguea solo. Actualiza vivo + histórico |
+| Sesión expirada, ISP no responde | Popup "Sesión del ISP expirada" con instrucciones |
+| Manual ejecutado | Abre Chrome visible. Te logueás. El bot hace su trabajo |
+
+### Qué probar mañana (2026-09-24)
+
+1. Encender la notebook y NO ejecutar el manual.
+2. Esperar a la corrida automática (cada 15 min).
+3. Ver si aparece popup de "Sesión expirada" o si actualiza normal.
+4. Anotar el resultado acá abajo.
+
+### Resultado de la prueba
+
+- **Fecha:**
+- **¿Actualizó solo?:** SI / NO
+- **¿Apareció popup?:** SI / NO
+- **Observaciones:**
 
 ---
 
-## Pendientes
+## PENDIENTES
 
-| # | Tema | Prioridad | Notas para retomar |
+| # | Tema | Prioridad | Notas |
 |---|---|---|---|
-| 1 | Leer `auditoria.html` | Baja | Solo lectura. Verificar qué carga y si está alineado con `auditoria.js` |
-| 2 | `sb_secret_` en `.env` de bots | Baja | Riesgo latente. No urgente. Ver "Notas de seguridad" abajo |
-| 3 | Cosmético: `\n` en popup del bot | Baja | Los `\n` aparecen como texto literal en vez de saltos de línea |
-| 4 | `package.json` con `"main": "index.js"` | Baja | No existe ese archivo. Ignorable |
-| 5 | `reportes.js` congelado | Baja | Módulo parado por el usuario. No tocar sin pedido explícito |
-| 6 | `test_recupero_radar.html` | Baja | Prototipo viejo. Se puede borrar o dejar |
+| 1 | Verificar login automático del bot mañana | Alta | Ver sección "Estado del bot" |
+| 2 | Leer `auditoria.html` | Baja | Solo lectura |
+| 3 | `sb_secret_` en `.env` | Baja | Riesgo latente. Ver "Notas de seguridad" |
+| 4 | Cosmético: `\n` literal en popup del bot | Baja | Aparece "\n" en vez de salto de línea |
+| 5 | `package.json` con `"main": "index.js"` | Baja | No existe ese archivo. Ignorable |
+| 6 | `reportes.js` congelado | Baja | No tocar sin pedido explícito |
+| 7 | `test_recupero_radar.html` | Baja | Prototipo viejo. Se puede borrar |
+| 8 | **Comentar los archivos `.js` con descripciones** | Media | Ver sección "Tarea extra" abajo |
 
 ---
 
-## Hallazgos detectados (sin arreglar)
+## TAREA EXTRA: COMENTAR CÓDIGO
 
-| # | Hallazgo | Archivo | Gravedad | Notas para retomar |
-|---|---|---|---|---|
-| 1 | 4 copias de `normalizar` con distintos nombres | varios | Baja | `window.normalizar`, `normalizar` local, `normalizarTextoAud`, `normalizarTexto` |
-| 2 | `renderAuditoriaTabla` es código muerto | stock.js | Baja | Solo se define, nadie la llama. Se puede borrar |
-| 3 | `window.EstadoStock.catrielCant` nunca se asigna | stock.js | Baja | Variable muerta |
-| 4 | `renderTablaRecuperoDiario` recalcula lo mismo | recupero_ui.js | Media | **Ojo:** `recupero_ui.js` es el archivo más grande. Cambiar con cuidado |
-| 5 | `itemsOrigenHoy` y `itemsTesteadosHoy` nunca se asignan | recupero.js | Baja | Los fallbacks a otros arrays hacen que funcione igual |
-| 6 | `auditoria_control_activo.auditor`/`auditor_nombre` duplicados | DB | Baja | Tienen el mismo valor. Unificar requiere cambio de código |
-| 7 | `upsert` de clasificación manda todos los ítems visibles | referencias.js | Baja | Ineficiente pero funcional |
+**Objetivo:** que cada archivo `.js` tenga al principio un bloque de comentario que explique:
 
----
+- Qué hace el archivo.
+- Qué módulo del dashboard alimenta.
+- Qué tablas de Supabase lee o escribe.
+- Qué funciones expone a `window` (si corresponde).
 
-## Cerrados en la sección de hallazgos
+**Ejemplo de bloque a agregar al inicio de cada archivo:**
 
-- ~~Llave faltante → `window.toggle*` no se definen~~
-- ~~`obtenerInfoCatalogo` no está en `window`~~
-- ~~Duplicados internos en `recupero_historico_equipos`~~
-- ~~`cargarDatosUmbralesAlmacen` duplicada~~
-- ~~`renderizarTablaReferencias`/`renderizarTablaUmbrales` es código muerto~~
-- ~~`tendencias.js` descarga todo `stock_historico` cada vez~~
-- ~~Detección de superadmin por CSS en referencias.js~~
-- ~~5 copias de SUPABASE_URL + SUPABASE_KEY~~
-- ~~Otra copia de credenciales en admin.js~~
-- ~~Límites silenciosos en tendencias (3000/10000)~~
+```js
+// ====================================================
+// MÓDULO: <nombre del módulo>
+// DESCRIPCIÓN: <qué hace en 1 o 2 líneas>
+// TABLAS QUE USA: <nombres>
+// EXPONE EN WINDOW: <nombres de funciones globales>
+// ====================================================
 
----
+Archivos a comentar:
 
-## Notas de seguridad
+Archivo	Tiene encabezado?
+js/core/config.js	SI (parcial)
+js/core/auth.js	SI (parcial)
+js/core/app.js	SI
+js/modules/stock/stock.js	SI (parcial)
+js/modules/stock/stock_insumos.js	SI (parcial)
+js/modules/recupero/recupero.js	SI
+js/modules/recupero/recupero_ui.js	SI
+js/modules/recupero/recupero_actions.js	SI
+js/modules/recupero/recupero_radar.js	SI
+js/modules/tendencias/tendencias.js	SI
+js/modules/auditoria/auditoria.js	SI
+js/modules/auditoria/visor.js	SI
+js/modules/referencias/referencias.js	SI
+js/modules/admin/admin.js	SI
+js/modules/ops/ops.js	SI
+js/services/reportes.js	SI
+Tarea concreta: completar el encabezado de cada archivo con las 4 líneas indicadas arriba (MÓDULO, DESCRIPCIÓN, TABLAS, EXPONE).
 
-### Estado actual (2026-09-22)
+RESULTADO DE LA ÚLTIMA AUDITORÍA (2026-09-22)
+Lo que se hizo
+Área	Cambio
+Seguridad	RLS activo en 13 tablas. 50 políticas por rol. Cero acceso anónimo
+Credenciales	Centralizadas en js/core/config.js (antes en 10 archivos)
+Bots	De 4 bots (2 roto, 1 duplicado) a 2 (1 automático, 1 manual)
+Código muerto	Limpiado en stock.js, referencias.js, recupero_ui.js
+Radar multisucursal	Módulo nuevo integrado en pestaña RECUPERO
+Tablas huérfanas	4 tablas de prueba borradas
+Duplicados en histórico	991 filas duplicadas limpiadas + UNIQUE agregado
+Lo que quedó pendiente
+7 hallazgos chicos (todos Baja salvo uno Medio).
 
-| Elemento | Estado |
-|---|---|
-| Frontend usa `publishable key` | ✅ Correcto. Es pública por diseño |
-| Bots usan `sb_secret_` en `.env` | ⚠️ Funciona, pero es más poder del necesario |
-| `.env` en `.gitignore` | ✅ Nunca se subió a Git |
-| `user_data/` en `.gitignore` | ✅ |
-| RLS activo en todas las tablas | ✅ |
-| Políticas RLS por rol | ✅ 50 políticas |
-| Registro público de Supabase | ✅ Cerrado. Solo el admin puede crear usuarios |
-| `service_role` / `sb_secret_` en frontend | ✅ No está. Solo en `.env` de bots |
+Login automático del bot (en verificación).
 
-### Sobre el `sb_secret_` de los bots (pendiente #2)
+HALLAZGOS ACTIVOS (sin arreglar)
+#	Hallazgo	Archivo	Gravedad
+1	4 copias de normalizar con distintos nombres	varios	Baja
+2	renderAuditoriaTabla es código muerto	stock.js	Baja
+3	window.EstadoStock.catrielCant nunca se asigna	stock.js	Baja
+4	renderTablaRecuperoDiario recalcula lo mismo que recupero.js	recupero_ui.js	Media
+5	itemsOrigenHoy y itemsTesteadosHoy nunca se asignan	recupero.js	Baja
+6	auditoria_control_activo.auditor y auditor_nombre duplicados	DB	Baja
+7	upsert de clasificación manda todos los ítems visibles	referencias.js	Baja
+HALLAZGOS CERRADOS
+~~Llave faltante en recupero_ui.js (window.toggle*)~~
 
-**Riesgo:** bajo (el `.env` está ignorado en Git y no se sirve al navegador).
-**Recomendación:** dejarlo como está por ahora. Si algún día migrás a otra base de datos o compartís el proyecto con más gente, evaluar crear un "usuario bot" en Supabase Auth con permisos limitados a `registro_stock` y `stock_historico`.
-**Si alguna vez sospechás que se filtró:** Supabase → Settings → API → Rotate Secret Keys. Después actualizar `.env`.
+~~obtenerInfoCatalogo no está en window~~
 
----
+~~Duplicados internos en recupero_historico_equipos~~
 
-## Estado de la base de datos
+~~cargarDatosUmbralesAlmacen duplicada~~
 
-### Tablas en `public` (13 activas)
+~~renderizarTablaReferencias/renderizarTablaUmbrales código muerto~~
 
-| Tabla | Rol |
-|---|---|
-| `registro_stock` | Foto actual del stock (bot vivo) |
-| `stock_historico` | Foto diaria del stock (bot histórico) |
-| `catalogo_equipos` | Catálogo de equipos ONUs |
-| `catalogo_insumos` | Catálogo de insumos |
-| `config_stock_almacen` | Umbrales (mín/PP/máx) por almacén |
-| `usuarios_permisos` | Permisos de cada usuario |
-| `recupero_operativo` | Equipos en mesa activa del laboratorio |
-| `recupero_historico_equipos` | Equipos cerrados en cierres semanales |
-| `recupero_informes_semanales` | Resúmenes semanales |
-| `auditoria_control_activo` | Cabeceras de auditoría |
-| `auditoria_control_detalle` | Detalle por modelo |
-| `auditoria_sucursales` | Config de sucursales a auditar |
+~~tendencias.js descargaba todo stock_historico cada vez~~
 
-### Funciones y triggers
+~~Detección de superadmin por CSS en referencias.js~~
 
-| Objeto | Tipo | Detalle |
-|---|---|---|
-| `es_superadmin()` | Función | Usada por las políticas RLS |
-| `auto_clasificar_stock_historico()` | Función | Deduce `sucursal_id` y `tipo_almacen` |
-| `trg_auto_clasificar_registro_stock` | Trigger | Aplica a `registro_stock` |
-| `trg_auto_clasificar_stock_historico` | Trigger | Aplica a `stock_historico` |
+~~5 copias de SUPABASE_URL + SUPABASE_KEY~~
 
-### Sucursales operativas
+~~Otra copia de credenciales en admin.js~~
 
-| Código | Nombre |
-|---|---|
-| OBE | Oberá (Matriz) |
-| SPD | San Pedro |
-| WND | Wanda |
-| ITU | Ituzaingó |
-| ELDO | Eldorado |
+~~Límites silenciosos en tendencias (3000/10000)~~
 
----
+NOTAS DE SEGURIDAD
+Elemento	Estado
+Frontend usa publishable key	OK. Es pública por diseño
+Bots usan sb_secret_ en .env	OK. Es más poder del necesario, pero el .env está ignorado en Git
+.env en .gitignore	OK
+user_data/ en .gitignore	OK
+RLS activo en todas las tablas	OK
+Registro público de Supabase	Cerrado. Solo el admin crea usuarios
+sb_secret_ en frontend	No está. Solo en .env de bots
+Si alguna vez sospechás que la clave se filtró: Supabase → Settings → API → Rotate Secret Keys. Después actualizar .env.
 
-## Próximos pasos sugeridos
-
-### Si querés seguir mejorando el proyecto
-
-1. **Leer `auditoria.html`** (pendiente #1). Solo lectura. Verificar que no tenga credenciales hardcodeadas ni código muerto.
-2. **Decidir qué hacer con `test_recupero_radar.html`** (pendiente #6). Es un prototipo viejo. Se puede borrar.
-3. **Revisar los hallazgos chicos** (#2, #3, #5, #6, #7). Son cosméticos. Ninguno rompe nada.
-
-### Si querés arreglar algo más profundo
-
-4. **Hallazgo #4** (duplicación en `recupero_ui.js`). Es el último de prioridad Media. Requiere refactor cuidadoso.
-
-### Si querés cerrar la auditoría
-
-5. Hacer un informe final consolidado con todo lo hecho y lo pendiente. Este `.md` ya sirve como base.
-
----
-
-## Notas importantes para futuras sesiones
-
-- **No tocar `reportes.js`** sin pedido explícito. Está congelado por el usuario.
-- **No tocar `recupero_ui.js`** sin leerlo entero primero. Es el archivo más grande y delicado.
-- **Antes de cambiar cualquier `.js`:** verificar la consola del navegador (F12) al recargar.
-- **Cada cambio de credenciales:** recordar que ahora viven SOLO en `js/core/config.js`.
-- **Cada cambio de base de datos:** hacer backup con `select * from tabla` antes de tocar.
-- **Cada cambio de políticas RLS:** guardar el resultado de `pg_policies` en un `.txt` antes de tocar.
-
----
-
-## Archivos del proyecto (estado actual)
+ESTADO DE LA BASE DE DATOS
+Tablas en public (13 activas)
+Tabla	Rol
+registro_stock	Foto actual del stock (bot vivo)
+stock_historico	Foto diaria del stock (bot histórico)
+catalogo_equipos	Catálogo de equipos ONUs
+catalogo_insumos	Catálogo de insumos
+config_stock_almacen	Umbrales (mín/PP/máx) por almacén
+usuarios_permisos	Permisos de cada usuario
+recupero_operativo	Equipos en mesa activa del laboratorio
+recupero_historico_equipos	Equipos cerrados en cierres semanales
+recupero_informes_semanales	Resúmenes semanales
+auditoria_control_activo	Cabeceras de auditoría
+auditoria_control_detalle	Detalle por modelo
+auditoria_sucursales	Config de sucursales a auditar
+Funciones y triggers
+Objeto	Tipo	Detalle
+es_superadmin()	Función	Usada por las políticas RLS
+auto_clasificar_stock_historico()	Función	Deduce sucursal_id y tipo_almacen
+trg_auto_clasificar_registro_stock	Trigger	Aplica a registro_stock
+trg_auto_clasificar_stock_historico	Trigger	Aplica a stock_historico
+Sucursales operativas
+Código	Nombre
+OBE	Oberá (Matriz)
+SPD	San Pedro
+WND	Wanda
+ITU	Ituzaingó
+ELDO	Eldorado
+MÓDULOS LEÍDOS
+Módulo	Estado	Hallazgos activos
+stock.js	Leído	2
+stock_insumos.js	Leído	1
+recupero.js	Leído	2
+recupero_ui.js	Leído	1
+recupero_actions.js	Leído	0
+recupero_radar.js	Nuevo	0
+tendencias.js	Leído	1
+referencias.js	Leído	1
+admin.js	Leído	0
+ops.js	Leído	0
+app.js	Leído	0
+auth.js	Leído	0
+config.js	Nuevo	0
+reportes.js	Congelado	No se audita
+ops.html	Leído	0
+index.html	Leído	0
+auditoria.html	NO LEÍDO	Pendiente
+test_recupero_radar.html	Prototipo viejo	Reemplazado
+ARCHIVOS DEL PROYECTO
+text
 dashboard-onus_test/
-├── index.html ← dashboard principal
-├── ops.html ← suite operativa (laboratorio)
-├── auditoria.html ← ❌ no leído
-├── test_recupero_radar.html ← prototipo viejo (reemplazado por recupero_radar.js)
-├── bot_vivo.js ← bot automático (stock + histórico)
-├── bot_vivo_manual.js ← bot manual (desbloqueo)
-├── ejecutar_manual.bat ← lanzador del bot manual
-├── package.json ← dependencias
+│
+├── index.html                          Dashboard principal
+├── ops.html                            Suite operativa (laboratorio)
+├── auditoria.html                      NO LEÍDO
+├── test_recupero_radar.html            Prototipo viejo
+│
+├── bot_vivo.js                         Bot automático (vivo + histórico)
+├── bot_vivo_manual.js                  Bot manual (desbloqueo)
+├── ejecutar_manual.bat                 Lanzador del bot manual
+│
+├── package.json                        Dependencias
 ├── package-lock.json
-├── .env ← credenciales de bots (NO en Git)
-├── .gitignore ← user_data, node_modules, .env, descargas_bot, *.csv
+├── .env                                Credenciales bots (NO en Git)
+├── .gitignore
 ├── .nojekyll
-├── stockactual.csv ← excluido del .gitignore
-├── AUDITORIA_ESTADO.md ← este archivo
+├── stockactual.csv
+├── AUDITORIA_ESTADO.md                 Este archivo
+│
 ├── js/
-│ ├── core/
-│ │ ├── config.js ← NUEVO: credenciales centralizadas
-│ │ ├── auth.js
-│ │ └── app.js
-│ ├── modules/
-│ │ ├── stock/
-│ │ │ ├── stock.js
-│ │ │ └── stock_insumos.js
-│ │ ├── recupero/
-│ │ │ ├── recupero.js
-│ │ │ ├── recupero_ui.js
-│ │ │ ├── recupero_actions.js
-│ │ │ └── recupero_radar.js ← NUEVO: radar multisucursal
-│ │ ├── tendencias/
-│ │ │ └── tendencias.js
-│ │ ├── auditoria/
-│ │ │ ├── auditoria.js
-│ │ │ └── visor.js
-│ │ ├── referencias/
-│ │ │ └── referencias.js
-│ │ ├── admin/
-│ │ │ └── admin.js
-│ │ └── ops/
-│ │ └── ops.js
-│ └── services/
-│ └── reportes.js ← congelado
-├── descargas_bot/ ← CSV del bot (ignorado en Git)
-├── user_data/ ← perfil de Chrome del bot (ignorado en Git)
-└── node_modules/ ← ignorado en Git
+│   ├── core/
+│   │   ├── config.js                   Credenciales centralizadas
+│   │   ├── auth.js
+│   │   └── app.js
+│   ├── modules/
+│   │   ├── stock/
+│   │   │   ├── stock.js
+│   │   │   └── stock_insumos.js
+│   │   ├── recupero/
+│   │   │   ├── recupero.js
+│   │   │   ├── recupero_ui.js
+│   │   │   ├── recupero_actions.js
+│   │   │   └── recupero_radar.js       Radar multisucursal
+│   │   ├── tendencias/
+│   │   │   └── tendencias.js
+│   │   ├── auditoria/
+│   │   │   ├── auditoria.js
+│   │   │   └── visor.js
+│   │   ├── referencias/
+│   │   │   └── referencias.js
+│   │   ├── admin/
+│   │   │   └── admin.js
+│   │   └── ops/
+│   │       └── ops.js
+│   └── services/
+│       └── reportes.js                 Congelado
+│
+├── descargas_bot/                      CSV del bot (ignorado en Git)
+├── user_data/                          Perfil Chrome (ignorado en Git)
+└── node_modules/                       Ignorado en Git
+PRÓXIMOS PASOS SUGERIDOS
+Prioridad Alta
+Verificar mañana si el bot automático logra loguearse solo (ver sección "Estado del bot").
 
+Prioridad Media
+Comentar los archivos .js con descripciones (ver sección "Tarea extra").
 
----
+Arreglar hallazgo #4 (duplicación en recupero_ui.js). Requiere cuidado.
 
-## Changelog de sesiones
+Prioridad Baja
+Leer auditoria.html.
 
-### Sesión 2026-09-21 (inicio)
-- Auditoría inicial. Lectura de archivos principales.
-- Identificación de problemas: `server.js` roto, `bot_precios.js` roto, 3 bots duplicados.
+Decidir si borrar test_recupero_radar.html.
 
-### Sesión 2026-09-22 (principal)
-- Unificación de bots.
-- Reescritura de políticas RLS.
-- Limpieza de tablas huérfanas.
-- Centralización de credenciales en `config.js`.
-- Creación del radar multisucursal.
-- Arreglo de múltiples bugs en `recupero_ui.js`, `referencias.js`, `tendencias.js`, `recupero_actions.js`.
+Revisar hallazgos chicos (#2, #3, #5, #6, #7).
 
----
+NOTAS PARA FUTURAS SESIONES
+No tocar reportes.js sin pedido explícito.
 
-**FIN DEL DOCUMENTO**
+No tocar recupero_ui.js sin leerlo entero primero.
+
+Antes de cambiar cualquier .js: verificar consola del navegador (F12).
+
+Credenciales viven SOLO en js/core/config.js.
+
+Antes de cambiar la base de datos: backup con select * from tabla.
+
+Antes de cambiar políticas RLS: guardar pg_policies en un .txt.
+
+FIN DEL DOCUMENTO
