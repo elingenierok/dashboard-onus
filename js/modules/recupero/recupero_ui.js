@@ -197,6 +197,27 @@ function actualizarMatrizYDetalleUI() {
   renderDetalleYTecnicosUI(filtrados);
 }
 
+// Helper auxiliar para identificar equipos VIP dinámicamente desde catalogo_equipos
+function esModeloVIP(r) {
+  // 1. Si la consulta SQL o JOIN ya trae la propiedad es_vip de la BD
+  if (r.es_vip !== undefined && r.es_vip !== null) {
+    return Boolean(r.es_vip);
+  }
+
+  // 2. Si se cruza dinámicamente contra la variable global del catálogo (cargada desde la BD)
+  if (window.catalogoEquipos && Array.isArray(window.catalogoEquipos)) {
+    const descRegistro = (r.descripcion || r.modelo || '').trim().toUpperCase();
+    return window.catalogoEquipos.some(cat => 
+      cat.es_vip === true && (
+        (cat.modelo && descRegistro.includes(cat.modelo.trim().toUpperCase())) ||
+        (cat.modelo_norm && descRegistro.includes(cat.modelo_norm.trim().toUpperCase()))
+      )
+    );
+  }
+
+  return false;
+}
+
 function renderDetalleYTecnicosUI(itemsBase) {
   const tbodySN = document.getElementById('tbody-detalle-sn');
   const lblTitulo = document.getElementById('lbl-titulo-detalle');
@@ -238,7 +259,6 @@ function renderDetalleYTecnicosUI(itemsBase) {
       const sucFormateada = normalizarSucursalMatriz(r.sucursal_id);
       const origenFormateado = normalizarOrigenMatriz(r.almacen_origen || r.origen);
 
-      // Etiqueta destacada azul para Sucursal
       return `<tr style="background: #0f172a;">
         <td style="color: #cbd5e1; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${fecha}</td>
         <td style="padding: 8px 6px; border-bottom: 1px solid #1e293b;"><span class="code-sn" style="font-size: 0.78rem; padding: 2px 6px;">${r.sn || 'SIN SN'}</span></td>
@@ -266,11 +286,23 @@ function renderDetalleYTecnicosUI(itemsBase) {
     const cond = (r.condicion || 'PENDIENTE').toUpperCase();
     const esProbado = cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO') || cond.includes('DESCARTE') || cond.includes('FALLA');
     let tecNombre = (r.tecnico_prueba && r.tecnico_prueba.trim() !== '') ? r.tecnico_prueba.trim() : (esProbado ? 'Histórico / Sin Registro de Prueba' : 'Pendientes de Prueba');
-    if (!mapaTecnicos[tecNombre]) mapaTecnicos[tecNombre] = { total: 0, circ: 0, desc: 0, pend: 0 };
+    
+    if (!mapaTecnicos[tecNombre]) {
+      mapaTecnicos[tecNombre] = { total: 0, circ: 0, desc: 0, pend: 0, circVIP: 0, descVIP: 0 };
+    }
+    
     mapaTecnicos[tecNombre].total++;
-    if (cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO')) mapaTecnicos[tecNombre].circ++;
-    else if (cond.includes('DESCARTE') || cond.includes('FALLA')) mapaTecnicos[tecNombre].desc++;
-    else mapaTecnicos[tecNombre].pend++;
+    const esEqVIP = esModeloVIP(r);
+
+    if (cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO')) {
+      mapaTecnicos[tecNombre].circ++;
+      if (esEqVIP) mapaTecnicos[tecNombre].circVIP++;
+    } else if (cond.includes('DESCARTE') || cond.includes('FALLA')) {
+      mapaTecnicos[tecNombre].desc++;
+      if (esEqVIP) mapaTecnicos[tecNombre].descVIP++;
+    } else {
+      mapaTecnicos[tecNombre].pend++;
+    }
   });
 
   const listaTecnicos = Object.entries(mapaTecnicos).sort((a, b) => b[1].total - a[1].total);
@@ -279,8 +311,10 @@ function renderDetalleYTecnicosUI(itemsBase) {
     tbodyTec.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 15px; background: #0f172a;">Sin registros para los técnicos en este filtro.</td></tr>`;
   } else {
     tbodyTec.innerHTML = listaTecnicos.map(([nombre, c]) => {
-      const probados = c.circ + c.desc;
-      const pctEfectividad = probados > 0 ? ((c.circ / probados) * 100).toFixed(1) : '0.0';
+      // El porcentaje de efectividad se evalúa dinámicamente según el catálogo VIP
+      const probadosVIP = c.circVIP + c.descVIP;
+      const pctEfectividad = probadosVIP > 0 ? ((c.circVIP / probadosVIP) * 100).toFixed(1) : '0.0';
+      
       return `<tr style="background: #0f172a;">
         <td style="color: #f8fafc; font-weight: 700; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">👤 ${nombre}</td>
         <td style="text-align: center; font-weight: bold; color: #38bdf8; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${c.total} un.</td>

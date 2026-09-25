@@ -69,6 +69,9 @@ async function cargarModuloRecupero() {
     if (resHistorico.error) throw resHistorico.error;
 
     const catalogo = resCatalogo.data || [];
+    
+    // GUARDAMOS EL CATÁLOGO EN MEMORIA GLOBAL PARA EL RESTO DE LA APP
+    window.catalogoEquipos = catalogo;
 
     // 2. UNIFICAMOS Y DESDUPLICAMOS (El corazón del sistema)
     const mapaUnicos = new Map();
