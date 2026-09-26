@@ -21,6 +21,18 @@ function obtenerSucursalReporte() {
   return window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 }
 
+function normRepSucursal(suc) {
+  const s = (suc || '').toUpperCase();
+  if (s.includes('ELD')) return 'ELDO';
+  if (s.includes('WND') || s.includes('WAN')) return 'WND';
+  if (s.includes('SPD') || s.includes('PEDRO')) return 'SPD';
+  if (s.includes('ITU')) return 'ITU';
+  return 'OBE';
+}
+
+// ====================================================
+// 1. APERTURA DEL MODAL (ACTIVANDO RECUPERO POR DEFECTO)
+// ====================================================
 function abrirModalReportes() {
   const modal = document.getElementById('modal-reportes');
   if (modal) {
@@ -29,6 +41,14 @@ function abrirModalReportes() {
     const inputOp = document.getElementById('rep-txt-operador');
     if (inputOp) inputOp.value = usr.replace('👤', '').trim();
     
+    // Marcar automáticamente las casillas de Recupero
+    const chkRecEst = document.getElementById('rep-chk-rec-est');
+    const chkRecTac = document.getElementById('rep-chk-rec-tac');
+    const chkRecOpe = document.getElementById('rep-chk-rec-ope');
+    if (chkRecEst) chkRecEst.checked = true;
+    if (chkRecTac) chkRecTac.checked = true;
+    if (chkRecOpe) chkRecOpe.checked = true;
+
     document.getElementById('rep-rango-rapido').value = 'HOY';
     cambiarRangoReporte();
     compilarReporteLive();
@@ -40,34 +60,52 @@ function cerrarModalReportes() {
   if (modal) modal.style.display = 'none';
 }
 
-function cambiarRangoReporte() {
+async function cambiarRangoReporte() {
   const rango = document.getElementById('rep-rango-rapido').value;
   const customDiv = document.getElementById('rep-custom-dates');
   const btnAplicar = document.getElementById('btn-aplicar-fecha-rep');
   const statusMsg = document.getElementById('rep-status-fechas');
 
-  statusMsg.style.display = 'none';
+  if (statusMsg) statusMsg.style.display = 'none';
 
   if (rango === 'CUSTOM') {
-    customDiv.style.display = 'flex';
-    btnAplicar.style.display = 'block';
+    if (customDiv) customDiv.style.display = 'flex';
+    if (btnAplicar) btnAplicar.style.display = 'block';
   } else if (rango === 'HOY') {
-    customDiv.style.display = 'none';
-    btnAplicar.style.display = 'none';
+    if (customDiv) customDiv.style.display = 'none';
+    if (btnAplicar) btnAplicar.style.display = 'none';
     window.EstadoReporte.usarHistorico = false;
     window.EstadoReporte.rangoStr = 'MESA ACTIVA (HOY)';
     compilarReporteLive();
   } else {
-    customDiv.style.display = 'flex';
-    btnAplicar.style.display = 'block';
+    if (customDiv) customDiv.style.display = 'flex';
+    if (btnAplicar) btnAplicar.style.display = 'block';
     
     const hoy = new Date();
-    const desde = new Date();
-    if (rango === 'SEMANA') desde.setDate(hoy.getDate() - 7);
-    if (rango === 'MES') desde.setDate(hoy.getDate() - 30);
+    let desde = new Date();
+    let hasta = new Date();
 
-    document.getElementById('rep-hasta').value = hoy.toISOString().split('T')[0];
-    document.getElementById('rep-desde').value = desde.toISOString().split('T')[0];
+    if (rango === 'SEMANA') {
+      const diaSem = hoy.getDay();
+      const distLunes = (diaSem === 0 ? -6 : 1 - diaSem);
+      desde.setDate(hoy.getDate() + distLunes);
+      
+      hasta = new Date(desde);
+      hasta.setDate(desde.getDate() + 6);
+    } else if (rango === 'MES') {
+      desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      hasta = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    }
+
+    const fDesdeStr = desde.toISOString().split('T')[0];
+    const fHastaStr = hasta.toISOString().split('T')[0];
+
+    document.getElementById('rep-desde').value = fDesdeStr;
+    document.getElementById('rep-hasta').value = fHastaStr;
+
+    if (typeof cargarDatosHistoricosReporte === 'function') {
+      await cargarDatosHistoricosReporte();
+    }
   }
 }
 
@@ -90,7 +128,6 @@ async function cargarDatosHistoricosReporte() {
   btn.disabled = true;
 
   try {
-    // 1. Obtener Catálogos Dinámicos (Clave para VIP por sucursal)
     const [resCat, resPrec] = await Promise.all([
       supabaseReportes.from('catalogo_equipos').select('*'),
       supabaseReportes.from('precios_catalogos').select('*')
@@ -98,7 +135,6 @@ async function cargarDatosHistoricosReporte() {
     
     const catalogo = resCat.data || [];
     
-    // Función auxiliar para resolver jerarquía del catálogo
     const resolverInfoRep = (descNorm) => {
       const coincidencias = catalogo.filter(item => {
         const itemNorm = item.modelo_norm || normRep(item.modelo);
@@ -118,7 +154,7 @@ async function cargarDatosHistoricosReporte() {
       if (p.descripcion) precios.set(normRep(p.descripcion), val);
     });
 
-    // 2. Extraer Stock Histórico
+    // 1. Stock Histórico
     const { data: ultData } = await supabaseReportes
       .from('registro_stock')
       .select('fecha_registro')
@@ -136,7 +172,6 @@ async function cargarDatosHistoricosReporte() {
         .select('*')
         .eq('fecha_registro', fechaStockEncontrada);
       
-      // Filtrar el stock a nivel nacional o por sucursal activa
       stockH = (stData || []).filter(row => {
         if (sucActiva === 'TODAS') return true;
         const alm = row.almacen || '';
@@ -144,7 +179,7 @@ async function cargarDatosHistoricosReporte() {
       });
     }
 
-    // 3. Extraer Recupero HISTÓRICO + ACTIVO
+    // 2. Extraer Recupero HISTÓRICO + ACTIVO (Desduplicado)
     let queryHist = supabaseReportes.from('recupero_historico_equipos').select('*');
     let queryOper = supabaseReportes.from('recupero_operativo').select('*');
 
@@ -154,19 +189,22 @@ async function cargarDatosHistoricosReporte() {
     }
 
     const [resHist, resOper] = await Promise.all([queryHist, queryOper]);
-    const recuperoCrudo = [...(resHist.data || []), ...(resOper.data || [])];
 
-    const recuperoH = recuperoCrudo.filter(row => {
-      const fIng = row.fecha_ingreso ? row.fecha_ingreso.substring(0, 10) : '1970-01-01';
-      const fFin = row.fin_prueba ? row.fin_prueba.substring(0, 10) : '1970-01-01';
-      const cAt = row.created_at ? row.created_at.substring(0, 10) : '1970-01-01';
-      
-      const entraEnRango = (fIng >= dDesde && fIng <= dHasta) || (cAt >= dDesde && cAt <= dHasta);
-      const probadoEnRango = (fFin >= dDesde && fFin <= dHasta);
-      return entraEnRango || probadoEnRango;
+    const mapaUnicos = new Map();
+    (resHist.data || []).forEach(r => {
+      const key = (r.sn || '').toString().trim().toUpperCase();
+      if (key) mapaUnicos.set(key, r);
+      else mapaUnicos.set(`NO_SN_HIST_${r.id}`, r);
+    });
+    (resOper.data || []).forEach(r => {
+      const key = (r.sn || '').toString().trim().toUpperCase();
+      if (key) mapaUnicos.set(key, r);
+      else mapaUnicos.set(`NO_SN_OPER_${r.id}`, r);
     });
 
-    // --- MATEMÁTICA DE STOCK HISTÓRICO ---
+    const recuperoUnificado = Array.from(mapaUnicos.values());
+
+    // MATEMÁTICA DE STOCK
     let sDB=0, sCATV=0, sTotal=0, sUSD=0, sNuevos=0, sUsados=0;
     let sDev=0, sDevUsd=0, sDesc=0, sDescUsd=0, sDescVip=0, sDescVipUsd=0;
 
@@ -176,7 +214,7 @@ async function cargarDatosHistoricosReporte() {
       
       const cant = parseInt(r.stock_total) || 0;
       const infoCat = resolverInfoRep(dn);
-      const isVIP = infoCat ? (infoCat.es_vip && !infoCat.es_obsoleto) : false;
+      const isVIP = infoCat ? (Boolean(infoCat.es_vip) && !infoCat.es_obsoleto) : false;
       const cat = infoCat ? infoCat.categoria : '';
 
       const usd = cant * (infoCat && infoCat.precio_usd > 0 ? infoCat.precio_usd : (precios.get(r.codigo) || precios.get(dn) || 0));
@@ -193,47 +231,82 @@ async function cargarDatosHistoricosReporte() {
       if (r.almacen === 'OBE_ALM_DESCARTE_VIP' && isVIP) { sDescVip += cant; sDescVipUsd += usd; }
     });
 
-    // --- MATEMÁTICA DE RECUPERO EN EL PERÍODO ---
-    let rTotal=0, rDescObs=0, rCirc=0, rDescVip=0, rUSD=0;
-    let itemsVipH = [];
+    // ====================================================
+    // ESTRUCTURAS DE AGRUPACIÓN MULTIDIMENSIONAL
+    // ====================================================
+    let ingTotal = 0, ingVIP = 0, ingObs = 0;
+    let labProbadosVIP = 0, labCircVIP = 0, labDescVIP = 0, labCapitalUsd = 0;
+    
+    const SUCURSALES = ['OBE', 'ELDO', 'WND', 'SPD', 'ITU'];
+    const CANALES = ['TÉCNICO RECLAMOS', 'PERSONAL RETIRO', 'SUCURSAL / MOSTRADOR', 'OTROS'];
 
-    recuperoH.forEach(r => {
-      const cant = parseInt(r.cantidad || 1) || 1;
-      const dn = normRep(r.descripcion);
+    const matrizIngresos = {};
+    CANALES.forEach(c => {
+      matrizIngresos[c] = {};
+      SUCURSALES.forEach(s => matrizIngresos[c][s] = 0);
+      matrizIngresos[c]['TOTAL'] = 0;
+    });
+
+    const tecsLab = {};
+
+    recuperoUnificado.forEach(r => {
+      const cant = parseInt(r.cantidad || 1, 10) || 1;
+      const dn = normRep(r.descripcion || r.modelo || '');
       const cond = normRep(r.condicion || r.estado || '');
+      const suc = normRepSucursal(r.sucursal_id || 'OBE');
       
       const infoCat = resolverInfoRep(dn);
-      const isVIP = infoCat ? (infoCat.es_vip && !infoCat.es_obsoleto) : false;
+      const isVIP = infoCat ? (Boolean(infoCat.es_vip) && !infoCat.es_obsoleto) : false;
       const isOK = ['CIRCULACION','OK','BUENO','APROBADO'].some(e => cond.includes(e));
+      const isRechazado = ['DESCARTE','FALLA','BAJA','DEFECTUOSO','ROTO','RECHAZADO'].some(e => cond.includes(e));
       const usd = cant * (infoCat && infoCat.precio_usd > 0 ? infoCat.precio_usd : (precios.get(r.codigo) || precios.get(dn) || 0));
 
-      const fIng = r.fecha_ingreso ? r.fecha_ingreso.substring(0,10) : (r.created_at ? r.created_at.substring(0,10) : '1970-01-01');
-      if (fIng >= dDesde && fIng <= dHasta) rTotal += cant;
-      
-      const fFin = r.fin_prueba ? r.fin_prueba.substring(0, 10) : '1970-01-01';
-      if (fFin >= dDesde && fFin <= dHasta) {
-        if (!isVIP) {
-          rDescObs += cant;
-        } else if (isOK) {
-          rCirc += cant; rUSD += usd;
-        } else {
-          rDescVip += cant;
+      const fIng = r.fecha_ingreso ? r.fecha_ingreso.substring(0, 10) : (r.created_at ? r.created_at.substring(0, 10) : '');
+      const fFin = r.fin_prueba ? r.fin_prueba.substring(0, 10) : '';
+
+      // --- VECTOR 1: INGRESO LOGÍSTICO (Evalúa por fIng) ---
+      if (fIng && fIng >= dDesde && fIng <= dHasta) {
+        ingTotal += cant;
+        if (isVIP) ingVIP += cant; else ingObs += cant;
+
+        const origRaw = normRep(r.origen || r.almacen_origen || '');
+        let canal = 'OTROS';
+        if (origRaw.includes('RECLAMO') || origRaw.includes('TECNICO')) canal = 'TÉCNICO RECLAMOS';
+        else if (origRaw.includes('RETIRO') || origRaw.includes('PERSONAL')) canal = 'PERSONAL RETIRO';
+        else if (origRaw.includes('SUCURSAL') || origRaw.includes('MOSTRADOR')) canal = 'SUCURSAL / MOSTRADOR';
+
+        if (matrizIngresos[canal]) {
+          const sucKey = SUCURSALES.includes(suc) ? suc : 'OBE';
+          matrizIngresos[canal][sucKey] += cant;
+          matrizIngresos[canal]['TOTAL'] += cant;
+        }
+      }
+
+      // --- VECTOR 2: PRODUCCIÓN LAB (Evalúa por fFin, solo VIP) ---
+      if (isVIP && fFin && fFin >= dDesde && fFin <= dHasta) {
+        const tecRaw = r.tecnico_prueba || r.tecnico || 'SIN REGISTRO';
+        const tecNombre = tecRaw.trim().toUpperCase();
+
+        if (!tecsLab[tecNombre]) {
+          tecsLab[tecNombre] = { probados: 0, ok: 0, desc: 0 };
         }
 
-        if (isVIP && r.fin_prueba) {
-          const fh = new Date(r.fin_prueba);
-          itemsVipH.push({
-            hora: fh.toLocaleDateString('es-AR') + ' ' + fh.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'}),
-            sn: r.sn || 'S/N',
-            modelo: r.descripcion,
-            esAprobado: isOK
-          });
+        if (isOK) {
+          labCircVIP += cant;
+          labCapitalUsd += usd;
+          labProbadosVIP += cant;
+          tecsLab[tecNombre].probados += cant;
+          tecsLab[tecNombre].ok += cant;
+        } else if (isRechazado) {
+          labDescVIP += cant;
+          labProbadosVIP += cant;
+          tecsLab[tecNombre].probados += cant;
+          tecsLab[tecNombre].desc += cant;
         }
       }
     });
 
-    const probadosH = rCirc + rDescVip;
-    const rPct = probadosH > 0 ? ((rCirc / probadosH)*100).toFixed(1) : 0;
+    const pctEfectividadVIP = labProbadosVIP > 0 ? ((labCircVIP / labProbadosVIP) * 100).toFixed(1) : "0.0";
 
     window.EstadoReporte.stock = {
       cargado: true,
@@ -247,10 +320,16 @@ async function cargarDatosHistoricosReporte() {
 
     window.EstadoReporte.recupero = {
       cargado: true,
-      totalRecibidos: rTotal, directoDescarteObs: rDescObs,
-      enCirculacionVIP: rCirc, fueraCirculacionVIP: rDescVip,
-      pctReaprovechamiento: rPct, capitalTotal: rUSD,
-      itemsVipTesteadosHoy: itemsVipH, recuperadosHoy: rCirc
+      ingresadosTotal: ingTotal,
+      ingresadosVIP: ingVIP,
+      ingresadosObs: ingObs,
+      matrizIngresos: matrizIngresos,
+      probadosVIPTotal: labProbadosVIP,
+      enCirculacionVIP: labCircVIP,
+      fueraCirculacionVIP: labDescVIP,
+      pctReaprovechamiento: pctEfectividadVIP,
+      capitalTotal: labCapitalUsd,
+      tecnicosLab: tecsLab
     };
 
     window.EstadoReporte.usarHistorico = true;
@@ -260,8 +339,10 @@ async function cargarDatosHistoricosReporte() {
     
     compilarReporteLive();
 
-    statusMsg.textContent = '✅ Datos procesados correctamente';
-    statusMsg.style.display = 'block';
+    if (statusMsg) {
+      statusMsg.textContent = '✅ Datos procesados correctamente';
+      statusMsg.style.display = 'block';
+    }
   } catch (error) {
     console.error(error);
     alert("Error al extraer historial. Revisa consola.");
@@ -272,7 +353,7 @@ async function cargarDatosHistoricosReporte() {
 }
 
 // ====================================================
-// RENDERIZADO DEL PDF
+// 2. COMPILADOR A4 CON MATRIZ PIVOT Y RENDIMIENTO TÉCNICO
 // ====================================================
 function compilarReporteLive() {
   const hoja = document.getElementById('hoja-a4-preview');
@@ -280,10 +361,8 @@ function compilarReporteLive() {
 
   const stkEst = document.getElementById('rep-chk-stock-est')?.checked || false;
   const stkTac = document.getElementById('rep-chk-stock-tac')?.checked || false;
-  const stkOpe = document.getElementById('rep-chk-stock-ope')?.checked || false;
   const recEst = document.getElementById('rep-chk-rec-est')?.checked || false;
   const recTac = document.getElementById('rep-chk-rec-tac')?.checked || false;
-  const recOpe = document.getElementById('rep-chk-rec-ope')?.checked || false;
 
   const operador = document.getElementById('rep-txt-operador')?.value || 'Sin Especificar';
   const fechaHoyStr = new Date().toLocaleDateString('es-AR', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -291,16 +370,15 @@ function compilarReporteLive() {
 
   const estStock = window.EstadoReporte.usarHistorico ? window.EstadoReporte.stock : (window.EstadoStock || {});
   const estRec = window.EstadoReporte.usarHistorico ? window.EstadoReporte.recupero : (window.EstadoRecupero || {});
-  const rangoAplicado = window.EstadoReporte.rangoStr;
+  const rangoAplicado = window.EstadoReporte.rangoStr || 'FECHA ACTUAL';
   
-  // Detección para el encabezado del documento
   let tituloSucursal = obtenerSucursalReporte();
   if (tituloSucursal === 'OBE') tituloSucursal = 'OBERÁ MATRIZ';
   if (tituloSucursal === 'SPD') tituloSucursal = 'SAN PEDRO';
   if (tituloSucursal === 'TODAS') tituloSucursal = 'GLOBAL SUCURSALES';
 
   let html = `
-    <div style="font-family: 'Consolas', 'Courier New', monospace; font-size: 8pt; color: #000; line-height: 1.2; width: 100%;">
+    <div style="font-family: 'Consolas', 'Courier New', monospace; font-size: 8pt; color: #000; line-height: 1.25; width: 100%;">
       
       <div style="border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
         <div>
@@ -314,7 +392,8 @@ function compilarReporteLive() {
       </div>
   `;
 
-  if (stkEst || stkTac || stkOpe) {
+  // ==================== 1. MÓDULO CONTROL DE STOCK ====================
+  if (stkEst || stkTac) {
     html += `<div style="margin-bottom: 12px;"><div style="font-weight: bold; background: #000; color: #fff; padding: 2px 5px; font-size: 8.5pt;">=== 1. MÓDULO CONTROL DE STOCK ===</div>`;
 
     if (stkEst && estStock.cargado) {
@@ -338,94 +417,152 @@ function compilarReporteLive() {
       html += `
         <div style="margin-top: 6px; font-size: 7.5pt; font-weight: bold;">[🎯 INDICADORES TÁCTICOS - INMOVILIZADOS Y A PROBAR]</div>
         <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 7.5pt; border: 1px solid #000;">
-          <tr style="background: #f0f0f0; font-weight: bold;">
-            <td style="padding: 2px; border: 1px solid #000;">Depósito / Categoría</td>
-            <td style="padding: 2px; border: 1px solid #000; text-align: center;">Cantidad</td>
-            <td style="padding: 2px; border: 1px solid #000; text-align: right;">Capital Inmovilizado USD</td>
-          </tr>
-          <tr>
-            <td style="padding: 2px; border: 1px solid #ccc;">📥 Devoluciones (A Probar)</td>
-            <td style="padding: 2px; border: 1px solid #ccc; text-align: center; font-weight: bold;">${estStock.devolucionesCant || 0} un.</td>
-            <td style="padding: 2px; border: 1px solid #ccc; text-align: right;">$ ${Math.round(estStock.devolucionesValorUsd || 0).toLocaleString('es-AR')} USD</td>
-          </tr>
-          <tr>
-            <td style="padding: 2px; border: 1px solid #ccc;">🗑️ Descarte General (Obsoleto)</td>
-            <td style="padding: 2px; border: 1px solid #ccc; text-align: center;">${estStock.descarteCant || 0} un.</td>
-            <td style="padding: 2px; border: 1px solid #ccc; text-align: right;">$ ${Math.round(estStock.descarteValorUsd || 0).toLocaleString('es-AR')} USD</td>
-          </tr>
-          <tr>
-            <td style="padding: 2px; border: 1px solid #ccc;">👑 Descarte VIP (Falla Lab)</td>
-            <td style="padding: 2px; border: 1px solid #ccc; text-align: center;">${estStock.descarteVipCant || 0} un.</td>
-            <td style="padding: 2px; border: 1px solid #ccc; text-align: right;">$ ${Math.round(estStock.descarteVipValorUsd || 0).toLocaleString('es-AR')} USD</td>
-          </tr>
+          <thead>
+            <tr style="background: #f0f0f0; font-weight: bold; border-bottom: 1px solid #000;">
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: left;">Depósito / Categoría</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">Cantidad</th>
+              <th style="padding: 2px 4px; text-align: right;">Capital Inmovilizado USD</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc;">📥 Devoluciones (A Probar)</td>
+              <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center; font-weight: bold;">${estStock.devolucionesCant || 0} un.</td>
+              <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; text-align: right;">$ ${Math.round(estStock.devolucionesValorUsd || 0).toLocaleString('es-AR')} USD</td>
+            </tr>
+            <tr>
+              <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc;">🗑️ Descarte General (Obsoleto)</td>
+              <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${estStock.descarteCant || 0} un.</td>
+              <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; text-align: right;">$ ${Math.round(estStock.descarteValorUsd || 0).toLocaleString('es-AR')} USD</td>
+            </tr>
+            <tr>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc;">👑 Descarte VIP (Falla Lab)</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${estStock.descarteVipCant || 0} un.</td>
+              <td style="padding: 2px 4px; text-align: right;">$ ${Math.round(estStock.descarteVipValorUsd || 0).toLocaleString('es-AR')} USD</td>
+            </tr>
+          </tbody>
         </table>
-      `;
-    }
-    
-    if (stkOpe && estStock.cargado) {
-      html += `
-        <div style="margin-top: 6px; font-size: 7.5pt; font-weight: bold;">[⚙️ INDICADORES OPERATIVOS - MATRIZ DE SUCURSAL]</div>
-        <div style="font-size: 7pt; color: #444; margin-top: 2px;">• La vista operativa se encuentra resumida en los KPI estratégicos superiores por limitación de formato.</div>
       `;
     }
 
     html += `</div>`;
   }
 
-  if (recEst || recTac || recOpe) {
+  // ==================== 2. MÓDULO RECUPERO Y LABORATORIO ====================
+  if (recEst || recTac) {
     html += `<div style="margin-bottom: 12px;"><div style="font-weight: bold; background: #000; color: #fff; padding: 2px 5px; font-size: 8.5pt;">=== 2. MÓDULO RECUPERO Y LABORATORIO ===</div>`;
 
+    // 2.1 VISTA ESTRATÉGICA (MACRO TOTALES)
     if (recEst && estRec.cargado) {
       html += `
         <div style="margin-top: 4px; font-size: 7.5pt; font-weight: bold;">[🏛️ INDICADORES ESTRATÉGICOS DE RECUPERO]</div>
         <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 7.5pt;">
           <tr style="border-bottom: 1px solid #ccc;">
-            <td style="padding: 2px;">Total Ingresado en Período: <b>${estRec.totalRecibidos || 0} un.</b></td>
+            <td style="padding: 2px;">Total Ingresado en Período: <b>${estRec.ingresadosTotal || 0} un.</b></td>
             <td style="padding: 2px;">Recuperados VIP (OK): <b>${estRec.enCirculacionVIP || 0} un.</b></td>
-            <td style="padding: 2px; text-align: right;">Efectividad VIP: <b>${estRec.pctReaprovechamiento || 0}%</b></td>
+            <td style="padding: 2px; text-align: right;">Efectividad VIP: <b>${estRec.pctReaprovechamiento || "0.0"}%</b></td>
           </tr>
           <tr style="border-bottom: 1px solid #ccc;">
             <td style="padding: 2px;">Descarte VIP (Falla Lab): <b>${estRec.fueraCirculacionVIP || 0} un.</b></td>
-            <td style="padding: 2px;">Descarte Obsoleto Directo: <b>${estRec.directoDescarteObs || 0} un.</b></td>
+            <td style="padding: 2px;">Descarte Obsoleto Directo: <b>${estRec.ingresadosObs || 0} un.</b></td>
             <td style="padding: 2px; text-align: right;">Capital Recuperado: <b>$ ${Math.round(estRec.capitalTotal || 0).toLocaleString('es-AR')} USD</b></td>
           </tr>
         </table>
       `;
     }
 
+    // 2.2 VISTA TÁCTICA (DESGLOSE POR SUCURSAL Y POR TÉCNICO)
     if (recTac && estRec.cargado) {
-      let limitados = (estRec.itemsVipTesteadosHoy || []).slice(0, 30);
-      let masEquipos = (estRec.itemsVipTesteadosHoy || []).length > 30 ? `<tr><td colspan="4" style="padding:3px; text-align:center; font-style:italic;">... Y ${(estRec.itemsVipTesteadosHoy.length - 30)} registros adicionales omitidos por formato ...</td></tr>` : '';
+      const mat = estRec.matrizIngresos || {};
+      const SUCURSALES = ['OBE', 'ELDO', 'WND', 'SPD', 'ITU'];
+      
+      const totSuc = { OBE: 0, ELDO: 0, WND: 0, SPD: 0, ITU: 0, TOTAL: 0 };
+      Object.keys(mat).forEach(canal => {
+        SUCURSALES.forEach(s => totSuc[s] += (mat[canal][s] || 0));
+        totSuc['TOTAL'] += (mat[canal]['TOTAL'] || 0);
+      });
 
-      let filasHistoricas = limitados.map(i => `
+      let filasMatriz = Object.keys(mat).map(canal => `
         <tr>
-          <td style="padding: 2px; border: 1px solid #ccc;">${i.hora || '--:--'}</td>
-          <td style="padding: 2px; border: 1px solid #ccc; font-weight: bold;">${i.sn}</td>
-          <td style="padding: 2px; border: 1px solid #ccc;">${i.modelo}</td>
-          <td style="padding: 2px; border: 1px solid #ccc; text-align: center;">${i.esAprobado ? 'CIRCULACIÓN' : 'DESCARTE'}</td>
+          <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc;">${canal}</td>
+          <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${mat[canal]['OBE'] || 0}</td>
+          <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${mat[canal]['ELDO'] || 0}</td>
+          <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${mat[canal]['WND'] || 0}</td>
+          <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${mat[canal]['SPD'] || 0}</td>
+          <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${mat[canal]['ITU'] || 0}</td>
+          <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; text-align: center; font-weight: bold;">${mat[canal]['TOTAL'] || 0}</td>
         </tr>
       `).join('');
 
       html += `
-        <div style="margin-top: 6px; font-size: 7.5pt; font-weight: bold;">[🎯 INDICADORES TÁCTICOS - DETALLE DE SERIES (${(estRec.itemsVipTesteadosHoy || []).length} un.)]</div>
+        <div style="margin-top: 8px; font-size: 7.5pt; font-weight: bold;">[📥 2.1 INGRESO LOGÍSTICO POR CANAL Y SUCURSAL]</div>
         <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 7pt; border: 1px solid #000;">
           <thead>
-            <tr style="background: #f0f0f0; font-weight: bold;">
-              <th style="padding: 2px; border: 1px solid #000; text-align: left;">FECHA/HORA</th>
-              <th style="padding: 2px; border: 1px solid #000; text-align: left;">Nº SERIE (SN)</th>
-              <th style="padding: 2px; border: 1px solid #000; text-align: left;">MODELO</th>
-              <th style="padding: 2px; border: 1px solid #000; text-align: center;">VEREDICTO</th>
+            <tr style="background: #f0f0f0; font-weight: bold; border-bottom: 1px solid #000;">
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: left;">Canal de Origen</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">OBERÁ</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">ELDORADO</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">WANDA</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">SAN PEDRO</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">ITUZAINGÓ</th>
+              <th style="padding: 2px 4px; text-align: center; background: #e2e8f0;">TOTAL</th>
             </tr>
           </thead>
-          <tbody>${filasHistoricas || '<tr><td colspan="4" style="padding: 3px; text-align: center;">Sin registros de laboratorio en este período.</td></tr>'}${masEquipos}</tbody>
+          <tbody>
+            ${filasMatriz}
+            <tr style="background: #f8fafc; font-weight: bold;">
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc;">TOTAL RECIBIDO (VIP: ${estRec.ingresadosVIP || 0} | OBS: ${estRec.ingresadosObs || 0})</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${totSuc['OBE']}</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${totSuc['ELDO']}</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${totSuc['WND']}</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${totSuc['SPD']}</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${totSuc['ITU']}</td>
+              <td style="padding: 2px 4px; text-align: center; background: #e2e8f0;">${totSuc['TOTAL']} un.</td>
+            </tr>
+          </tbody>
         </table>
       `;
-    }
 
-    if (recOpe && estRec.cargado && !window.EstadoReporte.usarHistorico) {
-       html += `
-        <div style="margin-top: 6px; font-size: 7.5pt; font-weight: bold;">[⚙️ INDICADORES OPERATIVOS - DESGLOSE POR MODELOS]</div>
-        <div style="font-size: 7pt; color: #444; margin-top: 2px;">• La vista de modelos se omite en reportes por rangos amplios por cuestiones de espacio.</div>
+      const tecs = estRec.tecnicosLab || {};
+      let filasTecnicos = Object.keys(tecs).map(t => {
+        const p = tecs[t].probados;
+        const ok = tecs[t].ok;
+        const desc = tecs[t].desc;
+        const pct = p > 0 ? ((ok / p) * 100).toFixed(1) : "0.0";
+        return `
+          <tr>
+            <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; font-weight: bold;">${t}</td>
+            <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${p} un.</td>
+            <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${ok} un.</td>
+            <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; border-right: 1px solid #ccc; text-align: center;">${desc} un.</td>
+            <td style="padding: 2px 4px; border-bottom: 1px solid #ccc; text-align: center; font-weight: bold;">${pct}%</td>
+          </tr>
+        `;
+      }).join('');
+
+      html += `
+        <div style="margin-top: 8px; font-size: 7.5pt; font-weight: bold;">[🧪 2.2 PRODUCCIÓN Y RENDIMIENTO POR TÉCNICO DE PRUEBA]</div>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 7pt; border: 1px solid #000;">
+          <thead>
+            <tr style="background: #f0f0f0; font-weight: bold; border-bottom: 1px solid #000;">
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: left;">Técnico de Prueba</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">Total Testeado</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">🟢 VIP OK (Circulación)</th>
+              <th style="padding: 2px 4px; border-right: 1px solid #000; text-align: center;">🔴 VIP Descarte (Falla)</th>
+              <th style="padding: 2px 4px; text-align: center;">% Efectividad VIP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasTecnicos || '<tr><td colspan="5" style="padding: 4px; text-align: center;">Sin registros de laboratorio en el período.</td></tr>'}
+            <tr style="background: #f8fafc; font-weight: bold; border-top: 1px solid #000;">
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc;">TOTAL RENDIMIENTO LAB</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${estRec.probadosVIPTotal || 0} un.</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${estRec.enCirculacionVIP || 0} un.</td>
+              <td style="padding: 2px 4px; border-right: 1px solid #ccc; text-align: center;">${estRec.fueraCirculacionVIP || 0} un.</td>
+              <td style="padding: 2px 4px; text-align: center;">${estRec.pctReaprovechamiento || "0.0"}%</td>
+            </tr>
+          </tbody>
+        </table>
       `;
     }
 
@@ -433,7 +570,7 @@ function compilarReporteLive() {
   }
 
   html += `
-      <div style="margin-top: 20px; border-top: 1px dashed #000; padding-top: 6px; font-size: 7pt; text-align: center; color: #333;">
+      <div style="margin-top: 15px; border-top: 1px dashed #000; padding-top: 4px; font-size: 7pt; text-align: center; color: #333;">
         =================== FIN DEL INFORME ===================
       </div>
     </div>

@@ -28,15 +28,15 @@ function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
   const elTotal = document.getElementById('rec-val-total-un');
   const elDinero = document.getElementById('rec-val-dinero');
 
-  if (elCirc) elCirc.textContent = `${circ.toLocaleString('es-AR')} un.`;
-  if (elPctCirc) elPctCirc.textContent = `(${pct}%)`;
+  if (elCirc) elCirc.textContent = `${(circ || 0).toLocaleString('es-AR')} un.`;
+  if (elPctCirc) elPctCirc.textContent = `(${pct || 0}%)`;
 
-  const pctDesc = probados > 0 ? (100 - parseFloat(pct)).toFixed(1) : "0.0";
-  if (elDesc) elDesc.textContent = `${descVIP.toLocaleString('es-AR')} un.`;
+  const pctDesc = probados > 0 ? (100 - parseFloat(pct || 0)).toFixed(1) : "0.0";
+  if (elDesc) elDesc.textContent = `${(descVIP || 0).toLocaleString('es-AR')} un.`;
   if (elPctDesc) elPctDesc.textContent = `(${pctDesc}%)`;
 
-  if (elTotal) elTotal.textContent = `${probados.toLocaleString('es-AR')} un. VIP`;
-  if (elDinero) elDinero.textContent = `$ ${Math.round(capital).toLocaleString('es-AR')} USD`;
+  if (elTotal) elTotal.textContent = `${(probados || 0).toLocaleString('es-AR')} un. VIP`;
+  if (elDinero) elDinero.textContent = `$ ${Math.round(capital || 0).toLocaleString('es-AR')} USD`;
 
   const canvas = document.getElementById('recuperoChart');
   if (!canvas) return;
@@ -44,15 +44,15 @@ function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
   const chartData = {
     labels: ['Laboratorio VIP'],
     datasets: [
-      { label: '🟢 En Circulación (Recuperadas)', data: [circ], backgroundColor: '#4ade80', borderRadius: 4 },
-      { label: '🔴 Fuera de Circulación (Descarte VIP)', data: [descVIP], backgroundColor: '#f87171', borderRadius: 4 }
+      { label: '🟢 En Circulación (Recuperadas)', data: [circ || 0], backgroundColor: '#4ade80', borderRadius: 4 },
+      { label: '🔴 Fuera de Circulación (Descarte VIP)', data: [descVIP || 0], backgroundColor: '#f87171', borderRadius: 4 }
     ]
   };
 
   if (recuperoChartInstance) {
     recuperoChartInstance.data = chartData;
     recuperoChartInstance.update();
-  } else {
+  } else if (typeof Chart !== 'undefined') {
     recuperoChartInstance = new Chart(ctx, {
       type: 'bar',
       data: chartData,
@@ -62,7 +62,7 @@ function renderRecuperoEstrategico(circ, descVIP, probados, capital, pct) {
 }
 
 function normalizarSucursalMatriz(rawSuc) {
-  const norm = (rawSuc || '').toUpperCase().trim();
+  const norm = String(rawSuc || '').toUpperCase().trim();
   if (norm.includes('ELD')) return 'ELDO';
   if (norm.includes('WAN') || norm.includes('WND')) return 'WND';
   if (norm.includes('PEDRO') || norm.includes('SPD') || norm.includes('SAN')) return 'SPD';
@@ -71,63 +71,112 @@ function normalizarSucursalMatriz(rawSuc) {
 }
 
 function normalizarOrigenMatriz(txt) {
-  const norm = (txt || '').toUpperCase();
+  const norm = String(txt || '').toUpperCase();
   if (norm.includes('RECLAMO') || norm.includes('TECNICO')) return 'Técnico Reclamos';
   if (norm.includes('RETIRO') || norm.includes('PERSONAL')) return 'Personal Retiro';
   if (norm.includes('SUCURSAL') || norm.includes('MOSTRADOR') || norm.includes('DEVOLUCION')) return 'Sucursal / Mostrador';
   return 'Otros';
 }
 
+function esModeloVIP(r) {
+  if (!r) return false;
+  if (r.es_vip !== undefined && r.es_vip !== null) {
+    return Boolean(r.es_vip);
+  }
+  if (window.catalogoEquipos && Array.isArray(window.catalogoEquipos)) {
+    const descRegistro = String(r.descripcion || r.modelo || '').trim().toUpperCase();
+    return window.catalogoEquipos.some(cat => 
+      cat && cat.es_vip === true && (
+        (cat.modelo && descRegistro.includes(String(cat.modelo).trim().toUpperCase())) ||
+        (cat.modelo_norm && descRegistro.includes(String(cat.modelo_norm).trim().toUpperCase()))
+      )
+    );
+  }
+  return false;
+}
+
 function esVIPMatriz(desc) {
   if (typeof window.obtenerInfoCatalogo === 'function' && matrizCatalogoGlobal.length > 0) {
-    const descNorm = window.normalizar ? window.normalizar(desc) : (desc || '').toUpperCase();
+    const descNorm = window.normalizar ? window.normalizar(desc) : String(desc || '').toUpperCase();
     const info = window.obtenerInfoCatalogo(descNorm, matrizCatalogoGlobal);
     return info ? Boolean(info.esVIP || info.es_vip) : false;
   }
   return false;
 }
 
+// ====================================================
+// 1. FILTRO DE FECHAS DE CALENDARIO NATURAL
+// ====================================================
 function esDeFechaMatriz(fechaIso, modo) {
   if (modo === 'HISTORICO') return true;
   if (!fechaIso) return false;
   const f = new Date(fechaIso);
   if (isNaN(f.getTime())) return false;
+
   const hoy = new Date();
-  if (modo === 'DIARIO') return f.toDateString() === hoy.toDateString();
-  if (modo === 'SEMANAL') { const diffDias = (hoy - f) / (1000 * 60 * 60 * 24); return diffDias >= 0 && diffDias <= 7; }
-  if (modo === 'MENSUAL') return f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
+
+  if (modo === 'DIARIO') {
+    return f.toDateString() === hoy.toDateString();
+  }
+
+  if (modo === 'SEMANAL') {
+    const diaSem = hoy.getDay(); // 0 es Domingo, 1 es Lunes...
+    const distLunes = (diaSem === 0 ? -6 : 1 - diaSem);
+    
+    const lunes = new Date(hoy);
+    lunes.setDate(hoy.getDate() + distLunes);
+    lunes.setHours(0, 0, 0, 0);
+
+    const domingo = new Date(lunes);
+    domingo.setDate(lunes.getDate() + 6);
+    domingo.setHours(23, 59, 59, 999);
+
+    return f >= lunes && f <= domingo;
+  }
+
+  if (modo === 'MENSUAL') {
+    return f.getMonth() === hoy.getMonth() && f.getFullYear() === hoy.getFullYear();
+  }
+
   return true;
 }
 
 function coincideMetricaMatriz(r) {
-  const cond = (r.condicion || '').toUpperCase();
-  const vip = esVIPMatriz(r.descripcion || r.modelo || '');
+  if (!r) return false;
+  const cond = String(r.condicion || '').toUpperCase();
+  const vip = esModeloVIP(r) || esVIPMatriz(r.descripcion || r.modelo || '');
 
   if (matrizMetrica === 'TOTAL_TODOS') return true;
   if (matrizMetrica === 'VIP_TOTAL') return vip;
   if (matrizMetrica === 'PENDIENTES') return cond === 'PENDIENTE' || cond === '';
-  
-  // Estos filtros exigen VIP para que cuadre exacto con la barra superior de 1500
   if (matrizMetrica === 'CIRCULACION') return vip && (cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO'));
   if (matrizMetrica === 'DESCARTE') return vip && (cond.includes('DESCARTE') || cond.includes('FALLA'));
   return true;
 }
 
 window.renderizarResumenGestionUI = function(dataUnificada, catalogo) {
-  matrizDatosCombinados = dataUnificada || [];
-  window.matrizDatosCombinados = matrizDatosCombinados; // Exponer para auditoría
+  matrizDatosCombinados = Array.isArray(dataUnificada) ? dataUnificada : [];
+  window.matrizDatosCombinados = matrizDatosCombinados;
   if (catalogo) matrizCatalogoGlobal = catalogo;
   actualizarMatrizYDetalleUI();
 };
 
 window.setTemporalidad = function(temp, btn) {
-  if (btn) { btn.parentElement.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
-  matrizTemporalidad = temp; actualizarMatrizYDetalleUI();
+  if (btn && btn.parentElement) { 
+    btn.parentElement.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active')); 
+    btn.classList.add('active'); 
+  }
+  matrizTemporalidad = temp; 
+  actualizarMatrizYDetalleUI();
 };
 
 window.setMetrica = function(met, btn) {
-  if (btn) { btn.parentElement.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
-  matrizMetrica = met; actualizarMatrizYDetalleUI();
+  if (btn && btn.parentElement) { 
+    btn.parentElement.querySelectorAll('.btn-pill').forEach(b => b.classList.remove('active')); 
+    btn.classList.add('active'); 
+  }
+  matrizMetrica = met; 
+  actualizarMatrizYDetalleUI();
 };
 
 window.ordenarTablaMatriz = function(columna) {
@@ -147,6 +196,9 @@ window.seleccionarCeldaMatriz = function(origen, sucursal) {
 
 window.limpiarFiltroCelda = function() { matrizFiltroCelda = null; actualizarMatrizYDetalleUI(); };
 
+// ====================================================
+// 2. ACTUALIZACIÓN DE MATRIZ PIVOT (VECTOR INGRESO LOGÍSTICO)
+// ====================================================
 function actualizarMatrizYDetalleUI() {
   const tbodyMatriz = document.getElementById('tbody-matriz-pivot');
   if (!tbodyMatriz) return;
@@ -157,12 +209,14 @@ function actualizarMatrizYDetalleUI() {
   MATRIZ_SUCURSALES.forEach(s => totalesCol[s] = 0);
   let granTotal = 0;
 
-  const filtrados = matrizDatosCombinados.filter(r => {
-    const fecha = r.fin_prueba || r.fecha_ingreso || r.created_at || r.fecha_cierre || r.fecha;
-    return esDeFechaMatriz(fecha, matrizTemporalidad) && coincideMetricaMatriz(r);
+  // VECTOR 1: La Matriz Pivot filtra estrictamente por FECHA DE INGRESO
+  const filtradosIngreso = matrizDatosCombinados.filter(r => {
+    if (!r) return false;
+    const fechaIng = r.fecha_ingreso || r.created_at || r.fecha;
+    return esDeFechaMatriz(fechaIng, matrizTemporalidad) && coincideMetricaMatriz(r);
   });
 
-  filtrados.forEach(r => {
+  filtradosIngreso.forEach(r => {
     const suc = normalizarSucursalMatriz(r.sucursal_id);
     const orig = normalizarOrigenMatriz(r.almacen_origen || r.origen);
     if (matriz[orig] && matriz[orig][suc] !== undefined) matriz[orig][suc]++;
@@ -189,104 +243,105 @@ function actualizarMatrizYDetalleUI() {
   });
 
   htmlMatriz += `<tr class="fila-total" style="background: #0f172a !important; font-weight: 800;">`;
-  htmlMatriz += `<td style="text-align: left; padding: 12px; color: #4ade80 !important; font-size: 1.1rem; border: 1px solid #1e293b !important; border-top: 2px solid #0284c7 !important; background: #0f172a !important;">TOTALES</td>`;
+  htmlMatriz += `<td style="text-align: left; padding: 12px; color: #4ade80 !important; font-size: 1.1rem; border: 1px solid #1e293b !important; border-top: 2px solid #0284c7 !important; background: #0f172a !important;">TOTALES RECIBIDOS</td>`;
   MATRIZ_SUCURSALES.forEach(suc => { htmlMatriz += `<td style="padding: 12px; text-align: center; color: #4ade80 !important; font-size: 1.1rem; border: 1px solid #1e293b !important; border-top: 2px solid #0284c7 !important; background: #0f172a !important;">${totalesCol[suc]}</td>`; });
   htmlMatriz += `<td style="padding: 12px; text-align: center; background: #0284c7 !important; color: #ffffff !important; font-size: 1.15rem; font-weight: 900; border: 1px solid #0284c7 !important;">${granTotal}</td></tr>`;
   
   tbodyMatriz.innerHTML = htmlMatriz;
-  renderDetalleYTecnicosUI(filtrados);
+  renderDetalleYTecnicosUI(filtradosIngreso);
 }
 
-// Helper auxiliar para identificar equipos VIP dinámicamente desde catalogo_equipos
-function esModeloVIP(r) {
-  // 1. Si la consulta SQL o JOIN ya trae la propiedad es_vip de la BD
-  if (r.es_vip !== undefined && r.es_vip !== null) {
-    return Boolean(r.es_vip);
-  }
-
-  // 2. Si se cruza dinámicamente contra la variable global del catálogo (cargada desde la BD)
-  if (window.catalogoEquipos && Array.isArray(window.catalogoEquipos)) {
-    const descRegistro = (r.descripcion || r.modelo || '').trim().toUpperCase();
-    return window.catalogoEquipos.some(cat => 
-      cat.es_vip === true && (
-        (cat.modelo && descRegistro.includes(cat.modelo.trim().toUpperCase())) ||
-        (cat.modelo_norm && descRegistro.includes(cat.modelo_norm.trim().toUpperCase()))
-      )
-    );
-  }
-
-  return false;
-}
-
+// ====================================================
+// 3. DETALLE Y RENDIMIENTO DE TÉCNICOS (VECTOR LABORATORIO)
+// ====================================================
 function renderDetalleYTecnicosUI(itemsBase) {
   const tbodySN = document.getElementById('tbody-detalle-sn');
   const lblTitulo = document.getElementById('lbl-titulo-detalle');
-  let listaVisual = [...itemsBase];
+  let listaVisual = Array.isArray(itemsBase) ? [...itemsBase] : [];
+
+  if (lblTitulo) {
+    if (matrizFiltroCelda) {
+      lblTitulo.textContent = `📋 Detalle: ${matrizFiltroCelda.origen} ➔ [${matrizFiltroCelda.sucursal}]`;
+    } else {
+      lblTitulo.textContent = `📋 Listado Completo del Filtro (${listaVisual.length} equipos)`;
+    }
+  }
 
   if (matrizFiltroCelda) {
-    lblTitulo.textContent = `📋 Detalle: ${matrizFiltroCelda.origen} ➔ [${matrizFiltroCelda.sucursal}]`;
-    listaVisual = listaVisual.filter(r => normalizarSucursalMatriz(r.sucursal_id) === matrizFiltroCelda.sucursal && normalizarOrigenMatriz(r.almacen_origen || r.origen) === matrizFiltroCelda.origen);
-  } else {
-    lblTitulo.textContent = `📋 Listado Completo del Filtro (${listaVisual.length} equipos)`;
+    listaVisual = listaVisual.filter(r => r && normalizarSucursalMatriz(r.sucursal_id) === matrizFiltroCelda.sucursal && normalizarOrigenMatriz(r.almacen_origen || r.origen) === matrizFiltroCelda.origen);
   }
 
   listaVisual.sort((a, b) => {
+    if (!a || !b) return 0;
     let valA = '', valB = '';
     if (matrizColOrden === 'fecha') {
-      valA = new Date(a.fin_prueba || a.fecha_ingreso || a.created_at || a.fecha_cierre || 0).getTime();
-      valB = new Date(b.fin_prueba || b.fecha_ingreso || b.created_at || b.fecha_cierre || 0).getTime();
-    } else if (matrizColOrden === 'sn') { valA = (a.sn || '').toUpperCase(); valB = (b.sn || '').toUpperCase(); }
-    else if (matrizColOrden === 'modelo') { valA = (a.descripcion || a.modelo || '').toUpperCase(); valB = (b.descripcion || b.modelo || '').toUpperCase(); }
+      valA = new Date(a.fecha_ingreso || a.created_at || a.fin_prueba || 0).getTime();
+      valB = new Date(b.fecha_ingreso || b.created_at || b.fin_prueba || 0).getTime();
+    } else if (matrizColOrden === 'sn') { valA = String(a.sn || '').toUpperCase(); valB = String(b.sn || '').toUpperCase(); }
+    else if (matrizColOrden === 'modelo') { valA = String(a.descripcion || a.modelo || '').toUpperCase(); valB = String(b.descripcion || b.modelo || '').toUpperCase(); }
     else if (matrizColOrden === 'origen') { valA = normalizarOrigenMatriz(a.almacen_origen || a.origen); valB = normalizarOrigenMatriz(b.almacen_origen || b.origen); }
     else if (matrizColOrden === 'sucursal') { valA = normalizarSucursalMatriz(a.sucursal_id); valB = normalizarSucursalMatriz(b.sucursal_id); }
-    else if (matrizColOrden === 'estado') { valA = (a.condicion || 'PENDIENTE').toUpperCase(); valB = (b.condicion || 'PENDIENTE').toUpperCase(); }
-    else if (matrizColOrden === 'tecnico') { valA = (a.tecnico_prueba || '').toUpperCase(); valB = (b.tecnico_prueba || '').toUpperCase(); }
+    else if (matrizColOrden === 'estado') { valA = String(a.condicion || 'PENDIENTE').toUpperCase(); valB = String(b.condicion || 'PENDIENTE').toUpperCase(); }
+    else if (matrizColOrden === 'tecnico') { valA = String(a.tecnico_prueba || a.tecnico || '').toUpperCase(); valB = String(b.tecnico_prueba || b.tecnico || '').toUpperCase(); }
 
     if (valA < valB) return matrizOrdenAsc ? -1 : 1;
     if (valA > valB) return matrizOrdenAsc ? 1 : -1;
     return 0;
   });
 
-  if (listaVisual.length === 0) {
-    tbodySN.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 15px; background: #0f172a;">Sin equipos registrados para este filtro.</td></tr>`;
-  } else {
-    tbodySN.innerHTML = listaVisual.map(r => {
-      const fechaRaw = r.fin_prueba || r.fecha_ingreso || r.created_at || r.fecha_cierre || '';
-      const fecha = fechaRaw ? fechaRaw.split('T')[0] : '--/--/----';
-      const cond = (r.condicion || 'PENDIENTE').toUpperCase();
-      let colorCond = cond.includes('CIRCULACI') || cond.includes('OK') ? '#4ade80' : cond.includes('DESCARTE') || cond.includes('FALLA') ? '#f87171' : '#fde047';
-      const tecPrueba = r.tecnico_prueba || 'Sin Registro (Histórico)';
-      const sucFormateada = normalizarSucursalMatriz(r.sucursal_id);
-      const origenFormateado = normalizarOrigenMatriz(r.almacen_origen || r.origen);
+  if (tbodySN) {
+    if (listaVisual.length === 0) {
+      tbodySN.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 15px; background: #0f172a;">Sin equipos registrados para este filtro.</td></tr>`;
+    } else {
+      tbodySN.innerHTML = listaVisual.map(r => {
+        const fechaRaw = r.fecha_ingreso || r.created_at || r.fin_prueba || '';
+        const fecha = fechaRaw ? String(fechaRaw).split('T')[0] : '--/--/----';
+        const cond = String(r.condicion || 'PENDIENTE').toUpperCase();
+        let colorCond = cond.includes('CIRCULACI') || cond.includes('OK') ? '#4ade80' : cond.includes('DESCARTE') || cond.includes('FALLA') ? '#f87171' : '#fde047';
+        const tecPrueba = String(r.tecnico_prueba || r.tecnico || 'Sin Registro');
+        const sucFormateada = normalizarSucursalMatriz(r.sucursal_id);
+        const origenFormateado = normalizarOrigenMatriz(r.almacen_origen || r.origen);
 
-      return `<tr style="background: #0f172a;">
-        <td style="color: #cbd5e1; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${fecha}</td>
-        <td style="padding: 8px 6px; border-bottom: 1px solid #1e293b;"><span class="code-sn" style="font-size: 0.78rem; padding: 2px 6px;">${r.sn || 'SIN SN'}</span></td>
-        <td style="color: #f8fafc; font-weight: 600; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${r.descripcion || r.modelo || '-'}</td>
-        <td style="color: #38bdf8; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${origenFormateado}</td>
-        <td style="padding: 8px 6px; border-bottom: 1px solid #1e293b; text-align: center;">
-          <span style="color: #38bdf8; background: #1e293b; border: 1px solid #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; display: inline-block;">${sucFormateada}</span>
-        </td>
-        <td style="padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;"><span style="color: ${colorCond}; font-weight: bold;">${cond}</span></td>
-        <td style="color: #94a3b8; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${tecPrueba}</td>
-      </tr>`;
-    }).join('');
+        return `<tr style="background: #0f172a;">
+          <td style="color: #cbd5e1; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${fecha}</td>
+          <td style="padding: 8px 6px; border-bottom: 1px solid #1e293b;"><span class="code-sn" style="font-size: 0.78rem; padding: 2px 6px;">${r.sn || 'SIN SN'}</span></td>
+          <td style="color: #f8fafc; font-weight: 600; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${r.descripcion || r.modelo || '-'}</td>
+          <td style="color: #38bdf8; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${origenFormateado}</td>
+          <td style="padding: 8px 6px; border-bottom: 1px solid #1e293b; text-align: center;">
+            <span style="color: #38bdf8; background: #1e293b; border: 1px solid #0284c7; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.75rem; display: inline-block;">${sucFormateada}</span>
+          </td>
+          <td style="padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;"><span style="color: ${colorCond}; font-weight: bold;">${cond}</span></td>
+          <td style="color: #94a3b8; padding: 8px 6px; border-bottom: 1px solid #1e293b; font-size: 0.78rem;">${tecPrueba}</td>
+        </tr>`;
+      }).join('');
+    }
   }
 
   const tbodyTec = document.getElementById('tbody-tecnicos');
   const lblTituloTec = document.getElementById('lbl-titulo-tecnicos');
+
+  if (lblTituloTec) {
+    lblTituloTec.textContent = matrizFiltroCelda 
+      ? `👨‍🔧 Rendimiento: ${matrizFiltroCelda.origen} ➔ [${matrizFiltroCelda.sucursal}]`
+      : `👨‍🔧 Rendimiento por Técnico de Prueba (Laboratorio en Período)`;
+  }
+
   if (!tbodyTec) return;
 
-  lblTituloTec.textContent = matrizFiltroCelda 
-    ? `👨‍🔧 Rendimiento: ${matrizFiltroCelda.origen} ➔ [${matrizFiltroCelda.sucursal}]`
-    : `👨‍🔧 Rendimiento por Técnico de Prueba (Filtro Activo)`;
+  // VECTOR 2: Rendimiento de Técnicos por Fecha de Prueba (Lectura pura de BD)
+  const filtradosLaboratorio = matrizDatosCombinados.filter(r => {
+    return r && r.fin_prueba && esDeFechaMatriz(r.fin_prueba, matrizTemporalidad);
+  });
 
   const mapaTecnicos = {};
-  listaVisual.forEach(r => {
-    const cond = (r.condicion || 'PENDIENTE').toUpperCase();
+  filtradosLaboratorio.forEach(r => {
+    const cond = String(r.condicion || '').toUpperCase();
     const esProbado = cond.includes('CIRCULACI') || cond.includes('OK') || cond.includes('RECUPERADO') || cond.includes('DESCARTE') || cond.includes('FALLA');
-    let tecNombre = (r.tecnico_prueba && r.tecnico_prueba.trim() !== '') ? r.tecnico_prueba.trim() : (esProbado ? 'Histórico / Sin Registro de Prueba' : 'Pendientes de Prueba');
-    
+    if (!esProbado) return;
+
+    const tecRaw = String(r.tecnico_prueba || r.tecnico || 'SIN REGISTRO');
+    const tecNombre = tecRaw.trim().toUpperCase();
+
     if (!mapaTecnicos[tecNombre]) {
       mapaTecnicos[tecNombre] = { total: 0, circ: 0, desc: 0, pend: 0, circVIP: 0, descVIP: 0 };
     }
@@ -300,18 +355,15 @@ function renderDetalleYTecnicosUI(itemsBase) {
     } else if (cond.includes('DESCARTE') || cond.includes('FALLA')) {
       mapaTecnicos[tecNombre].desc++;
       if (esEqVIP) mapaTecnicos[tecNombre].descVIP++;
-    } else {
-      mapaTecnicos[tecNombre].pend++;
     }
   });
 
   const listaTecnicos = Object.entries(mapaTecnicos).sort((a, b) => b[1].total - a[1].total);
 
   if (listaTecnicos.length === 0) {
-    tbodyTec.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 15px; background: #0f172a;">Sin registros para los técnicos en este filtro.</td></tr>`;
+    tbodyTec.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 15px; background: #0f172a;">Sin registros de pruebas terminadas en este período.</td></tr>`;
   } else {
     tbodyTec.innerHTML = listaTecnicos.map(([nombre, c]) => {
-      // El porcentaje de efectividad se evalúa dinámicamente según el catálogo VIP
       const probadosVIP = c.circVIP + c.descVIP;
       const pctEfectividad = probadosVIP > 0 ? ((c.circVIP / probadosVIP) * 100).toFixed(1) : '0.0';
       
