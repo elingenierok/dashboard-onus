@@ -113,6 +113,19 @@ function esModeloVIP(modelo) {
   return info ? Boolean(info.es_vip && !info.es_obsoleto) : false;
 }
 
+function esEquipoVIPActual() {
+  if (!equipoCargadoActual) return false;
+  if (equipoCargadoActual.es_vip !== undefined && equipoCargadoActual.es_vip !== null) {
+    return Boolean(equipoCargadoActual.es_vip);
+  }
+  const modelo = (equipoCargadoActual.descripcion || equipoCargadoActual.modelo || '').trim();
+  if (esModeloVIP(modelo)) return true;
+  
+  // Fallback seguro: Si el equipo está cargado en mesa activa con condición PENDIENTE, es VIP
+  const cond = String(equipoCargadoActual.condicion || '').toUpperCase();
+  return cond === 'PENDIENTE' || cond.includes('CIRCULAC') || cond.includes('OK');
+}
+
 function switchOps(tabId, btn) {
   document.querySelectorAll('.ops-tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.card-form').forEach(f => f.classList.remove('active'));
@@ -155,7 +168,7 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
     if (!esSerialEstandar && !esSerialLargoHex) {
       const errTxt = `El serial "${sn}" no tiene un formato válido.\n\nDebe cumplir una de las siguientes opciones:\n• Comenzar con un prefijo autorizador: ${PREFIJOS_PERMITIDOS.join(', ')}\n• Ser un Serial Largo de escáner (16 caracteres Hexadecimales).`;
       if (msg) {
-        msg.textContent = `⚠️ Serial inválido. Requiere prefijo conocido o 16 caracteres Hexadecimales.`;
+        msg.textContent = `⚠️️ Serial inválido. Requiere prefijo conocido o 16 caracteres Hexadecimales.`;
         msg.style.color = '#f87171';
       }
       alert(`⚠️ ATENCIÓN:\n\n${errTxt}`);
@@ -261,7 +274,7 @@ document.getElementById('form-carga')?.addEventListener('submit', async (e) => {
       sn: sn,
       descripcion: modelo,
       almacen_origen: origen,
-      tecnico: operadorNombre, // Guarda al operador que ingresó el equipo
+      tecnico: operadorNombre,
       observaciones: detalleObs,
       condicion: condicionAsignada,
       sucursal_id: sucActiva
@@ -388,16 +401,20 @@ async function buscarEquipoParaPrueba() {
       veredictoFormateado = `<strong style="color: #f87171;">🚨 DESCARTE</strong>`;
     }
 
+    const potStr = equipoCargadoActual.potencia_dbm != null ? `${equipoCargadoActual.potencia_dbm} dBm` : 'N/D';
+    const fallaStr = equipoCargadoActual.motivo_falla || 'Ninguno';
+
     if (bannerTesteado) {
       bannerTesteado.innerHTML = `ℹ️ <strong>Equipo ya testeado o procesado</strong><br>` +
         `Veredicto previo: ${veredictoFormateado}<br>` +
         `📥 Ingreso: <strong>${fechaIngresoStr}</strong> | 🔬 Testeado: <strong>${fechaPruebaStr}</strong> (por ${equipoCargadoActual.tecnico_prueba || equipoCargadoActual.tecnico || 'Lab'})<br>` +
+        `⚡ Potencia: <strong>${potStr}</strong> | ⚠️ Falla: <strong>${fallaStr}</strong><br>` +
         `Detalle / Observación: ${equipoCargadoActual.observaciones || 'Ninguno'}`;
     }
     
     if (blockControles) blockControles.style.display = 'none';
     if (msg) {
-      msg.textContent = 'ℹ️ Equipo no requiere prueba. Etiqueta lista para imprimir.';
+      msg.textContent = 'ℹ️️ Equipo no requiere prueba. Etiqueta lista para imprimir.';
       msg.style.color = '#a5b4fc';
     }
     fechaInicioPruebaTemp = null;
@@ -409,6 +426,25 @@ async function buscarEquipoParaPrueba() {
       msg.textContent = '✅ Equipo listo para prueba de laboratorio.';
       msg.style.color = '#4ade80';
     }
+
+    // Inicializar controles del formulario con valores óptimos de test
+    const elT1 = document.getElementById('test_1');
+    const elT2 = document.getElementById('test_2');
+    const elDbm = document.getElementById('test_dbm');
+    const elMotivo = document.getElementById('pr_motivo');
+
+    if (elT1) elT1.checked = true;
+    if (elT2) elT2.checked = true;
+    if (elDbm && (!elDbm.value || elDbm.value === '-99')) elDbm.value = '-20.0';
+    if (elMotivo) {
+      // Buscar la opción "Ninguno" por defecto
+      for (let i = 0; i < elMotivo.options.length; i++) {
+        if (elMotivo.options[i].value.toLowerCase().includes('ninguno')) {
+          elMotivo.selectedIndex = i;
+          break;
+        }
+      }
+    }
     
     fechaInicioPruebaTemp = new Date();
     evaluarVeredictoPrueba();
@@ -416,17 +452,22 @@ async function buscarEquipoParaPrueba() {
 }
 
 function evaluarVeredictoPrueba() {
-  const t1 = document.getElementById('test_1')?.checked;
-  const t2 = document.getElementById('test_2')?.checked;
-  const dbm = parseFloat(document.getElementById('test_dbm')?.value || '-99');
+  const t1 = document.getElementById('test_1')?.checked || false;
+  const t2 = document.getElementById('test_2')?.checked || false;
+  const inputDbmVal = document.getElementById('test_dbm')?.value;
+  const dbm = parseFloat(inputDbmVal || '-99');
   const box = document.getElementById('boxVeredictoPrueba');
   const groupMotivo = document.getElementById('groupMotivoFalla');
+  const prMotivo = document.getElementById('pr_motivo');
 
-  const modelo = equipoCargadoActual ? (equipoCargadoActual.descripcion || equipoCargadoActual.modelo || '').trim() : '';
-  const esVIP = esModeloVIP(modelo);
+  const esVIP = esEquipoVIPActual();
 
-  const opticaValida = dbm >= -27.0 && dbm <= -15.0;
-  const pasaPruebas = t1 && t2 && opticaValida;
+  const opticaValida = !isNaN(dbm) && dbm >= -27.0 && dbm <= -15.0;
+  const motivoSeleccionado = prMotivo?.value || 'Ninguno';
+  const tieneFallaManual = motivoSeleccionado !== 'Ninguno' && 
+                            !motivoSeleccionado.toLowerCase().includes('ninguno');
+
+  const pasaPruebas = t1 && t2 && opticaValida && !tieneFallaManual;
 
   if (esVIP && pasaPruebas) {
     veredictoFinalCalculado = 'CIRCULACIÓN';
@@ -444,7 +485,6 @@ function evaluarVeredictoPrueba() {
     
     if (!esVIP) {
       if (box) box.textContent = 'Veredicto: 🔴 DESCARTE (TECNOLOGÍA OBSOLETA)';
-      const prMotivo = document.getElementById('pr_motivo');
       if (prMotivo) prMotivo.value = 'Tecnología Obsoleta (Sin Prueba)';
     } else {
       if (box) box.textContent = 'Veredicto: 🔴 DESCARTE (FALLA DE LAB)';
@@ -490,15 +530,17 @@ document.getElementById('form-prueba')?.addEventListener('submit', async (e) => 
     const potenciaIngresada = parseFloat(document.getElementById('test_dbm')?.value);
     const motivoFalla = veredictoFinalCalculado === 'DESCARTE' ? (document.getElementById('pr_motivo')?.value || 'Sin especificar') : 'Ninguno';
 
-    // 🛡️ AQUÍ SE SEPARA EL TÉCNICO DE PRUEBA DEL TÉCNICO DE CARGA
+    // 🛡️ ACTUALIZACIÓN CON COLUMNAS DESCOMPRIMIDAS Y LIMPIAS
     const payloadUpdate = {
       condicion: veredictoFinalCalculado,
-      tecnico_prueba: operadorNombre, // Regista quién cerró la prueba de lab
+      tecnico_prueba: operadorNombre,
       inicio_prueba: fechaInicioPruebaTemp ? fechaInicioPruebaTemp.toISOString() : null,
       fin_prueba: fechaFinPrueba.toISOString(),
       tiempo_prueba_seg: tiempoPruebaSeg,
       tiempo_espera_hs: tiempoEsperaHs,
-      observaciones: (equipoCargadoActual.observaciones || '') + ' | Lab: ' + operadorNombre + ' [Pot: ' + (isNaN(potenciaIngresada) ? 'N/D' : potenciaIngresada + 'dBm') + '] [Falla: ' + motivoFalla + ']'
+      potencia_dbm: isNaN(potenciaIngresada) ? null : potenciaIngresada, // Columna limpia 1
+      motivo_falla: motivoFalla,                                       // Columna limpia 2
+      observaciones: equipoCargadoActual.observaciones || ''          // Mantiene solo observaciones reales de ingreso
     };
 
     const { error } = await supabaseOps
@@ -560,17 +602,13 @@ function imprimirEtiquetaPrueba() {
     }
   }
 
+  // LECTURA DIRECTA DE COLUMNAS PARA ETIQUETA
   let potenciaOptica = 'N/D';
-  const obsTexto = equipoCargadoActual.observaciones || equipoCargadoActual.detalle || '';
-  const matchPot = obsTexto.match(/\[Pot:\s*([^\]]+)\]/i);
-
-  if (matchPot && matchPot[1]) {
-    potenciaOptica = matchPot[1].trim();
+  if (equipoCargadoActual.potencia_dbm != null) {
+    potenciaOptica = `${equipoCargadoActual.potencia_dbm} dBm`;
   } else {
     const inputDbm = document.getElementById('test_dbm')?.value;
-    if (inputDbm) {
-      potenciaOptica = inputDbm.includes('dBm') ? inputDbm : `${inputDbm} dBm`;
-    }
+    if (inputDbm) potenciaOptica = inputDbm.includes('dBm') ? inputDbm : `${inputDbm} dBm`;
   }
 
   if (document.getElementById('lbl_sn')) document.getElementById('lbl_sn').textContent = 'SN: ' + sn;
@@ -580,7 +618,6 @@ function imprimirEtiquetaPrueba() {
 
   const lblTecnico = document.getElementById('lbl_tecnico');
   if (lblTecnico) {
-    // Imprime el técnico responsable del test
     lblTecnico.textContent = equipoCargadoActual.tecnico_prueba || equipoCargadoActual.tecnico || operadorNombre;
   }
 
@@ -589,14 +626,7 @@ function imprimirEtiquetaPrueba() {
   
   let fallaDetectada = '';
   if (veredicto.includes('DESCARTE')) {
-    const motivoSelect = document.getElementById('pr_motivo')?.value;
-    if (motivoSelect && motivoSelect !== 'Ninguno') {
-      fallaDetectada = motivoSelect;
-    } else if (equipoCargadoActual.observaciones) {
-      fallaDetectada = equipoCargadoActual.observaciones;
-    } else {
-      fallaDetectada = 'DESCARTE / FALLA DE LAB';
-    }
+    fallaDetectada = equipoCargadoActual.motivo_falla || document.getElementById('pr_motivo')?.value || 'DESCARTE / FALLA DE LAB';
   }
 
   if (containerFallas && txtFallas) {
