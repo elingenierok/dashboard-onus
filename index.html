@@ -717,113 +717,184 @@ table.tabla-sn td { padding: 8px 10px; border-bottom: 1px solid #1e293b; }
     </section>
 
     <!-- ====================================================
-         DESPLEGABLE 2: ANÁLISIS DE INSUMOS Y MATERIALES
-         ==================================================== -->
-    <section class="card" style="padding: 0; overflow: hidden; background: #0f172a; border-color: #334155; margin-top: 10px;">
-      <!-- CABECERA DESPLEGABLE 2 -->
-      <div onclick="toggleSeccionTendencias('sec-tendencias-insumos')" style="background: #1e293b; padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; user-select: none;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 1.2rem;">🛠️</span>
-          <h2 style="margin:0; font-size: 1rem; color: #4ade80; font-weight: 800;">2. Análisis y Consumo Histórico de Insumos / Materiales</h2>
+     DESPLEGABLE 2: ANÁLISIS DE INSUMOS Y MATERIALES
+     ==================================================== -->
+<section class="card" style="padding: 0; overflow: hidden; background: #0f172a; border-color: #334155; margin-top: 10px;">
+  <!-- CABECERA DESPLEGABLE 2 -->
+  <div onclick="toggleSeccionTendencias('sec-tendencias-insumos')" style="background: #1e293b; padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; user-select: none;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 1.2rem;">🛠️</span>
+      <h2 style="margin:0; font-size: 1rem; color: #4ade80; font-weight: 800;">2. Análisis y Consumo Histórico de Insumos / Materiales</h2>
+    </div>
+    <span id="icon-sec-tendencias-insumos" style="color: #4ade80; font-weight: bold; font-size: 1.1rem;">►</span>
+  </div>
+
+  <!-- CUERPO DESPLEGABLE 2 (OCULTO POR DEFECTO) -->
+  <div id="sec-tendencias-insumos" style="padding: 20px; display: none;">
+    
+    <!-- ⚡ BARRAS DE SELECCIÓN RÁPIDA / INSUMOS CRÍTICOS PREDETERMINADOS -->
+    <div style="background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #0284c7; margin-bottom: 16px;">
+      
+      <!-- Selector Rápido de Sucursales -->
+      <div style="margin-bottom: 12px;">
+        <span style="font-size: 0.8rem; font-weight: bold; color: #38bdf8; display: block; margin-bottom: 6px;">
+          🏬 Filtrar Sucursal Predeterminada:
+        </span>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-preset-suc active" onclick="seleccionarSucursalPreset('TODAS', this)">🌐 TODAS JUNTAS</button>
+          <button type="button" class="btn-preset-suc" onclick="seleccionarSucursalPreset('OBE', this)">OBE</button>
+          <button type="button" class="btn-preset-suc" onclick="seleccionarSucursalPreset('ITU', this)">ITU</button>
+          <button type="button" class="btn-preset-suc" onclick="seleccionarSucursalPreset('ELDO', this)">ELDO</button>
+          <button type="button" class="btn-preset-suc" onclick="seleccionarSucursalPreset('SPD', this)">SPD</button>
+          <button type="button" class="btn-preset-suc" onclick="seleccionarSucursalPreset('WND', this)">WND</button>
         </div>
-        <span id="icon-sec-tendencias-insumos" style="color: #4ade80; font-weight: bold; font-size: 1.1rem;">►</span>
       </div>
 
-      <!-- CUERPO DESPLEGABLE 2 (OCULTO POR DEFECTO) -->
-      <div id="sec-tendencias-insumos" style="padding: 20px; display: none;">
-        
-        <!-- PANEL DE FILTROS ACUMULATIVOS -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; background: #1e293b; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
-          
-          <!-- Filtro 1: Sucursal -->
-          <div>
-            <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🏬 1. Sucursal:</label>
-            <select id="sel-insumo-sucursal" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="alCambiarFiltroTipoOAgrupar(); actualizarGraficoInsumos();">
-              <option value="TODAS">🌐 Todas las Sucursales</option>
-              <option value="OBE">🏬 Oberá (Matriz)</option>
-              <option value="SPD">🏬 San Pedro</option>
-              <option value="WND">🏬 Wanda</option>
-              <option value="ITU">🏬 Ituzaingó</option>
-              <option value="ELDO">🏬 Eldorado</option>
-            </select>
-          </div>
-
-          <!-- Filtro 2.a: Tipo de Almacén -->
-          <div>
-            <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📦 2. Tipo de Almacén:</label>
-            <select id="sel-insumo-tipo-alm" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="alCambiarFiltroTipoOAgrupar(); actualizarGraficoInsumos();">
-              <option value="TODOS">Todos los Tipos de Almacén</option>
-              <option value="ALMACEN_CENTRAL">🏢 ALMACÉN CENTRAL</option>
-              <option value="MOVIL_TECNICO">🚚 MÓVIL TÉCNICO (Propio)</option>
-              <option value="MOVIL_TECNICO_3RO">🚜 MÓVIL TÉCNICO (3ros)</option>
-              <option value="MESA_PRUEBA">🔬 MESA PRUEBA / LAB</option>
-              <option value="DEVOLUCION">🔄 DEVOLUCIÓN / TRIAGE</option>
-              <option value="ALMACEN_AREA">⚙️ ALMACÉN DE ÁREA (Redes/Electro)</option>
-              <option value="OBSOLETO">🗑️ OBSOLETO / DESCARTE</option>
-              <option value="OTRO">📁 OTRO</option>
-            </select>
-          </div>
-
-          <!-- NUEVO: Filtro 2.b: Almacén Específico (Sub-selección) -->
-          <div>
-            <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🎯 2.b Almacén / Móvil Específico:</label>
-            <select id="sel-insumo-almacen-especifico" style="width:100%; background:#0f172a; color:#f8fafc; border:1px solid #0284c7; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="actualizarGraficoInsumos()">
-              <option value="TODOS">🌐 Todos los del Tipo Seleccionado</option>
-            </select>
-          </div>
-
-          <!-- NUEVO: Filtro 3 con Buscador / Autocompletado (Input + Datalist) -->
-          <div style="grid-column: span 2;">
-            <label style="color: #4ade80; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🔍 3. Escribir o Seleccionar Insumo / Material:</label>
-            <input type="text" id="txt-insumo-item" list="list-insumos-items" placeholder="🔍 Escribí para buscar insumo (ej: Patchcord, Conector...)" style="width:100%; background:#0f172a; color:white; border:1px solid #059669; padding:8px 12px; border-radius:6px; font-size:0.85rem; outline:none;" oninput="actualizarGraficoInsumos()">
-            <datalist id="list-insumos-items"></datalist>
-          </div>
-
-          <!-- Filtro 4: Fecha Desde -->
-          <div>
-            <label style="color: #fde047; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📅 Desde:</label>
-            <input type="date" id="insumo-fecha-desde" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:7px; border-radius:6px; font-size:0.82rem; outline:none;" onchange="actualizarGraficoInsumos()">
-          </div>
-
-          <!-- Filtro 5: Fecha Hasta -->
-          <div>
-            <label style="color: #fde047; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📅 Hasta:</label>
-            <input type="date" id="insumo-fecha-hasta" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:7px; border-radius:6px; font-size:0.82rem; outline:none;" onchange="actualizarGraficoInsumos()">
-          </div>
-
+      <!-- Accesos Directos a los 6 Insumos Críticos -->
+      <div>
+        <span style="font-size: 0.8rem; font-weight: bold; color: #34d399; display: block; margin-bottom: 6px;">
+          ⚡ Insumos Frecuentes (Acceso a 1 Clic):
+        </span>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-preset-item" onclick="cargarInsumoPreset('FO DROP 1F FIBER HOME')">🧵 FO DROP 1F FIBER HOME</button>
+          <button type="button" class="btn-preset-item" onclick="cargarInsumoPreset('CONECTOR 2.0 SM SC-APC(VERDE) (FLAT) FURUKAWA')">🔌 CONECTOR SC-APC FURUKAWA</button>
+          <button type="button" class="btn-preset-item" onclick="cargarInsumoPreset('CABLE COAXIAL RG6')">📻 CABLE COAXIAL RG6</button>
+          <button type="button" class="btn-preset-item" onclick="cargarInsumoPreset('CONECTOR CABLE COAXIAL RG6')">🔩 CONECTOR COAXIAL RG6</button>
+          <button type="button" class="btn-preset-item" onclick="cargarInsumoPreset('PRECINTO PLASTICO ALT-2 X100 150/3.5')">🏷️ PRECINTO PLASTICO 150/3.5</button>
+          <button type="button" class="btn-preset-item" onclick="cargarInsumoPreset('ELEC GRAMPA (CLIP) SUJETA CABLE TV COAXIL NÂ°6- N/B CAJA 50U')">📎 GRAMPA SUJETA CABLE N°6</button>
         </div>
-
-        <!-- TARJETAS DE MÉTRICAS KPI DE CONSUMO -->
-        <div id="grid-kpi-insumos" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #334155; padding: 12px;">
-            <div class="title" style="color: #cbd5e1; font-size: 0.72rem;">📦 STOCK ACTUAL</div>
-            <div id="kpi-insumo-stock-actual" class="value" style="color: #f8fafc; font-size: 1.5rem;">0 un.</div>
-            <div class="subtext" style="color: #94a3b8;">En el filtro seleccionado</div>
-          </div>
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #ef4444; padding: 12px;">
-            <div class="title" style="color: #f87171; font-size: 0.72rem;">📉 CONSUMO ACUMULADO</div>
-            <div id="kpi-insumo-consumo-total" class="value" style="color: #f87171; font-size: 1.5rem;">0 un.</div>
-            <div class="subtext" style="color: #cbd5e1;">Salidas netas en el tramo</div>
-          </div>
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #eab308; padding: 12px;">
-            <div class="title" style="color: #fde047; font-size: 0.72rem;">📊 CONSUMO PROMEDIO DIARIO</div>
-            <div id="kpi-insumo-promedio-diario" class="value" style="color: #fde047; font-size: 1.5rem;">0 un./día</div>
-            <div class="subtext" style="color: #cbd5e1;">Ritmo de salida</div>
-          </div>
-          <div class="kpi-card-dark" style="background: #1e293b; border-color: #10b981; padding: 12px;">
-            <div class="title" style="color: #34d399; font-size: 0.72rem;">⏳ AUTONOMÍA ESTIMADA</div>
-            <div id="kpi-insumo-autonomia" class="value" style="color: #34d399; font-size: 1.5rem;">-- días</div>
-            <div class="subtext" style="color: #cbd5e1;">Hasta quiebre de stock</div>
-          </div>
-        </div>
-
-        <!-- GRÁFICO HISTÓRICO DE CONSUMO DE INSUMO -->
-        <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
-          <canvas id="chartInsumosLine"></canvas>
-        </div>
-
       </div>
-    </section>
+
+    </div>
+
+    <!-- PANEL DE FILTROS ACUMULATIVOS -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; background: #1e293b; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155;">
+      
+      <!-- Filtro 1: Sucursal -->
+      <div>
+        <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🏬 1. Sucursal:</label>
+        <select id="sel-insumo-sucursal" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="alCambiarFiltroTipoOAgrupar(); actualizarGraficoInsumos();">
+          <option value="TODAS">🌐 Todas las Sucursales</option>
+          <option value="OBE">🏬 Oberá (Matriz)</option>
+          <option value="SPD">🏬 San Pedro</option>
+          <option value="WND">🏬 Wanda</option>
+          <option value="ITU">🏬 Ituzaingó</option>
+          <option value="ELDO">🏬 Eldorado</option>
+        </select>
+      </div>
+
+      <!-- Filtro 2.a: Tipo de Almacén -->
+      <div>
+        <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📦 2. Tipo de Almacén:</label>
+        <select id="sel-insumo-tipo-alm" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="alCambiarFiltroTipoOAgrupar(); actualizarGraficoInsumos();">
+          <option value="TODOS">Todos los Tipos de Almacén</option>
+          <option value="ALMACÉN CENTRAL">🏢 ALMACÉN CENTRAL</option>
+          <option value="MÓVIL / TÉCNICO">🚚 MÓVIL TÉCNICO (Propio)</option>
+          <option value="DEVOLUCIONES">🔄 DEVOLUCIÓN / TRIAGE</option>
+          <option value="DESCARTE">🗑️ OBSOLETO / DESCARTE</option>
+          <option value="OTROS">📁 OTROS</option>
+        </select>
+      </div>
+
+      <!-- Filtro 2.b: Almacén Específico -->
+      <div>
+        <label style="color: #38bdf8; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🎯 2.b Almacén / Móvil Específico:</label>
+        <select id="sel-insumo-almacen-especifico" style="width:100%; background:#0f172a; color:#f8fafc; border:1px solid #0284c7; padding:8px; border-radius:6px; font-size:0.85rem; outline:none;" onchange="actualizarGraficoInsumos()">
+          <option value="TODOS">🌐 Todos los del Tipo Seleccionado</option>
+        </select>
+      </div>
+
+      <!-- Filtro 3 con Buscador / Autocompletado -->
+      <div style="grid-column: span 2;">
+        <label style="color: #4ade80; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">🔍 3. Escribir o Seleccionar Insumo / Material:</label>
+        <input type="text" id="txt-insumo-item" list="list-insumos-items" placeholder="🔍 Escribí para buscar insumo..." style="width:100%; background:#0f172a; color:white; border:1px solid #059669; padding:8px 12px; border-radius:6px; font-size:0.85rem; outline:none;" oninput="actualizarGraficoInsumos()">
+        <datalist id="list-insumos-items"></datalist>
+      </div>
+
+      <!-- Filtro 4: Fecha Desde -->
+      <div>
+        <label style="color: #fde047; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📅 Desde:</label>
+        <input type="date" id="insumo-fecha-desde" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:7px; border-radius:6px; font-size:0.82rem; outline:none;" onchange="actualizarGraficoInsumos()">
+      </div>
+
+      <!-- Filtro 5: Fecha Hasta -->
+      <div>
+        <label style="color: #fde047; font-size: 0.82rem; font-weight: bold; display: block; margin-bottom: 6px;">📅 Hasta:</label>
+        <input type="date" id="insumo-fecha-hasta" style="width:100%; background:#0f172a; color:white; border:1px solid #334155; padding:7px; border-radius:6px; font-size:0.82rem; outline:none;" onchange="actualizarGraficoInsumos()">
+      </div>
+
+    </div>
+
+    <!-- TARJETAS DE MÉTRICAS KPI DE CONSUMO -->
+    <div id="grid-kpi-insumos" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
+      <div class="kpi-card-dark" style="background: #1e293b; border-color: #334155; padding: 12px;">
+        <div class="title" style="color: #cbd5e1; font-size: 0.72rem;">📦 STOCK ACTUAL</div>
+        <div id="kpi-insumo-stock-actual" class="value" style="color: #f8fafc; font-size: 1.5rem;">0 un.</div>
+        <div class="subtext" style="color: #94a3b8;">En el filtro seleccionado</div>
+      </div>
+      <div class="kpi-card-dark" style="background: #1e293b; border-color: #ef4444; padding: 12px;">
+        <div class="title" style="color: #f87171; font-size: 0.72rem;">📉 CONSUMO ACUMULADO</div>
+        <div id="kpi-insumo-consumo-total" class="value" style="color: #f87171; font-size: 1.5rem;">0 un.</div>
+        <div class="subtext" style="color: #cbd5e1;">Salidas netas en el tramo</div>
+      </div>
+      <div class="kpi-card-dark" style="background: #1e293b; border-color: #eab308; padding: 12px;">
+        <div class="title" style="color: #fde047; font-size: 0.72rem;">📊 CONSUMO PROMEDIO DIARIO</div>
+        <div id="kpi-insumo-promedio-diario" class="value" style="color: #fde047; font-size: 1.5rem;">0 un./día</div>
+        <div class="subtext" style="color: #cbd5e1;">Ritmo de salida</div>
+      </div>
+      <div class="kpi-card-dark" style="background: #1e293b; border-color: #10b981; padding: 12px;">
+        <div class="title" style="color: #34d399; font-size: 0.72rem;">⏳ AUTONOMÍA ESTIMADA</div>
+        <div id="kpi-insumo-autonomia" class="value" style="color: #34d399; font-size: 1.5rem;">-- días</div>
+        <div class="subtext" style="color: #cbd5e1;">Hasta quiebre de stock</div>
+      </div>
+    </div>
+
+    <!-- GRÁFICO HISTÓRICO DE CONSUMO DE INSUMO -->
+    <div style="position: relative; height: 380px; width: 100%; background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155;">
+      <canvas id="chartInsumosLine"></canvas>
+    </div>
+
+  </div>
+</section>
+
+<!-- ESTILOS DE LOS BOTONES DE PRESET -->
+<style>
+  .btn-preset-suc {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #94a3b8;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-preset-suc:hover {
+    border-color: #38bdf8;
+    color: #ffffff;
+  }
+  .btn-preset-suc.active {
+    background: #0284c7;
+    border-color: #38bdf8;
+    color: #ffffff;
+  }
+  .btn-preset-item {
+    background: #0f172a;
+    border: 1px solid #059669;
+    color: #34d399;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-preset-item:hover {
+    background: #059669;
+    color: #ffffff;
+  }
+</style>
 
   </main>
 

@@ -17,8 +17,6 @@ const COLORES_SUCURSAL_TEN = {
 let ten_rawHistoricoData = [];
 let ten_catalogoEquiposMemoria = [];
 let ten_tendenciasChart = null;
-
-// NUEVAS VARIABLES GLOBALES PARA EL MÓDULO DE INSUMOS
 let ten_insumosChart = null;
 
 function ten_normalizar(txt) {
@@ -49,7 +47,6 @@ function toggleSeccionTendencias(seccionId) {
     elem.style.display = 'block';
     if (icon) icon.textContent = '▼';
 
-    // Disparar renderizado del gráfico de insumos al abrir por primera vez esa sección
     if (seccionId === 'sec-tendencias-insumos') {
       actualizarGraficoInsumos();
     }
@@ -133,8 +130,6 @@ async function cargarModuloTendencias() {
 
     ten_inicializarLimitesFechas();
     actualizarGraficoTendencias();
-
-    // NUEVO: Cargar autocompletado de insumos y subalmacenes
     await cargarListaInsumosUnicos();
 
   } catch (err) {
@@ -153,7 +148,7 @@ async function descargarHistorialCompleto() {
   let hasMore = true;
 
   while (hasMore) {
-        const fechaLimite = new Date();
+    const fechaLimite = new Date();
     fechaLimite.setMonth(fechaLimite.getMonth() - 3);
     const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
 
@@ -195,7 +190,6 @@ function ten_inicializarLimitesFechas() {
     inputHasta.value = todasFechas[todasFechas.length - 1];
   }
 
-  // Inicializar también las fechas por defecto del módulo de insumos
   const insDesde = document.getElementById('insumo-fecha-desde');
   const insHasta = document.getElementById('insumo-fecha-hasta');
   if (insDesde && !insDesde.value) insDesde.value = todasFechas[Math.max(0, todasFechas.length - 30)];
@@ -203,7 +197,7 @@ function ten_inicializarLimitesFechas() {
 }
 
 // ====================================================
-// FUNCIÓN 1: GRÁFICO TENDENCIAS ONUs (MANTENIDO INTACTO)
+// FUNCIÓN 1: GRÁFICO TENDENCIAS ONUs
 // ====================================================
 function actualizarGraficoTendencias() {
   if (!ten_rawHistoricoData.length) return;
@@ -245,7 +239,6 @@ function actualizarGraficoTendencias() {
     todasFechas.forEach(f => mapaSuma[alm][f] = null);
   });
 
-  // 1. Acumulación primaria de datos
   ten_rawHistoricoData.forEach(row => {
     let alm = (row.almacen || '').trim().toUpperCase();
     if (alm === 'SPD_PRINCIPAL') alm = 'SPD_ALM_PRINCIPAL';
@@ -268,7 +261,6 @@ function actualizarGraficoTendencias() {
     }
   });
 
-  // 2. CORRECCIÓN DE PICOS A CERO (Forward Fill / Arrastre de Stock)
   almacenesTildados.forEach(alm => {
     let ultimoValorValido = null;
     todasFechas.forEach(f => {
@@ -386,18 +378,16 @@ function actualizarGraficoTendencias() {
 }
 window.actualizarGraficoTendencias = actualizarGraficoTendencias;
 
-
 // ====================================================
 // FUNCIÓN 2: ANÁLISIS DE CONSUMO E HISTÓRICO DE INSUMOS
 // ====================================================
 
-// A. Llenar el Datalist con los insumos existentes
 async function cargarListaInsumosUnicos() {
   const listContainer = document.getElementById('list-insumos-items');
   if (!listContainer) return;
 
   try {
-        const { data, error } = await supabaseTendencias
+    const { data, error } = await supabaseTendencias
       .from('stock_historico')
       .select('descripcion')
       .not('descripcion', 'ilike', '%ONU%')
@@ -411,7 +401,7 @@ async function cargarListaInsumosUnicos() {
       if (desc) mapaUnicos.add(desc);
     });
 
-      const itemsOrdenados = Array.from(mapaUnicos).sort();
+    const itemsOrdenados = Array.from(mapaUnicos).sort();
 
     let html = '';
     itemsOrdenados.forEach(desc => {
@@ -420,19 +410,16 @@ async function cargarListaInsumosUnicos() {
 
     listContainer.innerHTML = html;
 
-    // Aviso si se alcanzó el límite de descarga
     if (data && data.length >= 10000) {
-      console.warn(`⚠️ Se alcanzó el límite de 10000 insumos. Puede que falten más en el autocompletado.`);
+      console.warn(`⚠️ Se alcanzó el límite de 10000 insumos.`);
     }
 
-    // Popular subalmacenes iniciales
     await popularAlmacenesEspecificos();
   } catch (err) {
     console.error("Error al cargar lista de insumos:", err);
   }
 }
 
-// B. Llenar el selector 2.b con los vehículos/almacenes reales disponibles
 async function popularAlmacenesEspecificos() {
   const selEspecifico = document.getElementById('sel-insumo-almacen-especifico');
   if (!selEspecifico) return;
@@ -441,51 +428,68 @@ async function popularAlmacenesEspecificos() {
   const tipoFiltro = document.getElementById('sel-insumo-tipo-alm')?.value || 'TODOS';
 
   try {
-    let query = supabaseTendencias
+    const { data, error } = await supabaseTendencias
       .from('stock_historico')
-      .select('almacen, sucursal_id, tipo_almacen')
+      .select('almacen')
+      .not('almacen', 'is', null)
       .limit(20000);
 
-    if (sucFiltro !== 'TODAS') query = query.eq('sucursal_id', sucFiltro);
-    if (tipoFiltro !== 'TODOS') query = query.eq('tipo_almacen', tipoFiltro);
-
-    const { data, error } = await query;
     if (error) throw error;
 
     const almacenesUnicos = new Set();
     (data || []).forEach(r => {
-      if (r.almacen) almacenesUnicos.add(r.almacen.trim());
+      if (r.almacen) almacenesUnicos.add(r.almacen.trim().toUpperCase());
     });
 
-    const listaOrdenada = Array.from(almacenesUnicos).sort();
+    let listaAlmacenes = Array.from(almacenesUnicos);
 
-    let html = `<option value="TODOS">🌐 Todos los del Tipo Seleccionado (${listaOrdenada.length})</option>`;
-    listaOrdenada.forEach(alm => {
+    // 1. Filtrar por prefijo de Sucursal (ej: 'ITU_')
+    if (sucFiltro !== 'TODAS') {
+      listaAlmacenes = listaAlmacenes.filter(alm => alm.startsWith(`${sucFiltro}_`));
+    }
+
+    // 2. Filtrar por Patrón de Tipo de Almacén dentro de la columna almacen
+    if (tipoFiltro !== 'TODOS') {
+      listaAlmacenes = listaAlmacenes.filter(alm => {
+        if (tipoFiltro === 'ALMACÉN CENTRAL') return alm.includes('_ALM_PRINCIPAL');
+        if (tipoFiltro === 'MÓVIL / TÉCNICO') return alm.includes('_MOV_');
+        if (tipoFiltro === 'DEVOLUCIONES') return alm.includes('_ALM_DEVOLUCIONES');
+        if (tipoFiltro === 'DESCARTE') return alm.includes('_ALM_DESCARTE');
+        if (tipoFiltro === 'OTROS') {
+          return !alm.includes('_ALM_PRINCIPAL') &&
+                 !alm.includes('_MOV_') &&
+                 !alm.includes('_ALM_DEVOLUCIONES') &&
+                 !alm.includes('_ALM_DESCARTE');
+        }
+        return true;
+      });
+    }
+
+    listaAlmacenes.sort();
+
+    let html = `<option value="TODOS">🌐 Todos los del Tipo Seleccionado (${listaAlmacenes.length})</option>`;
+    listaAlmacenes.forEach(alm => {
       html += `<option value="${alm}">${alm}</option>`;
     });
 
     selEspecifico.innerHTML = html;
 
-    if (data && data.length >= 20000) {
-      console.warn(`⚠️ Se alcanzó el límite de 20000 almacenes. Puede que falten más en el select.`);
-    }
   } catch (err) {
     console.error("Error al popular almacenes específicos:", err);
   }
 }
 
-// Evento al cambiar Tipo de Almacén o Sucursal
 function alCambiarFiltroTipoOAgrupar() {
   popularAlmacenesEspecificos();
 }
 window.alCambiarFiltroTipoOAgrupar = alCambiarFiltroTipoOAgrupar;
 
-// C. Consulta y renderizado de Gráfico + Tarjetas KPI
 async function actualizarGraficoInsumos() {
-  const selInsumo = document.getElementById('txt-insumo-item')?.value?.trim();
+  const selInsumo = document.getElementById('txt-insumo-item')?.value;
   const sucFiltro = document.getElementById('sel-insumo-sucursal')?.value || 'TODAS';
   const tipoAlmFiltro = document.getElementById('sel-insumo-tipo-alm')?.value || 'TODOS';
   const almEspecifico = document.getElementById('sel-insumo-almacen-especifico')?.value || 'TODOS';
+  
   const fechaDesde = document.getElementById('insumo-fecha-desde')?.value || '';
   const fechaHasta = document.getElementById('insumo-fecha-hasta')?.value || '';
 
@@ -494,7 +498,7 @@ async function actualizarGraficoInsumos() {
   const kpiPromedio = document.getElementById('kpi-insumo-promedio-diario');
   const kpiAutonomia = document.getElementById('kpi-insumo-autonomia');
 
-  if (!selInsumo) {
+  if (!selInsumo || selInsumo.trim() === '') {
     if (kpiStock) kpiStock.textContent = '0 un.';
     if (kpiConsumo) kpiConsumo.textContent = '0 un.';
     if (kpiPromedio) kpiPromedio.textContent = '0 un./día';
@@ -505,32 +509,53 @@ async function actualizarGraficoInsumos() {
   try {
     let query = supabaseTendencias
       .from('stock_historico')
-      .select('fecha_registro, stock_total, sucursal_id, tipo_almacen, almacen')
-      .ilike('descripcion', `%${selInsumo}%`)
+      .select('fecha_registro, stock_total, almacen, descripcion')
       .order('fecha_registro', { ascending: true })
       .limit(10000);
 
-    if (sucFiltro !== 'TODAS') query = query.eq('sucursal_id', sucFiltro);
-    if (tipoAlmFiltro !== 'TODOS') query = query.eq('tipo_almacen', tipoAlmFiltro);
-    if (almEspecifico !== 'TODOS') query = query.eq('almacen', almEspecifico);
-    if (fechaDesde) query = query.gte('fecha_registro', fechaDesde);
-    if (fechaHasta) query = query.lte('fecha_registro', fechaHasta);
+    // Búsqueda multipalabra por descripcion
+    const palabrasInsumo = selInsumo.trim().split(/\s+/).filter(p => p.length > 0);
+    palabrasInsumo.forEach(palabra => {
+      query = query.ilike('descripcion', `%${palabra}%`);
+    });
+
+    // FILTRADO DIRECTO POR PATRONES EN LA COLUMNA 'ALMACEN'
+    if (almEspecifico && almEspecifico !== 'TODOS') {
+      query = query.eq('almacen', almEspecifico);
+    } else {
+      if (sucFiltro !== 'TODAS') {
+        query = query.ilike('almacen', `${sucFiltro}_%`);
+      }
+      
+      if (tipoAlmFiltro === 'ALMACÉN CENTRAL') {
+        query = query.ilike('almacen', '%_ALM_PRINCIPAL%');
+      } else if (tipoAlmFiltro === 'MÓVIL / TÉCNICO') {
+        query = query.ilike('almacen', '%_MOV_%');
+      } else if (tipoAlmFiltro === 'DEVOLUCIONES') {
+        query = query.ilike('almacen', '%_ALM_DEVOLUCIONES%');
+      } else if (tipoAlmFiltro === 'DESCARTE') {
+        query = query.ilike('almacen', '%_ALM_DESCARTE%');
+      }
+    }
+
+    // RANGO DE FECHAS COMPLETO (Cubre el día de hoy hasta las 23:59:59)
+    if (fechaDesde) query = query.gte('fecha_registro', `${fechaDesde}T00:00:00`);
+    if (fechaHasta) query = query.lte('fecha_registro', `${fechaHasta}T23:59:59`);
 
     const { data, error } = await query;
     if (error) throw error;
 
     const registros = data || [];
 
-    // 1. Agrupar suma por fecha real de la BD
     const sumaPorFecha = {};
     registros.forEach(r => {
-      const f = r.fecha_registro;
+      const f = String(r.fecha_registro).split('T')[0];
       if (!sumaPorFecha[f]) sumaPorFecha[f] = 0;
       sumaPorFecha[f] += (parseInt(r.stock_total, 10) || 0);
     });
 
-    // 2. Generar rango continuo de fechas desde "insumo-fecha-desde" hasta "insumo-fecha-hasta"
     const fechasOrdenadasBD = Object.keys(sumaPorFecha).sort();
+    
     if (fechasOrdenadasBD.length === 0) {
       if (kpiStock) kpiStock.textContent = '0 un.';
       if (kpiConsumo) kpiConsumo.textContent = '0 un.';
@@ -540,45 +565,16 @@ async function actualizarGraficoInsumos() {
       return;
     }
 
-    const fInicioStr = fechaDesde || fechasOrdenadasBD[0];
-    const fFinStr = fechaHasta || fechasOrdenadasBD[fechasOrdenadasBD.length - 1];
+    const serieStock = fechasOrdenadasBD.map(f => sumaPorFecha[f]);
+    const stockActual = serieStock[serieStock.length - 1] || 0;
 
-    const fechasCompletas = [];
-    let curDate = new Date(fInicioStr + 'T00:00:00');
-    const endDate = new Date(fFinStr + 'T00:00:00');
-
-    while (curDate <= endDate) {
-      fechasCompletas.push(curDate.toISOString().split('T')[0]);
-      curDate.setDate(curDate.getDate() + 1);
-    }
-
-    // 3. Arrastre de Stock (Forward Fill para cubrir fines de semana y días sin carga)
-    let ultimoStockValido = null;
-    const serieStock = [];
-
-    fechasCompletas.forEach(f => {
-      if (sumaPorFecha[f] !== undefined) {
-        ultimoStockValido = sumaPorFecha[f];
-      }
-      if (ultimoStockValido !== null) {
-        serieStock.push(ultimoStockValido);
-      }
-    });
-
-    // Recortar las fechas si el historial empieza después de fInicioStr
-    const fechasVisiblesFinal = fechasCompletas.slice(fechasCompletas.length - serieStock.length);
-
-    // 4. Cálculo de Consumo Neto
     let consumoAcumulado = 0;
     for (let i = 1; i < serieStock.length; i++) {
       const diff = serieStock[i - 1] - serieStock[i];
-      if (diff > 0) { 
-        consumoAcumulado += diff;
-      }
+      if (diff > 0) consumoAcumulado += diff;
     }
 
-    const stockActual = serieStock[serieStock.length - 1];
-    const cantDias = Math.max(1, fechasVisiblesFinal.length);
+    const cantDias = Math.max(1, fechasOrdenadasBD.length);
     const promedioDiario = parseFloat((consumoAcumulado / cantDias).toFixed(1));
 
     let autonomiaDias = '--';
@@ -588,29 +584,25 @@ async function actualizarGraficoInsumos() {
       autonomiaDias = '∞ Sin Consumo';
     }
 
-    // Actualizar Tarjetas KPI
     if (kpiStock) kpiStock.textContent = `${stockActual.toLocaleString('es-AR')} un.`;
     if (kpiConsumo) kpiConsumo.textContent = `${consumoAcumulado.toLocaleString('es-AR')} un.`;
     if (kpiPromedio) kpiPromedio.textContent = `${promedioDiario} un./día`;
     if (kpiAutonomia) kpiAutonomia.textContent = autonomiaDias;
 
-    // Renderizar Gráfico
     const canvas = document.getElementById('chartInsumosLine');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    if (ten_insumosChart) {
-      ten_insumosChart.destroy();
-    }
+    if (ten_insumosChart) ten_insumosChart.destroy();
 
     const labelGrafico = almEspecifico !== 'TODOS' 
       ? `${selInsumo} en [${almEspecifico}]` 
-      : `${selInsumo} (${tipoAlmFiltro})`;
+      : `${selInsumo} (${sucFiltro} - ${tipoAlmFiltro})`;
 
     ten_insumosChart = new Chart(ctx, {
       type: 'line',
       data: {
-        labels: fechasVisiblesFinal,
+        labels: fechasOrdenadasBD,
         datasets: [{
           label: `Evolución: ${labelGrafico}`,
           data: serieStock,
@@ -644,3 +636,54 @@ async function actualizarGraficoInsumos() {
   }
 }
 window.actualizarGraficoInsumos = actualizarGraficoInsumos;
+
+// ====================================================
+// FUNCIONES DE SELECCIÓN RÁPIDA DE INSUMOS Y SUCURSALES
+// ====================================================
+
+// 1. Cambiar la sucursal desde los botones rápidos
+function seleccionarSucursalPreset(codigoSucursal, btn) {
+  // Resaltar botón activo
+  document.querySelectorAll('.btn-preset-suc').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  // 1. Asignar la sucursal al desplegable
+  const selSucursal = document.getElementById('sel-insumo-sucursal');
+  if (selSucursal) {
+    selSucursal.value = codigoSucursal;
+  }
+
+  // 2. 🔴 CLAVE: Forzar siempre a "ALMACÉN CENTRAL" para evitar sumar descartes o devoluciones
+  const selTipoAlm = document.getElementById('sel-insumo-tipo-alm');
+  if (selTipoAlm) {
+    selTipoAlm.value = 'ALMACÉN CENTRAL'; 
+  }
+
+  // 3. Resetear el almacén específico a "TODOS" (para que aplique la regla del tipo y sucursal)
+  const selEspecifico = document.getElementById('sel-insumo-almacen-especifico');
+  if (selEspecifico) {
+    selEspecifico.value = 'TODOS';
+  }
+
+  // Recargar el selector 2.b con el nuevo tipo y refrescar el gráfico
+  if (typeof popularAlmacenesEspecificos === 'function') {
+    popularAlmacenesEspecificos().then(() => {
+      actualizarGraficoInsumos();
+    });
+  } else {
+    actualizarGraficoInsumos();
+  }
+}
+window.seleccionarSucursalPreset = seleccionarSucursalPreset;
+
+// 2. Cargar un insumo predeterminado con 1 clic
+function cargarInsumoPreset(nombreInsumo) {
+  const inputInsumo = document.getElementById('txt-insumo-item');
+  if (inputInsumo) {
+    inputInsumo.value = nombreInsumo;
+  }
+
+  // Disparar recarga de tarjetas y gráfico
+  actualizarGraficoInsumos();
+}
+window.cargarInsumoPreset = cargarInsumoPreset;
