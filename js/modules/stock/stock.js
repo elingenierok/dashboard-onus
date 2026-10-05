@@ -100,11 +100,24 @@ window.obtenerClasificacionABC = function(descNorm, codUpper = '') {
   }) || null;
 };
 
+// --- FUNCIÓN DE LIMPIEZA PARA COINCIDENCIA FLEXIBLE ---
+function ten_limpiarParaMatch(str) {
+  return (str || '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]/gi, "") // Elimina espacios, guiones, paréntesis y símbolos
+    .toUpperCase();
+}
+
 function resolverInfoEquipo(descNorm, sucActiva) {
+  const descLimpia = ten_limpiarParaMatch(descNorm);
+
   const coincidencias = catalogoEquiposMemoria.filter(item => {
     const itemNorm = item.modelo_norm || window.normalizar(item.modelo);
-    return descNorm.includes(itemNorm) || itemNorm.includes(descNorm);
+    const itemLimpio = ten_limpiarParaMatch(itemNorm);
+    return descLimpia.includes(itemLimpio) || itemLimpio.includes(descLimpia);
   });
+
   if (!coincidencias.length) return null;
 
   let match = coincidencias.find(c => c.sucursal_id === sucActiva);
