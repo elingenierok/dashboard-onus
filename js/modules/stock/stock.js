@@ -623,19 +623,22 @@ function renderStockTactico(devCant, devCatvCant, valDev, descCant, valDesc, des
 
   const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
 
-  const renderDesglose = (itemsObj, idTag) => {
-    const keys = Object.keys(itemsObj);
-    if (!keys.length) return `<div id="${idTag}" style="display:none; padding:8px; font-size:0.75rem; color:#94a3b8; text-align:center;">Sin ítems en esta categoría</div>`;
-    
-    let listHtml = keys.sort().map(k => `
-      <div style="display:flex; justify-content:space-between; font-size:0.75rem; padding:3px 0; border-bottom:1px solid #334155; color:#cbd5e1;">
-        <span>${k}</span>
-        <strong style="color:#f8fafc;">${itemsObj[k]} un.</strong>
+  const renderDesglose = (itemsObj, idTag, tipoAlmacen) => {
+  const keys = Object.keys(itemsObj);
+  if (!keys.length) return `<div id="${idTag}" style="display:none; padding:8px; font-size:0.75rem; color:#94a3b8; text-align:center;">Sin ítems en esta categoría</div>`;
+  
+  let listHtml = keys.sort().map(k => {
+    const modeloSafe = encodeURIComponent(k);
+    return `
+      <div onclick="verAlmacenesPorModelo('${modeloSafe}', '${tipoAlmacen}')" style="display:flex; justify-content:space-between; font-size:0.75rem; padding:4px 6px; border-bottom:1px solid #334155; color:#cbd5e1; cursor:pointer;" title="Clic para ver la distribución por almacén">
+        <span style="color:#38bdf8; text-decoration:underline;">${k}</span>
+        <strong style="color:#f8fafc;">${itemsObj[k]} un. 🏬</strong>
       </div>
-    `).join('');
-    
-    return `<div id="${idTag}" style="display:none; margin-top:8px; max-height:130px; overflow-y:auto; background:#0f172a; padding:6px 8px; border-radius:6px; border:1px solid #334155;">${listHtml}</div>`;
-  };
+    `;
+  }).join('');
+  
+  return `<div id="${idTag}" style="display:none; margin-top:8px; max-height:150px; overflow-y:auto; background:#0f172a; padding:6px 8px; border-radius:6px; border:1px solid #334155;">${listHtml}</div>`;
+};
 
   grid.innerHTML = `
     <!-- 1. DEVOLUCIONES / TRIAGE -->
@@ -653,7 +656,7 @@ function renderStockTactico(devCant, devCatvCant, valDev, descCant, valDesc, des
       <button type="button" class="btn" style="width:100%; margin-top:10px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-dev'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
         ▼ Ver Desglose
       </button>
-      ${renderDesglose(itemsDev, 'desglose-dev')}
+      ${renderDesglose(itemsDev, 'desglose-dev', 'DEVOLUCION')}
     </div>
 
     <!-- 2. DESCARTE GENERAL -->
@@ -668,7 +671,7 @@ function renderStockTactico(devCant, devCatvCant, valDev, descCant, valDesc, des
       <button type="button" class="btn" style="width:100%; margin-top:22px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-desc'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
         ▼ Ver Desglose
       </button>
-      ${renderDesglose(itemsDesc, 'desglose-desc')}
+      ${renderDesglose(itemsDesc, 'desglose-desc', 'DESCARTE')}
     </div>
 
     <!-- 3. DESCARTE VIP -->
@@ -683,7 +686,7 @@ function renderStockTactico(devCant, devCatvCant, valDev, descCant, valDesc, des
       <button type="button" class="btn" style="width:100%; margin-top:22px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-descvip'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
         ▼ Ver Desglose
       </button>
-      ${renderDesglose(itemsDescVip, 'desglose-descvip')}
+      ${renderDesglose(itemsDescVip, 'desglose-descvip', 'DESCARTE_VIP')}
     </div>
 
     <!-- 4. STOCK NUEVO / COMPRAS -->
@@ -696,7 +699,52 @@ function renderStockTactico(devCant, devCatvCant, valDev, descCant, valDesc, des
       <button type="button" class="btn" style="width:100%; margin-top:22px; background:#0f172a; border:1px solid #334155; color:#cbd5e1; font-size:0.75rem; padding:5px; border-radius:6px; cursor:pointer;" onclick="const el = document.getElementById('desglose-catriel'); el.style.display = el.style.display === 'none' ? 'block' : 'none';">
         ▼ Ver Desglose
       </button>
-      ${renderDesglose(itemsCatriel, 'desglose-catriel')}
+      ${renderDesglose(itemsCatriel, 'desglose-catriel', 'CATRIEL')}
     </div>
   `;
 }
+
+function verAlmacenesPorModelo(modeloCodificado, tipoFiltro) {
+  const modelo = decodeURIComponent(modeloCodificado);
+  const sucActiva = window.SUCURSAL_FILTRO_ACTIVA || window.SUCURSAL_USUARIO || 'OBE';
+  const modeloLimpio = window.normalizar(modelo);
+
+  // Filtrar las filas cargadas en memoria que tengan stock
+  const coincidencias = stockData.filter(row => {
+    if (row.stock <= 0) return false;
+    if (!window.perteneceASucursal(row.almacen, sucActiva)) return false;
+
+    // Filtro según la tarjeta táctica donde se hizo clic
+    const almUpper = (row.almacen || '').toUpperCase();
+    if (tipoFiltro === 'DEVOLUCION' && !(almUpper.includes('DEVOLUCION') || almUpper.includes('TRIAGE'))) return false;
+    if (tipoFiltro === 'DESCARTE' && !(almUpper.includes('DESCARTE') && !almUpper.includes('DESCARTE_VIP'))) return false;
+    if (tipoFiltro === 'DESCARTE_VIP' && !almUpper.includes('DESCARTE_VIP')) return false;
+    if (tipoFiltro === 'CATRIEL' && !almUpper.includes('CATRIEL')) return false;
+
+    // Coincidencia de la descripción
+    const descNorm = window.normalizar(row.descripcion);
+    return descNorm.includes(modeloLimpio) || modeloLimpio.includes(descNorm);
+  });
+
+  if (!coincidencias.length) {
+    alert(`ℹ️ No se encontraron registros de depósitos activos para:\n\n"${modelo}" [Filtro: ${sucActiva}]`);
+    return;
+  }
+
+  // Agrupar cantidades por almacén
+  const desgloseAlmacen = {};
+  let totalSumado = 0;
+
+  coincidencias.forEach(c => {
+    desgloseAlmacen[c.almacen] = (desgloseAlmacen[c.almacen] || 0) + c.stock;
+    totalSumado += c.stock;
+  });
+
+  // Generar lista para mostrar en pantalla
+  const lineas = Object.keys(desgloseAlmacen)
+    .sort()
+    .map((alm, idx) => `${idx + 1}. ${alm}: ${desgloseAlmacen[alm].toLocaleString('es-AR')} un.`);
+
+  alert(`🏬 Ubicación de "${modelo}" (${totalSumado} un. en total) [${sucActiva}]:\n\n` + lineas.join('\n'));
+}
+window.verAlmacenesPorModelo = verAlmacenesPorModelo;
