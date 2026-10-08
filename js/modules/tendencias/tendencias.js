@@ -197,7 +197,7 @@ function ten_inicializarLimitesFechas() {
 }
 
 // ====================================================
-// FUNCIÓN 1: GRÁFICO TENDENCIAS ONUs
+// FUNCIÓN 1: GRÁFICO TENDENCIAS ONUs (CORREGIDO)
 // ====================================================
 function actualizarGraficoTendencias() {
   if (!ten_rawHistoricoData.length) return;
@@ -239,6 +239,7 @@ function actualizarGraficoTendencias() {
     todasFechas.forEach(f => mapaSuma[alm][f] = null);
   });
 
+  // 1. Acumulación real desde los datos descargados
   ten_rawHistoricoData.forEach(row => {
     let alm = (row.almacen || '').trim().toUpperCase();
     if (alm === 'SPD_PRINCIPAL') alm = 'SPD_ALM_PRINCIPAL';
@@ -261,13 +262,11 @@ function actualizarGraficoTendencias() {
     }
   });
 
+  // 🔴 CORRECCIÓN: Si no hay registro en Supabase para una fecha, se asigna 0 (sin arrastrar el valor anterior)
   almacenesTildados.forEach(alm => {
-    let ultimoValorValido = null;
     todasFechas.forEach(f => {
-      if (mapaSuma[alm][f] !== null) {
-        ultimoValorValido = mapaSuma[alm][f];
-      } else if (ultimoValorValido !== null) {
-        mapaSuma[alm][f] = ultimoValorValido;
+      if (mapaSuma[alm][f] === null) {
+        mapaSuma[alm][f] = 0;
       }
     });
   });
