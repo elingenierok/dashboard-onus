@@ -24,11 +24,9 @@ Add-Type -AssemblyName System.Drawing
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "${titulo.replace(/"/g, '`"')}"
 $form.Size = New-Object System.Drawing.Size(520, 260)
-$form.StartPosition = 'CenterScreen'
-$form.TopMost = $true
-$form.FormBorderStyle = 'FixedDialog'
-$form.MaximizeBox = $false
-$form.MinimizeBox = $false
+$form.StartPosition = 'CenterScreen'$form.TopMost = $true$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox =$false
+$form.MinimizeBox =$false
 
 $label = New-Object System.Windows.Forms.Label
 $label.Text = "${mensaje.replace(/"/g, '`"')}"
@@ -59,24 +57,31 @@ $form.ShowDialog() | Out-Null
 `;
     execSync('powershell -NoProfile -Command -', { input: script, stdio: ['pipe', 'ignore', 'ignore'] });
   } catch (e) {
-    // Si el popup falla, no rompemos el bot. Solo lo logueamos.
     console.error('No se pudo mostrar el popup:', e.message);
   }
 }
 
 // ====================================================
-// PARSEO DEL CSV
+// PARSEO DEL CSV (DETECCIÓN AUTOMÁTICA DE SEPARADOR)
 // ====================================================
 function parsearCSVStock(filePath) {
   const contenido = fs.readFileSync(filePath, 'latin1');
   const lineas = contenido.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lineas.length < 2) return [];
 
+  // Detección automática del delimitador (; o \t o ,)
+  const primeraLinea = lineas[0];
+  let delimitador = ';';
+  if (primeraLinea.includes('\t')) delimitador = '\t';
+  else if (primeraLinea.includes(';') && !primeraLinea.includes('\t')) delimitador = ';';
+  else if (primeraLinea.includes(',')) delimitador = ',';
+
   const registros = [];
   for (let i = 1; i < lineas.length; i++) {
-    const cols = lineas[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
+    const cols = lineas[i].split(delimitador).map(c => c.replace(/^"|"$/g, '').trim());
     if (cols.length < 8) continue;
 
+    // Col 5: Stock Total, Col 6: Stock Reservado
     const stockTotalRaw = cols[5]?.replace(/\./g, '').replace(',', '.') || '0';
     const stockReservadoRaw = cols[6]?.replace(/\./g, '').replace(',', '.') || '0';
 
@@ -141,9 +146,6 @@ async function descargarCSV() {
   try {
     await page.goto(process.env.ISP_URL, { waitUntil: 'networkidle2' });
 
-    // El bot intenta loguearse con timeout corto.
-    // Si el ISP responde, sigue normal (vivo + histórico).
-    // Si tarda demasiado, corta con aviso.
     const inputPassword = await page.$('input[type="password"]');
     if (inputPassword) {
       try {
@@ -159,7 +161,6 @@ async function descargarCSV() {
           )
         ]);
 
-        // Verificar que el login funcionó (que no siga el input de password)
         const sigueLogin = await page.$('input[type="password"]');
         if (sigueLogin) {
           throw new Error('LOGIN_FALLIDO');
@@ -172,6 +173,7 @@ async function descargarCSV() {
       }
     }
 
+    // Navegar a Administracion -> Stock -> Stock Actual
     await page.evaluate(() => {
       const admin = Array.from(document.querySelectorAll('a')).find(a => a.textContent.trim().includes('Administracion'));
       if (admin) admin.click();
@@ -190,12 +192,19 @@ async function descargarCSV() {
     });
     await new Promise(r => setTimeout(r, 4000));
 
+    // CLICK EN EL BOTÓN CSV (Adaptado para <i class="fa-file-csv"> y su contenedor)
+    await page.waitForSelector('i.fa-file-csv, [title*="CSV"], [title*="Descargar CSV"]', { timeout: 10000 });
+    
     await page.evaluate(() => {
-      const imgCSV = document.querySelector('img[src*="fil_csv.png"]') || document.querySelector('img[src*="csv"]');
-      if (imgCSV) {
-        const enlacePadre = imgCSV.closest('a');
-        if (enlacePadre) enlacePadre.click();
-        else imgCSV.click();
+      const iconoCSV = document.querySelector('i.fa-file-csv') || 
+                       document.querySelector('[title="Descargar CSV"]') ||
+                       document.querySelector('i[class*="fa-file-csv"]');
+
+      if (iconoCSV) {
+        // Si el <i> está envuelto en un <a> o <button>, hacemos click en el contenedor
+        const padreClickeable = iconoCSV.closest('a, button');
+        if (padreClickeable) padreClickeable.click();
+        else iconoCSV.click();
       }
     });
 
@@ -210,7 +219,7 @@ async function descargarCSV() {
       }
     }
 
-    if (!archivoDescargado) throw new Error('No se detectó el archivo CSV.');
+    if (!archivoDescargado) throw new Error('No se detectó el archivo CSV en descargas_bot.');
 
     await browser.close();
     return archivoDescargado;
@@ -247,14 +256,11 @@ async function ejecutarBot() {
   let errorMensaje = null;
 
   try {
-    // 1. Descargar CSV
     const archivoDescargado = await descargarCSV();
-
-    // 2. Parsear
     const datos = parsearCSVStock(archivoDescargado);
     if (datos.length === 0) throw new Error('El CSV no tenía filas válidas.');
 
-    // 3. Actualizar registro_stock (siempre)
+    // 1. Actualizar registro_stock (vivo)
     await supabase.from('registro_stock').delete().neq('id', 0);
 
     const BATCH_SIZE = 500;
@@ -265,11 +271,10 @@ async function ejecutarBot() {
     }
     stockVivoOk = true;
 
-    // 4. Chequear histórico
+    // 2. Histórico (una vez al día)
     historicoYaExistia = await hayHistoricoDeHoy(fechaHoy);
 
     if (!historicoYaExistia) {
-      // 5. Insertar histórico (solo la primera del día)
       for (let i = 0; i < datos.length; i += BATCH_SIZE) {
         const lote = datos.slice(i, i + BATCH_SIZE);
         const { error } = await supabase.from('stock_historico').insert(lote);
@@ -278,14 +283,12 @@ async function ejecutarBot() {
       historicoOk = true;
     }
 
-    // 6. Limpiar CSV descargado
     try { fs.unlinkSync(archivoDescargado); } catch (e) {}
 
-    // 7. Popup solo si insertó histórico
     if (historicoOk) {
       mostrarPopup(
         'Stock actualizado correctamente',
-        `Stock vivo actualizado: ${fechaHoraLocal()}\\n\\nHistorico del dia: ${fechaHoraLocal()}\\n\\nFilas cargadas: ${datos.length}`
+        `Stock vivo actualizado: ${fechaHoraLocal()}\n\nHistorico del dia: ${fechaHoraLocal()}\n\nFilas cargadas: ${datos.length}`
       );
     }
 
@@ -293,7 +296,6 @@ async function ejecutarBot() {
     errorMensaje = error.message;
   }
 
-   // 8. Popup de error, si hubo
   if (errorMensaje) {
     if (errorMensaje === 'SESION_EXPIRADA') {
       mostrarPopup(

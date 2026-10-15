@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Test - Analizador de Órdenes de Servicio</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #0f172a; color: #cbd5e1; padding: 25px; margin: 0; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+    h2, h3 { color: #f8fafc; margin-top: 0; }
+    
+    /* Zona de Carga y Barra Compacta */
+    .dropzone { border: 2px dashed #475569; border-radius: 8px; padding: 25px; text-align: center; background: #0f172a; cursor: pointer; transition: border-color 0.2s; }
+    .dropzone:hover { border-color: #38bdf8; }
+    .file-bar-compact { display: flex; justify-content: space-between; align-items: center; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px 16px; margin-bottom: 20px; }
+
+    /* Filtros en una sola línea */
+    .filtros-inline { 
+      display: flex; gap: 12px; align-items: flex-end; 
+      flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; 
+    }
+    .form-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 130px; }
+    .form-group.meses { flex: 0 0 auto; min-width: auto; }
+    
+    label { font-size: 0.65rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+    input { background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 6px 8px; border-radius: 6px; font-size: 0.8rem; outline: none; width: 100%; height: 32px; }
+    input:focus { border-color: #38bdf8; }
+
+    /* Botones Meses */
+    .meses-grid { display: flex; gap: 3px; }
+    .btn-mes { background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 6px 7px; border-radius: 4px; font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease; height: 32px; }
+    .btn-mes:hover { border-color: #38bdf8; color: #f8fafc; }
+    .btn-mes.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
+
+    /* Ranking Cuadrillas */
+    .btn-toggle { background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+    .btn-toggle:hover { border-color: #38bdf8; color: #f8fafc; }
+    .btn-toggle.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
+    .ranking-container { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; padding-bottom: 5px; }
+    .rank-card { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; min-width: 120px; border-left: 3px solid #38bdf8; }
+    .rank-pos { font-size: 0.65rem; color: #94a3b8; font-weight: bold; margin-bottom: 2px; }
+    .rank-name { font-size: 0.75rem; color: #f8fafc; font-weight: bold; word-break: break-word; line-height: 1.1; margin-bottom: 4px; }
+    .rank-val { font-size: 1rem; font-weight: 800; }
+
+    /* Mini Tablas para Ranking OS */
+    .grid-top-os { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+    .mini-panel { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; }
+    .mini-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+    .mini-table th { color: #94a3b8; padding: 4px; text-align: left; border-bottom: 1px solid #334155; font-size: 0.65rem; text-transform: uppercase; }
+    .mini-table td { padding: 6px 4px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+    .mini-table tr:hover { background: #1e293b; }
+    .rank-os-num { color: #94a3b8; font-weight: bold; font-size: 0.65rem; }
+
+    /* KPIs Agrupados */
+    .kpi-container { display: flex; gap: 8px; flex-wrap: wrap; }
+    .kpi-card { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; flex: 1; min-width: 110px; }
+    .kpi-title { font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; font-weight: bold; }
+    .kpi-value { font-size: 1.1rem; font-weight: 800; color: #38bdf8; margin-top: 2px; }
+
+    /* Tablas Principales */
+    .btn-tab { background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+    .btn-tab.active { background: #0284c7; color: #ffffff; border-color: #0284c7; }
+    .table-container { max-height: 550px; overflow-y: auto; border: 1px solid #334155; border-radius: 8px; }
+    table.main-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left; }
+    table.main-table th { background: #0f172a; color: #94a3b8; padding: 6px 10px; position: sticky; top: 0; z-index: 2; border-bottom: 1px solid #334155; }
+    .th-title { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; font-size: 0.72rem; margin-bottom: 4px; }
+    .col-filter { width: 100%; padding: 4px 6px; font-size: 0.7rem; border-radius: 4px; background: #1e293b; border: 1px solid #475569; height: 26px; }
+    table.main-table td { padding: 8px 10px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+    table.main-table tr:hover { background: #1e293b50; }
+    
+    .badge { display: inline-block; padding: 2px 5px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; background: #334155; color: #cbd5e1; }
+    .badge-sn { background: #0284c7; color: #ffffff; }
+    .ul-insumos { margin: 0; padding-left: 15px; line-height: 1.3; color: #94a3b8; font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+
+  <h2>📊 Analizador de Consumo y Rendimiento de OS</h2>
+
+  <!-- ZONA DE CARGA -->
+  <div id="zonaCargaGrande" class="card">
+    <div class="dropzone" onclick="document.getElementById('fileInput').click()">
+      <div style="font-size: 1.5rem; margin-bottom: 6px;">📂</div>
+      <strong>Haz clic para cargar el CSV de Movimientos</strong>
+      <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">Soporta formato con separador de tabulaciones (\t) o punto y coma (;)</div>
+    </div>
+  </div>
+
+  <!-- BARRA DE ARCHIVO DISCRETA -->
+  <div id="barraArchivoCargado" class="file-bar-compact" style="display: none;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 1.2rem;">📄</span>
+      <div>
+        <strong id="nombreArchivoTxt" style="color: #f8fafc; font-size: 0.88rem;">archivo.csv</strong>
+        <span id="cantFilasTxt" style="font-size: 0.75rem; color: #94a3b8; margin-left: 8px;">(0 filas cargadas)</span>
+      </div>
+    </div>
+    <button class="btn-tab" onclick="document.getElementById('fileInput').click()" style="padding: 5px 12px; font-size: 0.78rem;">🔄 Cambiar CSV</button>
+  </div>
+  <input type="file" id="fileInput" accept=".csv, .txt" style="display:none;" onchange="procesarArchivo(this.files[0])" />
+
+  <!-- PANEL DE ANÁLISIS -->
+  <div id="panelAnalisis" style="display: none;">
+    
+    <!-- FILTROS (UNA SOLA FILA) -->
+    <div class="card" style="padding-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+        <h3 style="font-size: 1rem; margin: 0;">Filtros de Análisis</h3>
+        <button class="btn-tab" onclick="resetFiltros()" style="padding: 5px 12px; font-size: 0.75rem;">Limpiar Filtros</button>
+      </div>
+
+      <div class="filtros-inline">
+        <!-- Meses Acumulables -->
+        <div class="form-group meses">
+          <label>Meses (Acumulable):</label>
+          <div id="contenedorMeses" class="meses-grid"></div>
+        </div>
+        <!-- Fechas -->
+        <div class="form-group"><label>Desde:</label><input type="date" id="filtroDesde" onchange="actualizarBaseDatosLocal()" /></div>
+        <div class="form-group"><label>Hasta:</label><input type="date" id="filtroHasta" onchange="actualizarBaseDatosLocal()" /></div>
+        <!-- Desplegables -->
+        <div class="form-group"><label>Sucursal (Buscar):</label>
+          <input type="text" id="filtroSucursal" list="listSucursales" placeholder="Buscar..." oninput="actualizarBaseDatosLocal()" />
+          <datalist id="listSucursales"></datalist>
+        </div>
+        <div class="form-group" style="flex: 1.5;"><label>Móvil / Cuadrilla (Buscar):</label>
+          <input type="text" id="filtroAlmacen" list="listAlmacenes" placeholder="Buscar..." oninput="actualizarBaseDatosLocal()" />
+          <datalist id="listAlmacenes"></datalist>
+        </div>
+        <div class="form-group"><label>Búsqueda libre:</label>
+          <input type="text" id="filtroTexto" placeholder="OS, Cliente..." oninput="actualizarBaseDatosLocal()" />
+        </div>
+      </div>
+    </div>
+
+    <!-- RANKINGS (COLAPSABLE POR DEFECTO) -->
+    <div class="card">
+      <div onclick="toggleSeccionRanking()" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;">
+        <h3 style="font-size: 0.95rem; margin: 0;">🏆 Top 5 Ranking (Móvil / Cuadrilla)</h3>
+        <span id="icon-ranking" style="font-size: 0.8rem; color: #94a3b8;">► Desplegar</span>
+      </div>
+
+      <div id="sec-contenido-ranking" style="display: none; margin-top: 12px; border-top: 1px solid #334155; padding-top: 12px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn-toggle btn-rank active" id="btnRank_cantOS" onclick="setRankingMetric('cantOS')">OS Atendidas</button>
+          <button class="btn-toggle btn-rank" id="btnRank_drop" onclick="setRankingMetric('drop')">Drop Total</button>
+          <button class="btn-toggle btn-rank" id="btnRank_conectores" onclick="setRankingMetric('conectores')">Conectores Tot.</button>
+          <button class="btn-toggle btn-rank" id="btnRank_equipos" onclick="setRankingMetric('equipos')">Equipos Instalados</button>
+        </div>
+        <div class="ranking-container" id="rankingCards"></div>
+
+        <!-- Top 15 OS Específicas -->
+        <div class="grid-top-os">
+          <!-- Top 15 Drop -->
+          <div class="mini-panel">
+            <h4 style="margin:0 0 8px 0; color:#4ade80; font-size:0.8rem; display:flex; justify-content:space-between;">
+              <span>🚨 Top 15 OS con más Drop</span>
+              <span style="font-size:0.65rem; color:#94a3b8; font-weight:normal;">(Metros)</span>
+            </h4>
+            <table class="mini-table">
+              <thead><tr><th style="width:20px;">#</th><th>Ord. Servicio</th><th>Cliente / Cuadrilla</th><th style="text-align:right;">Mts.</th></tr></thead>
+              <tbody id="tbodyTopDrop"></tbody>
+            </table>
+          </div>
+
+          <!-- Top 15 Conectores -->
+          <div class="mini-panel">
+            <h4 style="margin:0 0 8px 0; color:#facc15; font-size:0.8rem; display:flex; justify-content:space-between;">
+              <span>🚨 Top 15 OS con más Conectores</span>
+              <span style="font-size:0.65rem; color:#94a3b8; font-weight:normal;">(Unidades)</span>
+            </h4>
+            <table class="mini-table">
+              <thead><tr><th style="width:20px;">#</th><th>Ord. Servicio</th><th>Cliente / Cuadrilla</th><th style="text-align:right;">Un.</th></tr></thead>
+              <tbody id="tbodyTopConectores"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESÚMENES GLOBALES -->
+    <div class="card">
+      <h3 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 12px;">📋 Resumen Global y Auditoría</h3>
+      <div class="kpi-container">
+        <div class="kpi-card"><div class="kpi-title">OS Atendidas</div><div class="kpi-value" id="kpiOS">0</div></div>
+        <div class="kpi-card"><div class="kpi-title">Drop Desplegado</div><div class="kpi-value" id="kpiDrop" style="color: #4ade80;">0 m</div></div>
+        <div class="kpi-card"><div class="kpi-title">Prom. Drop / OS</div><div class="kpi-value" id="kpiPromDrop">0 m</div></div>
+        <div class="kpi-card"><div class="kpi-title">Conectores Totales</div><div class="kpi-value" id="kpiConectores" style="color: #facc15;">0 un.</div></div>
+        <div class="kpi-card"><div class="kpi-title">Prom. Conect/OS</div><div class="kpi-value" id="kpiPromConect" style="color: #facc15;">0</div></div>
+        <div class="kpi-card" style="border-color: #991b1b;"><div class="kpi-title" style="color:#f87171;">OS > 2 Conectores</div><div class="kpi-value" id="kpiAlerta" style="color:#f87171;">0 OS</div></div>
+        <div class="kpi-card"><div class="kpi-title">ONUs / Routers</div><div class="kpi-value" id="kpiEquipos" style="color: #a855f7;">0 un.</div></div>
+      </div>
+    </div>
+
+    <!-- TABLAS DINÁMICAS -->
+    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+      <button id="btnVistaOS" class="btn-tab active" onclick="setVistaActiva('OS')">Registro por Orden de Servicio</button>
+      <button id="btnVistaCuadrilla" class="btn-tab" onclick="setVistaActiva('CUADRILLA')">Registro por Móvil / Cuadrilla</button>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div class="table-container">
+        <table id="tableOS" class="main-table">
+          <thead id="theadOS"></thead>
+          <tbody id="tbodyOS"></tbody>
+        </table>
+        <table id="tableCuadrilla" class="main-table" style="display:none;">
+          <thead id="theadCuadrilla"></thead>
+          <tbody id="tbodyCuadrilla"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Variables Globales
+    let rawData = [];
+    let currentFilteredData = [];
+    let agrupadoOS = [];
+    let agrupadoCuadrillas = [];
+    let vistaActiva = 'OS'; 
+    let rankingMetric = 'cantOS';
+    let mesesSeleccionados = new Set();
+    
+    // Config Tablas
+    const tableState = {
+      OS: { sortCol: 'fecha', sortAsc: false, filters: {} },
+      CUADRILLA: { sortCol: 'cantOS', sortAsc: false, filters: {} }
+    };
+
+    const colsOS = [
+      { id: 'fecha', label: 'Fecha' },
+      { id: 'os', label: 'Orden de Servicio' },
+      { id: 'almacen', label: 'Móvil / Técnico' },
+      { id: 'cliente', label: 'Cliente' },
+      { id: 'equiposStr', label: 'Equipos Instalados' },
+      { id: 'drop', label: 'Drop (m)', isNum: true },
+      { id: 'conectores', label: 'Conectores', isNum: true },
+      { id: 'otrosStr', label: 'Otros Insumos' }
+    ];
+    
+    const colsCua = [
+      { id: 'almacen', label: 'Móvil / Cuadrilla' },
+      { id: 'sucursal', label: 'Sucursal' },
+      { id: 'cantOS', label: 'OS Atendidas', isNum: true },
+      { id: 'drop', label: 'Drop Total', isNum: true },
+      { id: 'promDrop', label: 'Prom. Drop/OS', isNum: true },
+      { id: 'conectores', label: 'Conectores Tot.', isNum: true },
+      { id: 'promConect', label: 'Prom. Conect/OS', isNum: true },
+      { id: 'equipos', label: 'Equipos Inst.', isNum: true }
+    ];
+
+    const MESES = [
+      { num: '01', nombre: 'ENE' }, { num: '02', nombre: 'FEB' }, { num: '03', nombre: 'MAR' },
+      { num: '04', nombre: 'ABR' }, { num: '05', nombre: 'MAY' }, { num: '06', nombre: 'JUN' },
+      { num: '07', nombre: 'JUL' }, { num: '08', nombre: 'AGO' }, { num: '09', nombre: 'SEP' },
+      { num: '10', nombre: 'OCT' }, { num: '11', nombre: 'NOV' }, { num: '12', nombre: 'DIC' }
+    ];
+
+    // ====================================================
+    // ACCIONES DE INTERFAZ (DESPLEGABLE RANKING)
+    // ====================================================
+    function toggleSeccionRanking() {
+      const contenido = document.getElementById('sec-contenido-ranking');
+      const icono = document.getElementById('icon-ranking');
+      if (!contenido) return;
+
+      if (contenido.style.display === 'none' || contenido.style.display === '') {
+        contenido.style.display = 'block';
+        if (icono) icono.textContent = '▼ Contraer';
+      } else {
+        contenido.style.display = 'none';
+        if (icono) icono.textContent = '► Desplegar';
+      }
+    }
+
+    // ====================================================
+    // INICIALIZACIÓN Y PARSEO
+    // ====================================================
+    function renderBotonesMeses() {
+      document.getElementById('contenedorMeses').innerHTML = MESES.map(m => `
+        <button type="button" class="btn-mes" onclick="toggleMes('${m.num}', this)">${m.nombre}</button>
+      `).join('');
+    }
+
+    function toggleMes(numMes, btn) {
+      mesesSeleccionados.has(numMes) ? mesesSeleccionados.delete(numMes) : mesesSeleccionados.add(numMes);
+      btn.classList.toggle('active');
+      actualizarBaseDatosLocal();
+    }
+
+    function procesarArchivo(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        rawData = parsearCSV(e.target.result);
+        if (!rawData.length) { alert("Archivo sin registros válidos."); return; }
+
+        document.getElementById('zonaCargaGrande').style.display = 'none';
+        document.getElementById('barraArchivoCargado').style.display = 'flex';
+        document.getElementById('nombreArchivoTxt').textContent = file.name;
+        document.getElementById('cantFilasTxt').textContent = `(${rawData.length.toLocaleString()} filas)`;
+
+        renderBotonesMeses();
+        poblarDatalists(rawData);
+        construirCabecerasTabla();
+        document.getElementById('panelAnalisis').style.display = 'block';
+        actualizarBaseDatosLocal();
+      };
+      reader.readAsText(file, 'ISO-8859-1');
+    }
+
+    function parsearCSV(texto) {
+      const lineas = texto.split(/\r?\n/).filter(l => l.trim());
+      if (lineas.length < 2) return [];
+      const delimitador = lineas[0].includes('\t') ? '\t' : ';';
+      
+      return lineas.slice(1).map(l => {
+        const cols = l.split(delimitador).map(c => c.replace(/^"|"$/g, '').trim());
+        if(cols.length < 12) return null;
+
+        let fIso = '';
+        const m = cols[4]?.match(/(\d{2})-(\d{2})-(\d{4})/);
+        if (m) fIso = `${m[3]}-${m[2]}-${m[1]}`;
+
+        return {
+          numero: cols[1], cliente: cols[3] || 'Sin Cliente', fecha: fIso, os: cols[5] || 'SIN_OS',
+          sucursal: cols[7] || '', idCat: (cols[10] || '').toUpperCase(),
+          producto: cols[13] || '', sn: cols[14] || '',
+          cantidad: parseFloat(cols[15]?.replace(',','.')) || 0, um: cols[16] || '', almacen: cols[17] || ''
+        };
+      }).filter(Boolean);
+    }
+
+    // ====================================================
+    // FILTROS Y AGRUPACIÓN
+    // ====================================================
+    function poblarDatalists(datos) {
+      const suc = [...new Set(datos.map(d => d.sucursal).filter(Boolean))].sort();
+      const alm = [...new Set(datos.map(d => d.almacen).filter(Boolean))].sort();
+      document.getElementById('listSucursales').innerHTML = suc.map(s => `<option value="${s}">`).join('');
+      document.getElementById('listAlmacenes').innerHTML = alm.map(a => `<option value="${a}">`).join('');
+    }
+
+    function resetFiltros() {
+      document.getElementById('filtroSucursal').value = '';
+      document.getElementById('filtroAlmacen').value = '';
+      document.getElementById('filtroDesde').value = '';
+      document.getElementById('filtroHasta').value = '';
+      document.getElementById('filtroTexto').value = '';
+      mesesSeleccionados.clear();
+      document.querySelectorAll('.btn-mes').forEach(b => b.classList.remove('active'));
+      actualizarBaseDatosLocal();
+    }
+
+    function actualizarBaseDatosLocal() {
+      const fD = document.getElementById('filtroDesde').value;
+      const fH = document.getElementById('filtroHasta').value;
+      const fSuc = document.getElementById('filtroSucursal').value.trim().toLowerCase();
+      const fAlm = document.getElementById('filtroAlmacen').value.trim().toLowerCase();
+      const fTxt = document.getElementById('filtroTexto').value.trim().toLowerCase();
+
+      currentFilteredData = rawData.filter(d => {
+        if (mesesSeleccionados.size > 0 && (!d.fecha || !mesesSeleccionados.has(d.fecha.substring(5,7)))) return false;
+        if (fD && d.fecha < fD) return false;
+        if (fH && d.fecha > fH) return false;
+        if (fSuc && !d.sucursal.toLowerCase().includes(fSuc)) return false;
+        if (fAlm && !d.almacen.toLowerCase().includes(fAlm)) return false;
+        if (fTxt) {
+          const content = `${d.os} ${d.cliente} ${d.sn}`.toLowerCase();
+          if (!content.includes(fTxt)) return false;
+        }
+        return true;
+      });
+
+      generarAgrupaciones();
+      actualizarKPIs();
+      renderRankingMacro();
+      renderTop15OS();
+      renderTablaVisible();
+    }
+
+    function generarAgrupaciones() {
+      const gOS = {}, gCua = {};
+
+      currentFilteredData.forEach(r => {
+        const kOS = r.os !== 'SIN_OS' ? r.os : `${r.almacen}_${r.fecha}_${r.numero}`;
+        if (!gOS[kOS]) {
+          gOS[kOS] = { fecha: r.fecha, os: r.os, sucursal: r.sucursal, almacen: r.almacen, cliente: r.cliente, drop: 0, conectores: 0, equipos: [], otros: [] };
+        }
+        
+        const kCua = r.almacen;
+        if (!gCua[kCua]) {
+          gCua[kCua] = { almacen: r.almacen, sucursal: r.sucursal, ordenes: new Set(), drop: 0, conectores: 0, equipos: 0 };
+        }
+        if (r.os !== 'SIN_OS') gCua[kCua].ordenes.add(r.os);
+
+        const prodU = r.producto.toUpperCase();
+        const eqCond = (r.idCat === 'EC' || r.sn);
+        
+        if (eqCond) { 
+          gOS[kOS].equipos.push({p: r.producto, sn: r.sn}); gCua[kCua].equipos += (r.cantidad||1); 
+        } else if (prodU.includes('DROP') || prodU.includes('FO DROP')) { 
+          gOS[kOS].drop += r.cantidad; gCua[kCua].drop += r.cantidad; 
+        } else if (prodU.includes('CONECTOR') && !prodU.includes('COAXIAL') && !prodU.includes('RG6')) { 
+          // Conectores Ópticos
+          gOS[kOS].conectores += r.cantidad; gCua[kCua].conectores += r.cantidad; 
+        } else { 
+          // Otros insumos (incluyendo conectores coaxiales)
+          gOS[kOS].otros.push(`${r.producto} (${r.cantidad} ${r.um})`); 
+        }
+      });
+
+      agrupadoOS = Object.values(gOS).map(o => {
+        o.equiposStr = o.equipos.map(e => `${e.p} ${e.sn}`).join(' ');
+        o.otrosStr = o.otros.join(' ');
+        return o;
+      });
+
+      agrupadoCuadrillas = Object.values(gCua).map(c => {
+        c.cantOS = c.ordenes.size;
+        c.promDrop = c.cantOS ? Math.round(c.drop / c.cantOS) : 0;
+        c.promConect = c.cantOS ? parseFloat((c.conectores / c.cantOS).toFixed(2)) : 0;
+        return c;
+      });
+    }
+
+    // ====================================================
+    // KPIs Y RANKINGS (MACRO Y MICRO)
+    // ====================================================
+    function actualizarKPIs() {
+      const tOS = agrupadoOS.length;
+      const tDrop = agrupadoOS.reduce((a,o)=>a+o.drop,0);
+      const tCon = agrupadoOS.reduce((a,o)=>a+o.conectores,0);
+      const tEq = agrupadoOS.reduce((a,o)=>a+o.equipos.length,0);
+      const osAlt = agrupadoOS.filter(o => o.conectores > 2).length;
+
+      document.getElementById('kpiOS').textContent = tOS.toLocaleString();
+      document.getElementById('kpiDrop').textContent = `${Math.round(tDrop)} m`;
+      document.getElementById('kpiPromDrop').textContent = tOS ? `${Math.round(tDrop/tOS)} m` : '0 m';
+      document.getElementById('kpiConectores').textContent = `${tCon} un.`;
+      document.getElementById('kpiPromConect').textContent = tOS ? `${(tCon/tOS).toFixed(2)}` : '0';
+      document.getElementById('kpiAlerta').textContent = `${osAlt} OS`;
+      document.getElementById('kpiEquipos').textContent = `${tEq} un.`;
+    }
+
+    function setRankingMetric(metric) {
+      rankingMetric = metric;
+      document.querySelectorAll('.btn-rank').forEach(b => b.classList.remove('active'));
+      document.getElementById('btnRank_'+metric).classList.add('active');
+      renderRankingMacro();
+    }
+
+    function renderRankingMacro() {
+      const top5 = [...agrupadoCuadrillas].sort((a,b) => b[rankingMetric] - a[rankingMetric]).slice(0,5);
+      const container = document.getElementById('rankingCards');
+      if (!top5.length) { container.innerHTML = '<span style="color:#64748b; font-size:0.8rem;">Sin datos para el ranking</span>'; return; }
+
+      let formatUnit = (v) => v;
+      let cColor = '#4ade80'; 
+
+      if (rankingMetric === 'cantOS') { formatUnit = (v) => `${v} OS`; cColor = '#38bdf8'; }
+      else if (rankingMetric === 'drop') { formatUnit = (v) => `${Math.round(v)} m`; cColor = '#4ade80'; }
+      else if (rankingMetric === 'conectores') { formatUnit = (v) => `${v} un.`; cColor = '#facc15'; }
+      else if (rankingMetric === 'equipos') { formatUnit = (v) => `${v} un.`; cColor = '#a855f7'; }
+
+      container.innerHTML = top5.map((c, i) => `
+        <div class="rank-card" style="border-left-color: ${cColor}; color: ${cColor};">
+          <div class="rank-pos">#${i+1} ${c.sucursal.replace('Sucursal ','')}</div>
+          <div class="rank-name">${c.almacen.split('_').slice(0,3).join('_')}</div>
+          <div class="rank-val">${formatUnit(c[rankingMetric])}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderTop15OS() {
+      const htmlRow = (arr, valKey, color, format) => {
+        if (!arr.length) return '<tr><td colspan="4" style="text-align:center; color:#64748b;">Sin datos</td></tr>';
+        return arr.map((o, i) => `
+          <tr>
+            <td class="rank-os-num">#${i+1}</td>
+            <td>
+              <strong style="color:#38bdf8; font-size:0.75rem;">${o.os}</strong><br>
+              <span style="font-size:0.65rem; color:#94a3b8;">${o.fecha.split('-').reverse().join('/')}</span>
+            </td>
+            <td>
+              <div style="color:#f8fafc;">${o.cliente.substring(0,25)}${o.cliente.length>25?'...':''}</div>
+              <div style="font-size:0.65rem; color:#94a3b8;">${o.almacen.split('_').slice(0,3).join('_')}</div>
+            </td>
+            <td style="font-weight:bold; color:${color}; text-align:right;">${format(o[valKey])}</td>
+          </tr>
+        `).join('');
+      };
+
+      const topDrop = [...agrupadoOS].filter(o => o.drop > 0).sort((a,b) => b.drop - a.drop).slice(0, 15);
+      const topConect = [...agrupadoOS].filter(o => o.conectores > 0).sort((a,b) => b.conectores - a.conectores).slice(0, 15);
+
+      document.getElementById('tbodyTopDrop').innerHTML = htmlRow(topDrop, 'drop', '#4ade80', v => `${Math.round(v)} m`);
+      document.getElementById('tbodyTopConectores').innerHTML = htmlRow(topConect, 'conectores', '#facc15', v => `${v} un.`);
+    }
+
+    // ====================================================
+    // TABLAS PRINCIPALES ORDENABLES
+    // ====================================================
+    function construirCabecerasTabla() {
+      document.getElementById('theadOS').innerHTML = generarHTMLCabecera('OS', colsOS);
+      document.getElementById('theadCuadrilla').innerHTML = generarHTMLCabecera('CUADRILLA', colsCua);
+    }
+
+    function generarHTMLCabecera(tipo, cols) {
+      return '<tr>' + cols.map(c => `
+        <th>
+          <div class="th-title" onclick="ordenarTabla('${tipo}', '${c.id}')">
+            ${c.label} <span id="sort_${tipo}_${c.id}">↕</span>
+          </div>
+          <input type="text" class="col-filter" placeholder="Filtro..." onkeyup="filtrarColumna('${tipo}', '${c.id}', this.value)">
+        </th>
+      `).join('') + '</tr>';
+    }
+
+    function setVistaActiva(v) {
+      vistaActiva = v;
+      document.getElementById('btnVistaOS').classList.toggle('active', v === 'OS');
+      document.getElementById('btnVistaCuadrilla').classList.toggle('active', v === 'CUADRILLA');
+      document.getElementById('tableOS').style.display = v === 'OS' ? 'table' : 'none';
+      document.getElementById('tableCuadrilla').style.display = v === 'CUADRILLA' ? 'table' : 'none';
+      renderTablaVisible();
+    }
+
+    function ordenarTabla(tipo, colId) {
+      const state = tableState[tipo];
+      if (state.sortCol === colId) state.sortAsc = !state.sortAsc;
+      else { state.sortCol = colId; state.sortAsc = false; }
+      
+      document.querySelectorAll(`[id^="sort_${tipo}_"]`).forEach(el => el.textContent = '↕');
+      document.getElementById(`sort_${tipo}_${colId}`).textContent = state.sortAsc ? '▲' : '▼';
+      renderTablaVisible();
+    }
+
+    function filtrarColumna(tipo, colId, valor) {
+      tableState[tipo].filters[colId] = valor.trim().toLowerCase();
+      renderTablaVisible();
+    }
+
+    function renderTablaVisible() {
+      const tipo = vistaActiva;
+      const state = tableState[tipo];
+      const cols = tipo === 'OS' ? colsOS : colsCua;
+      let data = tipo === 'OS' ? [...agrupadoOS] : [...agrupadoCuadrillas];
+
+      Object.keys(state.filters).forEach(key => {
+        const valFiltro = state.filters[key];
+        if (valFiltro) { data = data.filter(r => String(r[key] || '').toLowerCase().includes(valFiltro)); }
+      });
+
+      if (state.sortCol) {
+        const cInfo = cols.find(c => c.id === state.sortCol);
+        data.sort((a,b) => {
+          let vA = a[state.sortCol], vB = b[state.sortCol];
+          if (!cInfo.isNum) { vA = String(vA).toLowerCase(); vB = String(vB).toLowerCase(); }
+          if (vA < vB) return state.sortAsc ? -1 : 1;
+          if (vA > vB) return state.sortAsc ? 1 : -1;
+          return 0;
+        });
+      }
+
+      // 🔴 CORRECCIÓN AQUÍ: Evitamos el error de mayúsculas mapeando el ID exacto del HTML
+      const tbodyId = tipo === 'OS' ? 'tbodyOS' : 'tbodyCuadrilla';
+      const tbody = document.getElementById(tbodyId);
+
+      if (tipo === 'OS') {
+        tbody.innerHTML = data.map(o => {
+          const eqHtml = o.equipos.length ? o.equipos.map(e => `<div><strong>${e.p}</strong> ${e.sn?`<span class="badge badge-sn">${e.sn}</span>`:''}</div>`).join('') : '<span style="color:#64748b">-</span>';
+          const oHtm = o.otros.length ? `<ul class="ul-insumos">${o.otros.map(i=>`<li>${i}</li>`).join('')}</ul>` : '<span style="color:#64748b">-</span>';
+          const cc = o.conectores > 2 ? '#f87171' : (o.conectores > 0 ? '#facc15' : '#64748b');
+          return `<tr>
+            <td style="white-space:nowrap">${o.fecha}</td>
+            <td><strong style="color:#38bdf8">${o.os}</strong></td>
+            <td><span class="badge">${o.almacen}</span></td>
+            <td>${o.cliente}</td><td>${eqHtml}</td>
+            <td style="font-weight:bold; color:${o.drop>0?'#4ade80':'#64748b'}">${o.drop}</td>
+            <td style="font-weight:bold; color:${cc}">${o.conectores}</td>
+            <td>${oHtm}</td>
+          </tr>`;
+        }).join('');
+      } else {
+        tbody.innerHTML = data.map(m => {
+          const cpColor = m.promConect > 2 ? '#f87171' : '#facc15';
+          return `<tr>
+            <td><strong style="color:#f8fafc">${m.almacen}</strong></td>
+            <td><span class="badge">${m.sucursal}</span></td>
+            <td style="font-weight:bold; color:#38bdf8">${m.cantOS}</td>
+            <td style="font-weight:bold; color:#4ade80">${Math.round(m.drop)}</td>
+            <td>${m.promDrop}</td>
+            <td style="font-weight:bold; color:#facc15">${m.conectores}</td>
+            <td style="font-weight:bold; color:${cpColor}">${m.promConect}</td>
+            <td style="font-weight:bold; color:#a855f7">${m.equipos}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+  </script>
+</body>
+</html>
